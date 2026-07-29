@@ -3,7 +3,7 @@
 Durable scratch log so work survives context summarization. Newest entries at top.
 Goal: usable coding agent in pi/openclaw via the prompt-emulated shell-routing path.
 
-## ☀️ END-OF-NIGHT SUMMARY (for Alex, ~05:30 2026-06-25)
+## ☀️ END-OF-NIGHT SUMMARY (for the account owner, ~05:30 2026-06-25)
 
 **Headline: the ultimate goal is VALIDATED.** Real `pi` (the actual coding agent, headless),
 backed by M365 Copilot through the proxy, fixes a real bug end-to-end **10/10** (F20, mean 107s,

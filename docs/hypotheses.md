@@ -141,7 +141,7 @@ email matches a stale hidden `loginfmt` and derails the flow (cost 3 debug cycle
 
 ## 10. June 25 2026 — framing A/B sweep (rested account) + a benign task that always Disengages
 
-Overnight A/B on the long-rested `ao@re-zip.com` account (≈2 weeks idle → **zero
+Overnight A/B on the long-rested `user@contoso.com` account (≈2 weeks idle → **zero
 thread-rate throttle all night**; every single ERROR was a content-filter Disengaged,
 F13 not implicated even once). Persistent proxy, `magic` tone + declarative tool agent,
 fenced shell-routing. Orchestrator `scripts/bench/overnight-sweep.sh` rotates BOTH
@@ -537,7 +537,7 @@ don't fully close — the honest ceiling of the prompt-emulated path. (i) is F17
 ## 9. June 14 2026 — agentic tool-use SOLVED via shell-routing (bench 0/5 → real multi-turn loops)
 
 The headline §8.12 problem (0/5, model narrates instead of acting) is **broken open**.
-Service version unrecorded this session (capture next run); single tenant `ao@re-zip.com`,
+Service version unrecorded this session (capture next run); single tenant `user@contoso.com`,
 `magic` tone, fenced format. All bench runs in `scripts/bench/out/`, full trace in
 `~/.config/opencode-m365/debug.log`, frames in `~/.config/opencode-m365/frames/`.
 
@@ -747,7 +747,7 @@ claims and re-prompt "show me the tool_response that proves it").
 ## M. Methods — how the June 9 2026 data was collected
 
 ### Environment
-- **Tenant:** single, dev account `ao@re-zip.com` (tid `fa7f56d8-49c4-4327-b816-9a0eeaa273df`).
+- **Tenant:** single, dev account `user@contoso.com` (tid `00000000-0000-4000-8000-000000000000`).
 - **Region:** Sydney back-end `substrate.office.com`; observed `locationInfo.country: DK`.
 - **M365 service version under test:** `1.0.03443.34112` (from `result.serviceVersion` in `type:2` stream items). Quote this when reproducing — Microsoft changes behaviour without notice.
 - **Tone:** `magic` (auto-routing) for all experiments unless noted.
@@ -1814,8 +1814,8 @@ oracle is blocked on the Teams install client, not on any licensing/permission w
   that native tools require a Copilot Studio license — a *free* declarative agent with a
   *custom action* imports fine for a regular user. §8.11's wall was the Dataverse/PVA
   authoring path only; the app-package path is open.
-- **Gate probe** (`scripts/da-app/gate-probe.mjs`): identity AO@re-zip.com, tenant
-  RE-ZIP ApS (`fa7f56d8-…`), **no activated directory role** (regular user), and the
+- **Gate probe** (`scripts/da-app/gate-probe.mjs`): identity user@contoso.com, tenant
+  Contoso Ltd (`00000000-…`), **no activated directory role** (regular user), and the
   proxy's Graph app has no AppCatalog write scope. So **programmatic org-catalog upload
   (`POST /appCatalogs/teamsApps`) and Graph user-install are both out** — Developer
   Portal apps don't surface in `/appCatalogs/teamsApps` either (`install-probe.mjs`:
@@ -2077,7 +2077,7 @@ harness (§12.10) can't either, since a recovered retry returns HTTP 200, not a 
 SOLVED-after-retry. Run the variants with **`M365_NO_DISENGAGE_RETRY=1`** (flag exists,
 `handler.ts:295`) on the disengage-prone `edit-config`/`ec-*` family at `--repeat ≥3`, and
 score the disengage count per variant. That is the confirmatory sweep §12.3 has been waiting
-for; it needs Alex's go-ahead on quota (4 variants × ~2 tasks × repeat 3 ≈ 24 fresh threads,
+for; it needs the account owner's go-ahead on quota (4 variants × ~2 tasks × repeat 3 ≈ 24 fresh threads,
 and it deliberately provokes the filter).
 
 **Second finding: the DEFAULT model's failure mode is confab, not disengage 🟢.** `m365-copilot`

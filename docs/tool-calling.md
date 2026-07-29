@@ -24,6 +24,15 @@ tool (`bash`/`shell`/`run`/`run_command`/… — any name), the proxy injects "d
 by writing one ` ```bash ` block" framing and routes that block to the shell tool. This is
 what turns 0/5 into real multi-turn loops. See [hypotheses §9 F12](./hypotheses.md).
 
+**Hosted-intent fallback.** Some tenants can use M365 chat but cannot provision the
+Copilot Studio agent because the legacy `minimalBots` environment host is unavailable.
+On those tenants, M365 may announce an imminent hosted command in a `Progress` message
+(`contentType:"Code"`, `hiddenText:"bash -lc …"`) before running it in `/mnt/data`.
+For tool-enabled turns without an agent, the proxy now intercepts that intent, cancels
+the hosted turn, and converts the command into the harness's local shell tool call. The
+harness still owns execution, approvals, sandboxing, and tool results. This path is a
+fallback for the missing-agent case; the normal declarative-agent path remains preferred.
+
 ## Enforcement
 
 The contract is enforced at three layers:

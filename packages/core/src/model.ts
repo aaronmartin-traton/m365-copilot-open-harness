@@ -56,10 +56,15 @@ export class ModelSession {
 
   /** Agent id baked into the current copilotSession (undefined = no agent). */
   private currentAgentId: string | undefined = undefined;
+  private currentEnableCodeInterpreter = true;
 
-  private createCopilotSession(agentId: string | undefined): CopilotSession {
+  private createCopilotSession(
+    agentId: string | undefined,
+    enableCodeInterpreter: boolean,
+  ): CopilotSession {
     return new CopilotSession({
       agentId,
+      enableCodeInterpreter,
       sessionId: this.sessionId,
       conversationId: this.conversationId,
     });
@@ -94,13 +99,22 @@ export class ModelSession {
       }
     }
     const agentForTurn = wantAgent ? (this.cachedAgentId ?? undefined) : undefined;
+    // A tool-enabled turn must not be swallowed by M365's hosted `/mnt/data`
+    // interpreter when agent provisioning is unavailable. Leave it enabled only
+    // for ordinary agent-less chat, where it is an intentional capability.
+    const enableCodeInterpreter = !wantAgent;
 
     // Create (or recreate) the session when missing or when this turn's
     // agent-ness differs from the current session's — switching the agent on/off
     // changes routing, so the WS session must carry the right threadLevelGptId.
-    if (!this.copilotSession || this.currentAgentId !== agentForTurn) {
-      this.copilotSession = this.createCopilotSession(agentForTurn);
+    if (
+      !this.copilotSession ||
+      this.currentAgentId !== agentForTurn ||
+      this.currentEnableCodeInterpreter !== enableCodeInterpreter
+    ) {
+      this.copilotSession = this.createCopilotSession(agentForTurn, enableCodeInterpreter);
       this.currentAgentId = agentForTurn;
+      this.currentEnableCodeInterpreter = enableCodeInterpreter;
     }
 
     log.info(`run: model=${model}, agent=${agentForTurn ?? "none"}, turn=${this.copilotSession.turnCount}, sid=${this.sessionId}, cid=${this.conversationId}, text=${JSON.stringify(trunc(text, 200))}`);
@@ -110,7 +124,7 @@ export class ModelSession {
     } catch (err: any) {
       // Session might be stale — reconnect with same IDs
       log.info("Session error, reconnecting:", err.message);
-      this.copilotSession = this.createCopilotSession(agentForTurn);
+      this.copilotSession = this.createCopilotSession(agentForTurn, enableCodeInterpreter);
       this.currentAgentId = agentForTurn;
       return await this.copilotSession.chat(token, text, model, signal);
     }

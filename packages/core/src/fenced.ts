@@ -60,7 +60,7 @@ const SHELL_LANGS = new Set([
 ]);
 // A tool counts as "the shell" if its name looks like a run-a-command tool. pi
 // uses `bash`, opencode `bash`, hermes `shell`/`run`, openclaw `run_command` — all caught.
-const SHELL_TOOL_NAME = /^(bash|sh|shell|zsh|run|exec|execute|command|cmd|terminal|run_command|run_terminal_cmd|execute_command|execute_bash|shell_exec|system)$/i;
+const SHELL_TOOL_NAME = /^(bash|sh|shell|shell_command|zsh|run|exec|execute|command|cmd|terminal|run_command|run_terminal_cmd|execute_command|execute_bash|shell_exec|system)$/i;
 
 /** The harness tool (if any) that runs a shell command — the target for ```bash routing. */
 export function findShellTool(tools: ToolDef[]): ToolDef | undefined {
@@ -225,9 +225,13 @@ const FRAMING_VARIANTS: Record<string, FramingBuilder> = {
   // V0 — the shipped framing (control). Shell-first + strict-rules + anti-confab.
   baseline(tools) {
     const shell = findShellTool(tools);
+    const workspaceHint = shell && /powershell/i.test(shell.function.description ?? "")
+      ? "\nThis harness runs on Windows and executes your fenced shell script through Git Bash in the actual task working directory. Use relative paths from that directory. Do NOT use /mnt/data — that is Microsoft's hosted sandbox, not the user's filesystem."
+      : "";
     const shellFraming = shell ? `
 
 THE WAY YOU DO ANYTHING IS BY WRITING A SHELL SCRIPT. You have a real shell (the \`${shell.function.name}\` tool). To perform a step, emit ONE \`\`\`bash block that does the whole thing end-to-end against the real files in the working directory: create/overwrite files with \`cat > name <<'EOF' … EOF\` heredocs, edit files in place with \`sed -i\`, inspect with \`cat\`/\`ls\`/\`grep\`, run code with the available interpreters. The block is executed for real and you get its output back. Writing the commands IS doing the task; describing what you "would" run, or claiming you did it, accomplishes nothing.
+${workspaceHint}
 
 You have NOT run any command yet and have NO results. NEVER claim a command "returned no output", that files are "missing", or that you "cannot access" / "cannot list" the environment before you have actually emitted a \`\`\`bash block and seen its <tool_response>. The files named in the task are present on a real filesystem right now. Your FIRST output must be a \`\`\`bash block (e.g. \`ls -la\` then \`cat\` the relevant files) — never open with prose, a question, or a request for the user to paste files. Do not assume a file's contents or a command's result; run a command and read the real output. One self-contained \`\`\`bash block per turn.` : "";
 
@@ -578,6 +582,14 @@ export function parseFencedToolCalls(
     if (!spec) continue; // ```python illustration etc. — not a tool, leave in prose
     const args = parseFencedInner(spec, match[2]);
     if (!args) continue;
+    if (spec.name === "shell_command" && spec.bodyParam && /powershell/i.test(spec.description ?? "")) {
+      const script = args[spec.bodyParam];
+      if (typeof script === "string") {
+        const encoded = Buffer.from(script, "utf-8").toString("base64");
+        args[spec.bodyParam] =
+          `$script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}')); & "$env:ProgramFiles\\Git\\bin\\bash.exe" -lc $script`;
+      }
+    }
     calls.push(makeCall(spec.name, args));
     leftover = leftover.replace(match[0], "");
   }

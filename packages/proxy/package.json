@@ -3,7 +3,8 @@
   "version": "0.2.0",
   "type": "module",
   "bin": {
-    "m365-proxy": "./bin/m365-proxy.mjs"
+    "m365-proxy": "./bin/m365-proxy.mjs",
+    "m365-login": "./bin/m365-login.mjs"
   },
   "files": [
     ".output",

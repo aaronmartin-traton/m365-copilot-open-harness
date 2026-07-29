@@ -2,9 +2,7 @@ export {
   getToken,
   getTokenSilent,
   getTokenForScope,
-  loginAutomated,
-  loadSecrets,
-  forceReauth,
+  loginInteractive,
 } from "./auth.js";
 
 export {

@@ -157,6 +157,8 @@ export interface CopilotSessionOptions {
   conversationId?: string;
   /** Enable native custom-action support (H-NATIVE-6/7). Off = unchanged behaviour. */
   nativeActions?: NativeActionConfig;
+  /** Enable M365's hosted code interpreter when no agent is attached. Default: true. */
+  enableCodeInterpreter?: boolean;
 }
 
 /**
@@ -170,12 +172,14 @@ export class CopilotSession {
   private _turnCount = 0;
   private agentId?: string;
   private nativeActions?: NativeActionConfig;
+  private enableCodeInterpreter: boolean;
 
   constructor(options?: CopilotSessionOptions) {
     this.sessionId = options?.sessionId ?? crypto.randomUUID();
     this.conversationId = options?.conversationId ?? crypto.randomUUID();
     this.agentId = options?.agentId;
     this.nativeActions = options?.nativeActions;
+    this.enableCodeInterpreter = options?.enableCodeInterpreter !== false;
     log.info(`New session: sid=${this.sessionId}, cid=${this.conversationId}, agent=${this.agentId ?? "none"}, nativeActions=${!!this.nativeActions}`);
   }
 
@@ -217,6 +221,7 @@ export class CopilotSession {
     const agentId = this.agentId;
     const sessionId = this.sessionId;
     const nativeActions = this.nativeActions;
+    const interceptHostedShell = !this.enableCodeInterpreter && !agentId;
 
     return new Promise((resolve, reject) => {
       // The authoritative reconstructed answer. M365 streams a MIX of token-level
@@ -241,6 +246,7 @@ export class CopilotSession {
       let baseArgs: Record<string, unknown> | null = null;
       let sawAction = false;
       let actionResumed = false;
+      let interceptedLocalTool = false;
 
       // Delta pump. The queue/state live at Promise scope (NOT inside the
       // asyncIterator factory) so deltas that arrive between `resolve(stream)` and
@@ -358,6 +364,30 @@ export class CopilotSession {
       let handshakeDone = false;
       let stopped = false;
 
+
+      const maybeInterceptHostedCommand = (message: {
+        messageType?: string;
+        contentType?: string;
+        hiddenText?: string;
+      }): boolean => {
+        if (!interceptHostedShell || interceptedLocalTool) return false;
+        if (message.messageType !== "Progress" || message.contentType !== "Code") return false;
+        const command = message.hiddenText?.match(/^bash\s+-lc\s+([\s\S]+)$/)?.[1];
+        if (!command) return false;
+
+        interceptedLocalTool = true;
+        const fencedCall = `\`\`\`bash\n${command}\n\`\`\``;
+        log.info(`Intercepted hosted shell intent for local execution: ${trunc(command, 200)}`);
+        advance(fencedCall);
+        stopped = true;
+        try {
+          ws.send(STOP_FRAME);
+          setTimeout(() => { try { ws.close(); } catch {} }, 500);
+        } catch {
+          try { ws.close(); } catch {}
+        }
+        return true;
+      };
       // Cancellation: when the caller's signal aborts (HTTP client disconnected),
       // cancel the in-flight M365 turn the same way the real UI does — send the
       // Stop frame, then let the server's type:3 ack close the socket (with a
@@ -452,7 +482,7 @@ export class CopilotSession {
               // agent-path "replace X→Y" Disengage (F17/F21). The GUI sends a rich
               // set + NO agent; we send [] + agent and Disengage.
               optionsSets: [
-                ...((!agentId && !process.env.M365_NO_CODE_INTERPRETER) ? CODE_INTERPRETER_OPTIONS_SETS : []),
+                ...((this.enableCodeInterpreter && !agentId && !process.env.M365_NO_CODE_INTERPRETER) ? CODE_INTERPRETER_OPTIONS_SETS : []),
                 ...(process.env.M365_EXTRA_OPTIONSSETS ? process.env.M365_EXTRA_OPTIONSSETS.split(",").map((s) => s.trim()).filter(Boolean) : []),
               ],
               streamingMode: "ConciseWithPadding",
@@ -673,6 +703,7 @@ export class CopilotSession {
         }
 
         if (base.type === 1 && base.target === "update" && Array.isArray(base.arguments)) {
+          if (interceptedLocalTool) return;
           for (const arg of base.arguments) {
             const delta = DeltaUpdate.safeParse(arg);
             if (delta.success) {
@@ -683,6 +714,7 @@ export class CopilotSession {
             const msgUpdate = MessageUpdate.safeParse(arg);
             if (msgUpdate.success) {
               for (const m of msgUpdate.data.messages) {
+                if (maybeInterceptHostedCommand(m)) continue;
                 // Capture diagnostic meta from every bot message — including the
                 // control-typed ones — so callers can tell apart `DeepLeo` from
                 // `3PDeclarativeAgent` and surface `Disengaged` cleanly.

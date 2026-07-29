@@ -17,6 +17,7 @@ const BAP_API = "https://api.bap.microsoft.com";
 const AGENT_BASE_NAME = "m365-tool-agent";
 const AGENT_DESCRIPTION = "Auto-created agent for tool calling";
 
+
 // The agent's instructions are baked in at creation time and can't be cheaply
 // updated in place (the Copilot Studio update API needs a changeToken that is
 // only returned by create). So we version the agent by NAME: the name carries a
@@ -65,13 +66,13 @@ The runtime returns the real result in a <tool_response> block — treat it as g
 When the message has no <tools> block, respond normally as a helpful assistant in natural language.`;
 }
 
-async function getEnvironmentUrl(ppToken: string): Promise<string> {
+async function getEnvironmentUrl(bapToken: string): Promise<string> {
   // Query BAP API to discover the default environment
   const res = await fetch(
     `${BAP_API}/providers/Microsoft.BusinessAppPlatform/environments/~default?api-version=2023-06-01`,
     {
       headers: {
-        Authorization: `Bearer ${ppToken}`,
+        Authorization: `Bearer ${bapToken}`,
       },
     },
   );
@@ -81,7 +82,7 @@ async function getEnvironmentUrl(ppToken: string): Promise<string> {
   }
 
   const data = await res.json();
-  const envName: string = data.name; // e.g. "Default-fa7f56d8-49c4-4327-b816-9a0eeaa273df"
+  const envName: string = data.name; // e.g. "Default-00000000-0000-4000-8000-000000000000"
   const envId = envName
     .replace(/^Default-/i, "")
     .replace(/-/g, "")

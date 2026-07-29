@@ -36,6 +36,8 @@ export const BotMessage = z.object({
   requestId: z.string().optional(),
   offense: z.string().optional(),
   messageType: z.string().optional(),
+  contentType: z.string().optional(),
+  hiddenText: z.string().optional(),
   adaptiveCards: z.array(z.any()).optional(),
   sourceAttributions: z.array(z.any()).optional(),
   contentOrigin: z.string().optional(),

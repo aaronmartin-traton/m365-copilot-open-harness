@@ -21,6 +21,9 @@ const MODEL_TONES: Record<string, string> = {
   "claude-sonnet-think-deeper": "Claude_Sonnet_Reasoning",
   "claude-opus": "Claude_Opus", // accepted tone; identity deflected, likely Opus
 
+  // GPT-5.6 Think deeper
+  "gpt-5.6-think-deeper": "Gpt_5_6_Reasoning",
+
   // GPT-5.5 (current generation)
   "gpt-5.5": "Gpt_5_5_Chat",
   "gpt-5.5-quick": "Gpt_5_5_Chat",

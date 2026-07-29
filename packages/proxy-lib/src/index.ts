@@ -4,6 +4,7 @@ import { SessionPool, handleChatCompletion } from "./handler.js";
 
 export { SessionPool, handleChatCompletion } from "./handler.js";
 export { ChatCompletionRequest, ChatMessage, ToolCall, ToolDefinition } from "./schemas.js";
+export { ResponsesRequest, handleResponse } from "./responses.js";
 
 // Re-export tool utilities from core
 export {

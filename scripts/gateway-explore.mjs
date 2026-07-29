@@ -13,7 +13,7 @@ mkdirSync(OUT, { recursive: true });
 const creds = loadSecrets();
 const cache = JSON.parse(readFileSync(join(homedir(), ".config", "opencode-m365", "agent-id.json"), "utf8"));
 const BOT_ID = cache.botId;
-const TENANT = "fa7f56d8-49c4-4327-b816-9a0eeaa273df";
+const TENANT = "00000000-0000-4000-8000-000000000000";
 const ENV = `Default-${TENANT}`;
 const GW = "https://powervamg.eu-il105.gateway.prod.island.powerapps.com";
 

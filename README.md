@@ -8,7 +8,7 @@ Use Microsoft 365 Copilot as an LLM backend for OpenAI-compatible coding agents 
 
 M365 Copilot uses a SignalR WebSocket protocol, not the OpenAI API. This project translates between the two:
 
-1. **Standalone proxy** — HTTP server with `/v1/chat/completions` and `/v1/models` endpoints. Works with any OpenAI-compatible client (pi, OpenClaw, etc.).
+1. **Standalone proxy** — HTTP server with `/v1/chat/completions`, `/v1/responses`, and `/v1/models` endpoints. Works with OpenAI-compatible clients including pi, Codex, and OpenClaw.
 2. **OpenClaw plugin** — Config generator + setup CLI for OpenClaw's provider system.
 
 ### Tool calling
@@ -126,7 +126,27 @@ pi --models "gpt-5.5-think-deeper" -p --tools read,list,edit,write "your task"
 
 This is verified working end-to-end, including multi-tool calls and real file edits.
 
-### 4. Use with OpenClaw
+### 4. Use with Codex
+
+Codex requires the Responses API. Add a profile file such as
+`~/.codex/m365.config.toml`:
+
+```toml
+model = "gpt-5.6-think-deeper"
+model_provider = "m365"
+
+[model_providers.m365]
+name = "M365 Copilot Proxy"
+base_url = "http://127.0.0.1:4143/v1"
+wire_api = "responses"
+```
+
+Then run `codex --profile m365`. On Windows, the local-shell bridge expects Git for
+Windows at its default installation path so Bash-shaped M365 commands can run through
+Codex's PowerShell `shell_command` tool.
+
+
+### 5. Use with OpenClaw
 
 ```sh
 # Configure and start in one command
@@ -139,7 +159,7 @@ m365-proxy 4141
 
 The proxy uses session reuse and delta messages — follow-up turns only send new messages, saving M365 quota. New conversations are detected automatically when the message array shrinks or the first user message changes.
 
-### 5. Use as standalone proxy
+### 6. Use as standalone proxy
 
 ```sh
 npx m365-proxy 4141
@@ -149,7 +169,7 @@ pnpm run dev
 
 Then point any OpenAI-compatible client at `http://localhost:4141/v1`.
 
-### 6. Run on NixOS (systemd service)
+### 7. Run on NixOS (systemd service)
 
 The proxy is a [Nitro](https://nitro.build/) service. The flake exposes a package
 (built from the workspace via [pnpm2nix](https://github.com/cramt/pnpm2nix)) and a NixOS

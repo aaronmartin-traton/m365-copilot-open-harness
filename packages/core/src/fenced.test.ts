@@ -167,6 +167,22 @@ describe("shell routing (Tier 1)", () => {
     },
   };
 
+  const codexShell: ToolDef = {
+    type: "function",
+    function: {
+      name: "shell_command",
+      description: "Runs a Powershell command (Windows) and returns its output.",
+      parameters: {
+        type: "object",
+        properties: {
+          command: { type: "string" },
+          timeout_ms: { type: "number" },
+        },
+        required: ["command"],
+      },
+    },
+  };
+
   it("detects a shell tool under various names", () => {
     expect(findShellTool([bash])?.function.name).toBe("bash");
     expect(findShellTool([runCommand])?.function.name).toBe("run_command");
@@ -179,6 +195,19 @@ describe("shell routing (Tier 1)", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].function.name).toBe("run_command");
     expect(JSON.parse(calls[0].function.arguments)).toEqual({ command: "sed -i 's/a/b/' f.py" });
+  });
+
+  it("routes Bash through Git Bash for Codex's PowerShell tool", () => {
+    const specs = buildSpecMap([codexShell]);
+    const call = parseFencedToolCalls("```bash\ncat file.txt\n```", specs).calls[0];
+    expect(call.function.name).toBe("shell_command");
+    const args = JSON.parse(call.function.arguments);
+    expect(args.command).toContain("Y2F0IGZpbGUudHh0");
+    expect(args.command).toContain("$env:ProgramFiles\\Git\\bin\\bash.exe");
+  });
+
+  it("warns Codex-backed prompts not to use the hosted /mnt/data sandbox", () => {
+    expect(formatFencedToolDefinitions([codexShell])).toContain("Do NOT use /mnt/data");
   });
 
   it("routes ```sh and ```shell aliases too", () => {
