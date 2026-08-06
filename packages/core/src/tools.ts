@@ -305,6 +305,35 @@ const CONFABULATION_PATTERNS: RegExp[] = [
   /(?:file|directory|folder|it)\s+(?:appears?|seems?|looks?)\s+(?:to\s+be\s+)?empty/i, // "the file appears to be empty"
   /nothing\s+to\s+(?:simplify|fix|do|change|show|read)/i,                               // "nothing to simplify"
   /(?:tool|command|it)\s+returned\s+(?:no|empty|nothing)/i,
+  // GPT-5.6 can truthfully describe M365's remote runtime as if it were the
+  // caller's environment. This wording slipped past the older can't-access
+  // patterns because it says the session "does not expose" the filesystem.
+  /(?:session|environment|runtime)\s+(?:does\s+not|doesn.?t|cannot)\s+(?:expose|mount|provide)\s+(?:the\s+)?(?:local\s+)?(?:repository\s+)?filesystem/i,
+  /(?:my|the)\s+filesystem\s+(?:only\s+)?(?:contained|contains|has)[\s\S]{0,80}\/mnt\/data/i,
+];
+
+// M365 sometimes creates a real patch in its Teams-hosted remote artifact
+// store instead of calling the harness's local edit/write/bash tools. The link
+// is valid in M365 but the referenced file is not present in the caller's
+// working directory, so a later `git apply <basename>` inevitably fails.
+// Every pattern must be ANCHORED to something only M365's remote runtime emits:
+// a Teams artifact URL, a `sandbox:/mnt/data` path, or a citation marker. Talking
+// about a "patch" or "diff" is normal for a coding agent, so an unanchored verb +
+// noun pattern (e.g. /generated .{0,100} patch/) fires on "I generated a patch for
+// review" and — because this detector fails closed below — turns an ordinary answer
+// into a 502. Anchors are what separate a remote artifact from a local one.
+const REMOTE_ARTIFACT_COMPLETION_PATTERNS: RegExp[] = [
+  /sandbox:\/mnt\/data\/[^\s)\]]+/i,
+  /https?:\/\/[^\s)\]]*asyncgw\.teams\.microsoft\.com\/[^\s)\]]+\.(?:patch|diff)(?:[?#][^\s)\]]*)?/i,
+  // The remote artifact may be the whole updated source file rather than a
+  // patch. Require a mutation claim near the Teams "views/original" URL so a
+  // normal shared link is not mistaken for a failed local edit.
+  /\b(?:updated|modified|replaced|rewrote|saved|applied|prepared|created)\b[\s\S]{0,600}https?:\/\/[^\s)\]]*asyncgw\.teams\.microsoft\.com\/[^\s)\]]*\/views\/original\//i,
+  /https?:\/\/[^\s)\]]*asyncgw\.teams\.microsoft\.com\/[^\s)\]]*\/views\/original\/[\s\S]{0,600}\b(?:updated|modified|replaced|rewrote|saved|applied|prepared|created)\b/i,
+  // Live GPT-5.6 variant: "Updated [plan.md](<turn1file1 citation>) locally".
+  // The private-use citation resolves to an M365 artifact, not the harness disk.
+  /\b(?:updated|modified|replaced|rewrote|saved|applied)\b[\s\S]{0,180}\uE200cite\uE202turn\d+file\d+\uE201/i,
+  /\uE200cite\uE202turn\d+file\d+\uE201[\s\S]{0,180}\b(?:updated|modified|replaced|rewrote|saved|applied)\b/i,
 ];
 
 /**
@@ -343,6 +372,18 @@ export function looksLikeHallucinatedCompletion(text: string | null): boolean {
   const t = text.trim();
   if (t.length < 8) return false;
   return HALLUCINATED_COMPLETION_PATTERNS.some((re) => re.test(t));
+}
+
+/**
+ * Did M365 substitute a remote Teams-hosted patch for a local filesystem edit?
+ * Unlike the general hallucinated-completion detector this must fire even after
+ * earlier tool calls: reading a file locally does not make a remote patch local.
+ */
+export function looksLikeRemoteArtifactCompletion(text: string | null): boolean {
+  if (!text) return false;
+  const t = text.trim();
+  if (t.length < 12) return false;
+  return REMOTE_ARTIFACT_COMPLETION_PATTERNS.some((re) => re.test(t));
 }
 
 export function looksLikeConfabulation(text: string | null): boolean {

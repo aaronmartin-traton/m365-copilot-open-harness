@@ -2152,6 +2152,24 @@ across `fix-bug` + a confab-prone/shell-less task (softened's failure case), on 
 demo_only and the whole disengage→softened-retry round-trip becomes dead weight for the common
 case. n here is only 2 — strong signal, not yet ship-grade.
 
+### 12.15 - Tone validation is three-state: `Gpt_5_6_Chat` is registered but dead
+
+**Hypothesis.** Tone validation is binary: accepted means a real route and rejected means `Failed to invoke Chat`.
+
+**Prediction.** Re-probing `Gpt_5_6_Chat` errors as it did in June 2026.
+
+**Test.** Agent-less single-turn probes requested exactly `pong`, with known-good and known-bad tones as controls. `Gpt_5_6_Chat` ran twice with distinct nonces.
+
+| Tone | Result | `contentOrigin` | Elapsed |
+|---|---|---|---|
+| `Gpt_5_5_Chat` | `pong` | `DeepLeo` | 5.4s |
+| `Gpt_5_6_Reasoning` | `pong` | `DeepLeo` | 21.0s |
+| `Gpt_5_6_Chat` (twice) | canned deflection | `BotConnection` | 1.6s / 1.8s |
+| `Claude_Haiku` | `Failed to invoke Chat` | none | 0.30s |
+| `Definitely_Not_A_Real_Tone_XYZ` | `Failed to invoke Chat` | none | 0.25s |
+
+**Conclusion.** Tone validation has a third state: registered but dead. `Gpt_5_6_Chat` no longer errors, but it returns the canned `BotConnection` deflection instead of reaching a model. Absence of an error is insufficient evidence of a working route. Future tone confirmation must require `contentOrigin: DeepLeo`; latency alone is also insufficient.
+
 ## 13. Conversation deletion (August 3 2026)
 
 ### H-D1 — The authenticated `m365.cloud.microsoft` browser context can delete a server-side conversation 🔴

@@ -15,7 +15,8 @@ const TONES = [
   "magic",                 // known good (baseline)
   "Gpt_5_5_Chat",          // g365 current
   "Gpt_5_5_Reasoning",     // g365 current
-  "Gpt_5_6_Chat",          // speculative next-gen
+  "Gpt_5_6_Reasoning",     // confirmed live: DeepLeo
+  "Gpt_5_6_Chat",          // registered but dead: BotConnection deflection
   "Claude_Sonnet",         // speculative Claude
   "Anthropic_Claude",      // speculative Claude
   "Claude_Reasoning",      // speculative Claude

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseToolCalls, formatToolDefinitions, looksLikeConfabulation, looksLikeHallucinatedCompletion, isProseDocument } from "./tools.js";
+import { parseToolCalls, formatToolDefinitions, looksLikeConfabulation, looksLikeHallucinatedCompletion, looksLikeRemoteArtifactCompletion, isProseDocument } from "./tools.js";
 
 describe("parseToolCalls", () => {
   it("should parse a clean tool call with no extra text", () => {
@@ -295,6 +295,47 @@ describe("looksLikeConfabulation", () => {
     expect(looksLikeConfabulation("Done.")).toBe(false);
     expect(looksLikeConfabulation(null)).toBe(false);
     expect(looksLikeConfabulation("")).toBe(false);
+  });
+});
+
+describe("looksLikeRemoteArtifactCompletion", () => {
+  it("flags the exact Teams-hosted patch shape returned by GPT-5.6", () => {
+    const response = "I prepared the update for `plan.md`.\n\n[Download the update patch](https://eu-prod.asyncgw.teams.microsoft.com/v1/objects/0-weu-d17-example/views/original/plan-update.patch)";
+    expect(looksLikeRemoteArtifactCompletion(response)).toBe(true);
+  });
+
+  // Detection must be anchored to an M365 artifact (Teams URL, sandbox path,
+  // citation marker). "patch"/"diff" is everyday coding-agent vocabulary, and this
+  // detector fails closed with a 502 — so an unanchored narration pattern costs a
+  // forced retry and then breaks an ordinary answer. Remote artifacts always carry
+  // a link in practice; a link-less mutation claim is the hallucination detector's job.
+  it("does not flag ordinary patch/diff talk with no M365 anchor", () => {
+    expect(looksLikeRemoteArtifactCompletion("I generated a patch for review, shown below.")).toBe(false);
+    expect(looksLikeRemoteArtifactCompletion("You can download the patch from the GitHub release page.")).toBe(false);
+    expect(looksLikeRemoteArtifactCompletion("I've attached the diff inline above for you to inspect.")).toBe(false);
+    expect(looksLikeRemoteArtifactCompletion("git format-patch generated 3 patch files in the repo.")).toBe(false);
+    expect(looksLikeRemoteArtifactCompletion("Here is the diff I prepared for the change:\n\n```diff\n-a\n+b\n```")).toBe(false);
+  });
+
+  it("flags GPT-5.6's hidden M365 file citation presented as a local edit", () => {
+    expect(looksLikeRemoteArtifactCompletion("Updated [plan.md](\uE200cite\uE202turn1file1\uE201) locally:\n\n- Changed the status to complete")).toBe(true);
+  });
+
+  it("flags an entire updated file hosted in Teams instead of written locally", () => {
+    const response = "Updated `plan.md` with `Status: complete`.\n\n[Download the updated plan.md](https://eu-prod.asyncgw.teams.microsoft.com/v1/objects/0-weu-d15-example/views/original/plan.md)";
+    expect(looksLikeRemoteArtifactCompletion(response)).toBe(true);
+  });
+
+  it("flags M365's sandbox path returned after a forced local-edit retry", () => {
+    expect(looksLikeRemoteArtifactCompletion("The update is complete. [Download plan.md](sandbox:/mnt/data/plan.md)")).toBe(true);
+  });
+
+  it("does not flag normal links, images, or local-edit confirmations", () => {
+    expect(looksLikeRemoteArtifactCompletion("See the documentation at https://example.com/setup.patch-notes")).toBe(false);
+    expect(looksLikeRemoteArtifactCompletion("Download the source at https://eu-prod.asyncgw.teams.microsoft.com/v1/objects/example/views/original/plan.md")).toBe(false);
+    expect(looksLikeRemoteArtifactCompletion("![generated image](https://example.com/image.png)")).toBe(false);
+    expect(looksLikeRemoteArtifactCompletion("Updated plan.md using the local edit tool.")).toBe(false);
+    expect(looksLikeRemoteArtifactCompletion(null)).toBe(false);
   });
 });
 
