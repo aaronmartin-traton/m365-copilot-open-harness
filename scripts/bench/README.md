@@ -24,7 +24,7 @@ Each task ends in one outcome:
 ## Usage
 
 ```sh
-pnpm run proxy 4141                 # in one shell
+bun run proxy 4141                 # in one shell
 # in another:
 node scripts/bench/run.mjs --base-url http://localhost:4141/v1 \
   --model m365-copilot --label magic-baseline

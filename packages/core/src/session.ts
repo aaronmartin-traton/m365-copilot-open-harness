@@ -10,7 +10,7 @@ import {
   CompletionFrame,
   CloseFrame,
 } from "./schemas.js";
-import { decodeJwt, getToneForModel, type CopilotStream } from "./copilot.js";
+import { decodeJwt, getToneForModel, type CopilotStream, type CapturedImage } from "./copilot.js";
 import {
   parseActionConfirmation,
   buildResumeInvokeAction,
@@ -18,6 +18,7 @@ import {
   ACTION_ALLOWED_MESSAGE_TYPES,
 } from "./native-actions.js";
 import { createLogger, trunc } from "./log.js";
+import { prepareImageAttachments, type ImageInput } from "./images.js";
 
 const RS = "\x1E";
 const log = createLogger("session");
@@ -41,6 +42,18 @@ const CODE_INTERPRETER_OPTIONS_SETS = [
   "cwc_code_interpreter_citation_fix",
   "code_interpreter_interactive_charts",
   "code_interpreter_matplotlib_patching",
+];
+const IMAGE_GEN_OPTIONS_SETS = [
+  "cwc_flux_image",
+  "cwc_flux_v3",
+  "enable_gg_gpt",
+  "flux_v3_progress_messages",
+  "flux_v3_image_gen_enable_dimensions",
+  "flux_v3_image_gen_enable_icon_dimensions",
+  "flux_v3_image_gen_enable_story",
+  "flux_v3_image_gen_enable_designer_dimensions_meta_prompting_in_system_prompts",
+  "flux_v3_image_gen_enable_system_text_with_params",
+  "flux_v3_image_gen_enable_non_watermarked_storage",
 ];
 
 // --- Optional per-request frame dumping for reverse engineering ---
@@ -149,12 +162,18 @@ export interface NativeActionConfig {
   autoConfirmAll?: boolean;
 }
 
+export interface ChatTurnOptions {
+  generateImages?: boolean;
+}
+
 export interface CopilotSessionOptions {
   agentId?: string;
   /** Reuse an existing session ID across reconnections. */
   sessionId?: string;
   /** Reuse an existing conversation ID so M365 finds the same server-side conversation. */
   conversationId?: string;
+  /** Completed turns restored with a persisted conversation. */
+  turnCount?: number;
   /** Enable native custom-action support (H-NATIVE-6/7). Off = unchanged behaviour. */
   nativeActions?: NativeActionConfig;
   /** Enable M365's hosted code interpreter when no agent is attached. Default: true. */
@@ -169,7 +188,7 @@ export interface CopilotSessionOptions {
 export class CopilotSession {
   private sessionId: string;
   private conversationId: string;
-  private _turnCount = 0;
+  private _turnCount: number;
   private agentId?: string;
   private nativeActions?: NativeActionConfig;
   private enableCodeInterpreter: boolean;
@@ -177,6 +196,7 @@ export class CopilotSession {
   constructor(options?: CopilotSessionOptions) {
     this.sessionId = options?.sessionId ?? crypto.randomUUID();
     this.conversationId = options?.conversationId ?? crypto.randomUUID();
+    this._turnCount = Math.max(0, Math.floor(options?.turnCount ?? 0));
     this.agentId = options?.agentId;
     this.nativeActions = options?.nativeActions;
     this.enableCodeInterpreter = options?.enableCodeInterpreter !== false;
@@ -193,13 +213,22 @@ export class CopilotSession {
    * Each turn opens a fresh WebSocket with invocationId "0" (per SignalR protocol).
    * Session/conversation IDs are reused so M365 maintains server-side context.
    */
-  chat(token: string, text: string, model: string = "m365-copilot", signal?: AbortSignal): Promise<CopilotStream> {
+  async chat(
+    token: string,
+    text: string,
+    model: string = "m365-copilot",
+    signal?: AbortSignal,
+    images: ImageInput[] = [],
+    opts?: ChatTurnOptions,
+  ): Promise<CopilotStream> {
+    const claims = decodeJwt(token);
+    const attachments = await prepareImageAttachments(token, this.conversationId, images);
+    const wantImages = opts?.generateImages === true;
     const isFirst = this._turnCount === 0;
     this._turnCount++;
 
-    log.info(`Chat turn ${this._turnCount - 1}: model=${model}, isFirst=${isFirst}, text=${JSON.stringify(trunc(text, 200))}`);
+    log.info(`Chat turn ${this._turnCount - 1}: model=${model}, isFirst=${isFirst}, images=${attachments.length}, text=${JSON.stringify(trunc(text, 200))}`);
 
-    const claims = decodeJwt(token);
     const requestId = crypto.randomUUID();
 
     const params = new URLSearchParams({
@@ -216,6 +245,7 @@ export class CopilotSession {
       agent: "web",
       scenario: "OfficeWebIncludedCopilot",
     });
+    if (process.env.M365_TEMPORARY_CHAT === "1") params.set("disableMemory", "1");
 
     const wsUrl = `wss://substrate.office.com/m365Copilot/Chathub/${claims.oid}@${claims.tid}?${params}`;
     const agentId = this.agentId;
@@ -237,6 +267,7 @@ export class CopilotSession {
       // Highest per-component score across all messages this turn. The most
       // recent score isn't necessarily the most informative — the worst one is.
       const maxScores: Record<string, number> = {};
+      const imagesByToken = new Map<string, CapturedImage>();
       let turnCountServer: number | null = null;
       let turnState: string | null = null;
       // Native-action round-trip state (H-NATIVE-6). `baseArgs` is the sent chat
@@ -298,8 +329,34 @@ export class CopilotSession {
         }
         if (r.emit) onDelta(r.emit);
       };
+      const captureImages = (message: unknown) => {
+        if (!message || typeof message !== "object" || !("contentGenerationProgressList" in message)) return;
+        const list = message.contentGenerationProgressList;
+        if (!Array.isArray(list)) return;
+        for (const entry of list) {
+          if (!entry || typeof entry !== "object" || !("ImageReferenceUrls" in entry)) continue;
+          const urls = entry.ImageReferenceUrls;
+          if (!Array.isArray(urls) || urls.length === 0 || typeof urls[0] !== "string") continue;
+          const record = entry as Record<string, unknown>;
+          const key = typeof record.fileToken === "string" ? record.fileToken : urls[0];
+          const status = typeof record.status === "number" ? record.status : 0;
+          const previous = imagesByToken.get(key);
+          if (previous && (previous.status ?? 0) >= status) continue;
+          imagesByToken.set(key, {
+            referenceUrls: urls.filter((url): url is string => typeof url === "string"),
+            fileToken: typeof record.fileToken === "string" ? record.fileToken : undefined,
+            pollUrl: typeof record.pollUrl === "string" ? record.pollUrl : undefined,
+            size: typeof record.size === "string" ? record.size : undefined,
+            orientation: typeof record.orientation === "string" ? record.orientation : undefined,
+            status,
+          });
+        }
+      };
 
       const stream: CopilotStream = {
+        get images() {
+          return [...imagesByToken.values()];
+        },
         get fullText() {
           return answer;
         },
@@ -483,7 +540,14 @@ export class CopilotSession {
               // set + NO agent; we send [] + agent and Disengage.
               optionsSets: [
                 ...((this.enableCodeInterpreter && !agentId && !process.env.M365_NO_CODE_INTERPRETER) ? CODE_INTERPRETER_OPTIONS_SETS : []),
+                ...(wantImages ? IMAGE_GEN_OPTIONS_SETS : []),
                 ...(process.env.M365_EXTRA_OPTIONSSETS ? process.env.M365_EXTRA_OPTIONSSETS.split(",").map((s) => s.trim()).filter(Boolean) : []),
+                ...(attachments.length > 0 ? [
+                  "cwcgptvsan",
+                  "flux_v3_gptv_enable_upload_multi_image_in_turn_wo_ch",
+                  "gptvnorm2048",
+                  "cwc_fileupload_odb",
+                ] : []),
               ],
               streamingMode: "ConciseWithPadding",
               spokenTextMode: "None",
@@ -505,6 +569,7 @@ export class CopilotSession {
                 "EndOfRequest",
                 "ReferencesListComplete",
                 "GeneratedCode",        // code-interpreter execution frames
+                ...(wantImages ? ["GenerateGraphicArt"] : []),
                 "GenerateContentQuery",
                 // Native custom-action vocabulary (H-NATIVE-6): the server only
                 // SENDS these trigger frames if the client says it can handle them.
@@ -543,6 +608,10 @@ export class CopilotSession {
                 experienceType: "Default",
                 adaptiveCards: [] as any[],
                 clientPreferences: {},
+                ...(attachments.length > 0 ? {
+                  messageAnnotations: attachments.map((attachment) => attachment.annotation),
+                  connectedFederatedConnections: ["dummyId"],
+                } : {}),
               },
               ...(agentId
                 ? {
@@ -679,6 +748,7 @@ export class CopilotSession {
             let resumedHere = false;
             for (const m of item.messages ?? []) {
               if (m.author !== "bot") continue;
+              captureImages(m);
               if (m.contentOrigin) contentOrigin = m.contentOrigin;
               if (m.messageType) messageType = m.messageType;
               if (m.messageId) messageId = m.messageId;
@@ -719,6 +789,7 @@ export class CopilotSession {
                 // control-typed ones — so callers can tell apart `DeepLeo` from
                 // `3PDeclarativeAgent` and surface `Disengaged` cleanly.
                 if (m.author === "bot") {
+                  captureImages(m);
                   if (m.contentOrigin) contentOrigin = m.contentOrigin;
                   if (m.messageType) messageType = m.messageType;
                   if (m.messageId) messageId = m.messageId;

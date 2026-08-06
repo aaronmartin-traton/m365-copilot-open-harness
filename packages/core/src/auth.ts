@@ -4,9 +4,9 @@ import { get as httpGet } from "node:http";
 import { createServer } from "node:net";
 import { chromium } from "playwright";
 import { z } from "zod";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { createLogger } from "./log.js";
 
 const CLIENT_ID = "c0ab8ce9-e9a0-42e7-b064-33d422df41f1";
@@ -16,14 +16,20 @@ const SCOPES = [
   "https://substrate.office.com/sydney/M365Chat.Read",
   "https://substrate.office.com/sydney/sydney.readwrite",
 ];
+const IMAGE_ARTIFACT_SCOPES = ["https://designerappservice.officeapps.live.com/.default"];
+
+export function getImageArtifactToken(): Promise<string | null> {
+  return getTokenForScope(IMAGE_ARTIFACT_SCOPES);
+}
 
 const log = createLogger("auth");
 const CONFIG_DIR = join(homedir(), ".config", "opencode-m365");
 
 mkdirSync(CONFIG_DIR, { recursive: true });
 const CACHE_FILE = process.env.M365_CACHE_FILE ?? join(CONFIG_DIR, "msal-cache.json");
-const BROWSER_PROFILE_DIR =
-  process.env.M365_BROWSER_PROFILE ?? join(CONFIG_DIR, "browser-profile-cdp");
+export function getBrowserProfileDir(): string {
+  return process.env.M365_BROWSER_PROFILE ?? join(CONFIG_DIR, "browser-profile-cdp");
+}
 
 function loadCache(app: msal.PublicClientApplication): void {
   if (!existsSync(CACHE_FILE)) return;
@@ -35,11 +41,12 @@ function loadCache(app: msal.PublicClientApplication): void {
 }
 
 function saveCache(app: msal.PublicClientApplication): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
+  mkdirSync(dirname(CACHE_FILE), { recursive: true, mode: 0o700 });
   writeFileSync(CACHE_FILE, app.getTokenCache().serialize(), {
     encoding: "utf-8",
     mode: 0o600,
   });
+  chmodSync(CACHE_FILE, 0o600);
 }
 
 let appInstance: msal.PublicClientApplication | null = null;
@@ -211,7 +218,7 @@ export async function loginInteractive(
     process.env.CHROMIUM_PATH ?? chromium.executablePath(),
     [
       `--remote-debugging-port=${debuggingPort}`,
-      `--user-data-dir=${BROWSER_PROFILE_DIR}`,
+      `--user-data-dir=${getBrowserProfileDir()}`,
       "--no-first-run",
       "--no-default-browser-check",
     ],

@@ -39,7 +39,7 @@ Hard-won defaults for working on this proxy. Internalize these before touching a
    weird: it tracks *conversations/threads started per unit time*, not messages (F13),
    and it surfaces as `Disengaged`-looking 502s that are actually throttle. Never fire
    concurrent requests, and never loop fresh conversations back-to-back. Space experiment
-   runs out (generous cooldowns between threads). A real pi/openclaw session — one long
+   runs out (generous cooldowns between threads). A real pi/Codex session — one long
    thread, many messages — is cheap; it's our *experiments* (a new thread per task) that
    burn the thread budget and trigger the throttle.
 
@@ -49,10 +49,9 @@ Hard-won defaults for working on this proxy. Internalize these before touching a
    than the task it interrupted. Don't suppress an idea because it's off the current
    thread. Record what you learn in [`docs/hypotheses.md`](docs/hypotheses.md).
 
-3. **The end goal is always a usable agent in pi or openclaw.** Every change exists to make
-   this proxy drop into pi/openclaw and actually drive a real coding loop. A clever protocol
-   finding that doesn't move that needle is a footnote, not a win. Validate wins through a
-   real harness, not only the bench.
+3. **The end goal is always a usable agent in pi, Codex, or standalone.** Every change exists to make
+   this proxy drive a real coding loop. A clever protocol finding that doesn't move that needle is a
+   footnote, not a win. Validate wins through a real harness, not only the bench.
 
 4. **Be scientific: hypothesize → predict → test → conclude.** Turn every "I think X" into a
    falsifiable hypothesis with the cheapest probe that settles it. Don't ship on a plausible
@@ -109,14 +108,14 @@ hypothesis that teaches us something.
 - Prefer empirical evidence — what the real first-party client sends/receives
   (capture it with Playwright), what the bench scores — over schema guesses.
 
-## Layout (pnpm workspace, all TypeScript/ESM)
+## Layout (Bun workspace, all TypeScript/ESM)
 
 | Package | Role |
 |---|---|
 | `@m365-copilot/core` | auth (MSAL+Playwright), WebSocket client, sessions, agent mgmt, tool formatting, schemas |
 | `@m365-copilot/proxy-lib` | OpenAI↔M365 translation: framework-free `createApp()` fetch handler, `SessionPool`, handler, tool-call parsing |
 | `@m365-copilot/proxy` | standalone **Nitro** service / proxy binary (`m365-proxy`); file-based `routes/`, startup-auth `plugins/`, builds to `.output/` |
-| `@m365-copilot/openclaw-plugin` | OpenClaw config generator + setup CLI |
+| `@m365-copilot/openclaw-plugin` | disabled, non-publishable compatibility tombstone |
 
 `scripts/` holds RE probes + dev tools (`_probe-chat` helper, `proxy-verify`,
 frame/optionsSets/tone probes, `gateway-*` captures) and **`scripts/bench/`** — the
@@ -125,10 +124,10 @@ quantitative benchmark. See the hypothesis-driven section above.
 ## Build & test
 
 ```sh
-pnpm install
-pnpm build          # tsdown, all packages (tests import from dist/, so build first)
-pnpm test           # = test:unit; pure unit tests, NO auth/network
-pnpm test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
+bun install
+bun run build          # tsdown, all packages (tests import from dist/, so build first)
+bun test               # = test:unit; pure unit tests, NO auth/network
+bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
 ```
 
 - ESM with `.js`-suffixed relative imports (tsdown/Node ESM). Keep that convention.
@@ -137,14 +136,13 @@ pnpm test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
 
 ## Running against real M365 (important)
 
-- **Run inside the Nix dev shell**: `nix develop --command bash -c '...'`. It provides
-  `CHROMIUM_PATH` (a system Chromium); Playwright's bundled one is broken on NixOS.
-- Auth uses `~/.config/opencode-m365/secrets.json` (email/password/mfaSecret) +
-  `msal-cache.json`. **This data dir keeps the legacy `opencode-m365` name** — do not
-  rename it or you orphan working credentials.
-- Set `M365_DEBUG=1` to log to `~/.config/opencode-m365/debug.log`. There is **no
-  interactive login** — auth is silent-refresh → automated (secrets.json) → fail loudly.
-  A headless host / second PC never opens a browser tab or hangs on a paste-the-URL prompt.
+- **Run directly with Bun**: `bun run build` and `bun packages/proxy/bin/m365-proxy.mjs`. Set
+  `CHROMIUM_PATH` only when the host's bundled Playwright browser is unavailable.
+- Auth uses `~/.config/opencode-m365/msal-cache.json`; the interactive login launcher
+  populates it without storing a plaintext password or MFA seed.
+- Set `M365_DEBUG=1` to log to `~/.config/opencode-m365/debug.log`. When the cache is
+  missing or expired, run `bun packages/proxy/bin/m365-login.mjs` interactively and
+  complete Microsoft's password/MFA flow in the browser.
 - **Mind the quota**: ~600 messages **per conversation**, plus account-level throttling.
   Don't burn it on loops. A "rate limited / empty response" is often actually a
   `Disengaged` refusal (see the API doc), not throttling.
@@ -188,8 +186,7 @@ pnpm test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
 ## Verifying changes end-to-end
 
 ```sh
-# proxy smoke + tool call + multiturn (run unsandboxed, inside nix develop):
-nix develop --command bash -c 'M365_DEBUG=1 node scripts/proxy-verify.mjs --agent --multiturn'
+M365_DEBUG=1 bun scripts/proxy-verify.mjs --agent --multiturn
 ```
 
 ## Conventions

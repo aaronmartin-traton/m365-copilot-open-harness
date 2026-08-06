@@ -16,8 +16,8 @@
 // and refuses to draw a conclusion from a rested account. Use --induce=N to
 // force degradation on demand (burns N threads — mind the quota).
 //
-// Usage (inside nix develop, unsandboxed):
-//   node scripts/throttle-recovery-ab.mjs [--induce=0] [--rounds=12] [--gap=45]
+// Usage (unsandboxed with Bun):
+//   bun scripts/throttle-recovery-ab.mjs [--induce=0] [--rounds=12] [--gap=45]
 //        [--newtoken=login|silent] [--no-new]
 //
 //   --induce=N     fire N back-to-back fresh threads to trigger thread-rate

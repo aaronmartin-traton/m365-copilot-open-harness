@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { parseImageDataUrl } from "./images.js";
 
 // --- OpenAI Request Schemas ---
 
@@ -22,6 +23,22 @@ export const ToolDefinition = z.object({
   }),
 });
 
+const ChatTextContentPart = z.object({
+  type: z.literal("text"),
+  text: z.string(),
+});
+
+const ChatImageContentPart = z.object({
+  type: z.literal("image_url"),
+  image_url: z.object({
+    url: z.string(),
+    detail: z.enum(["auto", "low", "high"]).optional(),
+  }),
+}).transform((part) => ({
+  ...part,
+  image: parseImageDataUrl(part.image_url.url, part.image_url.detail),
+}));
+
 export const ChatMessage = z.object({
   // `developer` is OpenAI's reasoning-model role — it replaces `system` for o1/
   // gpt-5-class reasoning models, and clients like Hermes emit it when pointed at
@@ -32,12 +49,7 @@ export const ChatMessage = z.object({
   ),
   content: z.union([
     z.string(),
-    z.array(
-      z.object({
-        type: z.string(),
-        text: z.string().optional(),
-      }),
-    ),
+    z.array(z.union([ChatTextContentPart, ChatImageContentPart])),
   ]).nullable().optional(),
   tool_calls: z.array(ToolCall).optional(),
   tool_call_id: z.string().optional(),
@@ -64,4 +76,8 @@ export const ChatCompletionRequest = z.object({
       function: z.object({ name: z.string() }),
     }),
   ]).optional(),
+  /** Optional continuity hints used by local clients; never sent to M365. */
+  conversation_id: z.string().optional(),
+  user: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });

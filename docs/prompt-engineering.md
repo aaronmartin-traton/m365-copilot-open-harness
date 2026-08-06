@@ -1,7 +1,7 @@
 # Prompt-engineering M365 Copilot into tool-calling
 
 Distilled, **conclusive** findings on how to make M365 Copilot's chat-tuned model
-emit usable tool calls — enough to drive a real agent loop in pi/openclaw. This is
+emit usable tool calls — enough to drive a real agent loop in pi or Codex. This is
 the reference layer: the protocol lives in [`m365-copilot-api.md`](m365-copilot-api.md),
 the messy in-progress experiments in [`hypotheses.md`](hypotheses.md). Promote things
 here once they're settled with evidence (not n=1).
@@ -94,11 +94,11 @@ Current strategies: `baseline` (shipped default, unchanged), `minimal`, `recency
 
 ```sh
 # 1. one persistent proxy pointed at the control file
-M365_FRAMING_FILE=/tmp/m365-framing M365_DEBUG=1 node packages/proxy/bin/m365-proxy.mjs 4141 &
+M365_FRAMING_FILE=/tmp/m365-framing M365_DEBUG=1 bun packages/proxy/bin/m365-proxy.mjs 4141 &
 # 2. sweep all strategies × discriminating tasks, rotated order, big cooldowns
 COOLDOWN=45 BLOCK_COOLDOWN=60 bash scripts/bench/sweep2.sh
 # 3. aggregate into a strategy × task matrix + leaderboard
-node scripts/bench/analyze-sweep.mjs s2
+bun scripts/bench/analyze-sweep.mjs s2
 ```
 
 ## Results

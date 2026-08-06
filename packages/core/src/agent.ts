@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { createLogger } from "./log.js";
 import { getTokenForScope } from "./auth.js";
+import { z } from "zod";
 
 const log = createLogger("agent");
 
@@ -16,6 +17,23 @@ const BAP_API = "https://api.bap.microsoft.com";
 
 const AGENT_BASE_NAME = "m365-tool-agent";
 const AGENT_DESCRIPTION = "Auto-created agent for tool calling";
+
+let unavailableUntil = 0;
+let unavailableReason = "";
+
+function markUnavailable(reason: string): void {
+  const ttlMs = Number(process.env.M365_AGENT_FAILURE_TTL_MS ?? 60 * 60 * 1000);
+  unavailableUntil = Date.now() + (Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : 60 * 60 * 1000);
+  unavailableReason = reason;
+}
+
+export function getAgentAvailability() {
+  return {
+    available: Date.now() >= unavailableUntil,
+    retryAt: unavailableUntil || null,
+    reason: unavailableReason || null,
+  };
+}
 
 
 // The agent's instructions are baked in at creation time and can't be cheaply
@@ -66,7 +84,7 @@ The runtime returns the real result in a <tool_response> block — treat it as g
 When the message has no <tools> block, respond normally as a helpful assistant in natural language.`;
 }
 
-async function getEnvironmentUrl(bapToken: string): Promise<string> {
+async function getEnvironmentUrl(bapToken: string, ppToken: string): Promise<string> {
   // Query BAP API to discover the default environment
   const res = await fetch(
     `${BAP_API}/providers/Microsoft.BusinessAppPlatform/environments/~default?api-version=2023-06-01`,
@@ -81,8 +99,7 @@ async function getEnvironmentUrl(bapToken: string): Promise<string> {
     throw new Error(`BAP API failed: ${res.status} ${await res.text()}`);
   }
 
-  const data = await res.json();
-  const envName: string = data.name; // e.g. "Default-00000000-0000-4000-8000-000000000000"
+  const envName = z.object({ name: z.string().min(1) }).parse(await res.json()).name;
   const envId = envName
     .replace(/^Default-/i, "")
     .replace(/-/g, "")
@@ -167,7 +184,7 @@ async function listBots(
   );
   if (!res.ok)
     throw new Error(`Failed to list bots: ${res.status} ${await res.text()}`);
-  return res.json();
+  return z.array(z.object({ botId: z.string(), shortBotName: z.string() })).parse(await res.json());
 }
 
 async function createBot(
@@ -262,8 +279,11 @@ async function createBot(
 
   if (!res.ok)
     throw new Error(`Failed to create bot: ${res.status} ${await res.text()}`);
-  const data = await res.json();
+  const data = z.object({
+    bot: z.object({ schemaName: z.string().optional(), cdsBotId: z.string().optional() }).optional(),
+  }).parse(await res.json());
   const botId = data.bot?.schemaName || data.bot?.cdsBotId;
+  if (!botId) throw new Error("Create bot response missing bot ID");
   return { botId };
 }
 
@@ -283,9 +303,7 @@ async function publishBot(
 
   if (!res.ok)
     throw new Error(`Failed to publish bot: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  const titleId: string = data.TitleId;
-  if (!titleId) throw new Error("Publish response missing TitleId");
+  const titleId = z.object({ TitleId: z.string().min(1) }).parse(await res.json()).TitleId;
   log.info(`Published agent: TitleId=${titleId}`);
   return titleId;
 }
@@ -319,21 +337,43 @@ export async function getOrCreateAgent(
     );
   }
 
+  if (Date.now() < unavailableUntil) {
+    log.info(`Agent provisioning unavailable until ${new Date(unavailableUntil).toISOString()}: ${unavailableReason}`);
+    return null;
+  }
+
   // Need BAP token for environment discovery
-  const bapToken = await getTokenForScope(BAP_SCOPES);
+  let bapToken: string | null;
+  try { bapToken = await getTokenForScope(BAP_SCOPES); }
+  catch (error: any) {
+    markUnavailable(error?.message ?? "BAP token acquisition failed");
+    return null;
+  }
   if (!bapToken) {
     log.info("No BAP token available — skipping agent creation");
+    markUnavailable("No BAP token available");
     return null;
   }
 
   // Need PowerPlatform token for Copilot Studio APIs
-  const ppToken = await getTokenForScope(POWERPLATFORM_SCOPES);
+  let ppToken: string | null;
+  try { ppToken = await getTokenForScope(POWERPLATFORM_SCOPES); }
+  catch (error: any) {
+    markUnavailable(error?.message ?? "PowerPlatform token acquisition failed");
+    return null;
+  }
   if (!ppToken) {
     log.info("No PowerPlatform token available — skipping agent creation");
+    markUnavailable("No PowerPlatform token available");
     return null;
   }
 
-  const envUrl = await getEnvironmentUrl(bapToken);
+  let envUrl: string;
+  try { envUrl = await getEnvironmentUrl(bapToken, ppToken); }
+  catch (error: any) {
+    markUnavailable(error?.message ?? "PowerPlatform environment discovery failed");
+    return null;
+  }
 
   try {
     log.info(`PowerPlatform env URL: ${envUrl}, agent name: ${wantName}`);
@@ -382,9 +422,12 @@ export async function getOrCreateAgent(
     // the agent it's mid-conversation with pulled out from under it. A few orphaned
     // lightweight bots are harmless; a deleted in-use agent breaks the other host.
     saveCachedAgent({ agentId, botId, instructionsHash: wantHash, createdAt: new Date().toISOString() });
+    unavailableUntil = 0;
+    unavailableReason = "";
     return agentId;
   } catch (err: any) {
     log.error("Agent creation failed:", err.message, err.cause?.message || "");
+    markUnavailable(err?.message ?? "Agent creation failed");
     return null;
   }
 }

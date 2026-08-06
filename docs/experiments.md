@@ -15,9 +15,9 @@ thinking lives in [`hypotheses.md`](hypotheses.md), confirmed facts in
 ## Setup
 
 ```sh
-pnpm build && pnpm run proxy 4141          # one shell; add env flags per experiment
-# probes: M365_NO_INTERACTIVE=1 CHROMIUM_PATH=$(which chromium) node scripts/<probe>.mjs
-# bench:  node scripts/bench/run.mjs --base-url http://localhost:4141/v1 --model <id> --label <name>
+bun run build && bun run proxy 4141          # one shell; add env flags per experiment
+# probes: M365_NO_INTERACTIVE=1 CHROMIUM_PATH=$(which chromium) bun scripts/<probe>.mjs
+# bench:  bun scripts/bench/run.mjs --base-url http://localhost:4141/v1 --model <id> --label <name>
 ```
 
 Bench scorecards land in `scripts/bench/out/<label>-<ts>.json` — diff them.
@@ -31,7 +31,7 @@ gets a non-zero `SOLVED` / tool-call rate. **Always diff against the magic basel
 
 ### E-C0 — Re-baseline (run first, on a rested account)
 - **Why:** the `0/5` was measured while degraded; confirm it holds when fresh.
-- **Run:** `node scripts/bench/run.mjs --model m365-copilot --label baseline --repeat 2`
+- **Run:** `bun scripts/bench/run.mjs --model m365-copilot --label baseline --repeat 2`
 - **Read:** `SOLVED %` + outcome mix. If still ~0 with few disengages → the prose
   failure is real (not throttle). If disengages vanish but prose stays → confirms
   the two failure modes are independent.
@@ -56,8 +56,8 @@ gets a non-zero `SOLVED` / tool-call rate. **Always diff against the magic basel
   default** (no env flag — fenced + shell-routing is the only path).
 - **Run (winning config):**
   ```sh
-  pnpm build && pnpm run proxy 4141   # fenced + shell framing are the default
-  node scripts/bench/run.mjs --model m365-copilot --label tier1-neutral --tasks fix-bug,count-lines
+  bun run build && bun run proxy 4141   # fenced + shell framing are the default
+  bun scripts/bench/run.mjs --model m365-copilot --label tier1-neutral --tasks fix-bug,count-lines
   ```
 - **New bench knobs (this session):** `--system <file>` / `BENCH_SEED=ls|cat`; prompt
   hypotheses live in `scripts/bench/prompts/p*.txt` (p0 neutral … p8/p9 bash-elicitation).

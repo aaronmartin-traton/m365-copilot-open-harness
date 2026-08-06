@@ -14,9 +14,9 @@ const creds = loadSecrets();
 if (!creds) { console.log("no secrets"); process.exit(1); }
 
 const ROOT = process.cwd();
-const pwMod = await import(`${ROOT}/node_modules/.pnpm/playwright@1.58.2/node_modules/playwright/index.js`);
+const pwMod = await import("../../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import(`${ROOT}/node_modules/.pnpm/otpauth@9.5.0/node_modules/otpauth/dist/otpauth.esm.js`);
+const { TOTP } = await import("../../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 const shot = async (page, name) => { await page.screenshot({ path: join(OUT, name + ".png") }).catch(() => {}); console.log(`[shot] ${name}`); };

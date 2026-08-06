@@ -26,5 +26,8 @@ export default defineEventHandler(async (event) => {
     response.once("close", maybeAbort);
   }
 
-  return handleResponse(body, pool, { signal: abortController.signal });
+  return handleResponse(body, pool, {
+    signal: abortController.signal,
+    sessionKey: getHeader(event, "x-m365-session-key") ?? undefined,
+  });
 });

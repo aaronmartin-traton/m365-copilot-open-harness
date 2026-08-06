@@ -19,16 +19,15 @@
 //     KEY OR VALUE looks token-/context-/usage-related (the actual gold).
 //   scripts/frame-dump-out/<timestamp>/sent.json              — what we sent
 //
-// Run unsandboxed inside `nix develop --command`. Burns ONE M365 message.
+// Run unsandboxed with Bun. Burns ONE M365 message.
 
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
 import { getToken, getOrCreateAgent, decodeJwt } from "../packages/core/dist/index.mjs";
 
 // `ws` lives in @m365-copilot/core's dependencies, not the workspace root,
-// so resolve it via the pnpm store the way studio-dig.mjs does for playwright.
-const ROOT = process.cwd();
-const wsMod = await import(`${ROOT}/node_modules/.pnpm/ws@8.20.0/node_modules/ws/wrapper.mjs`);
+// `ws` is provided by @m365-copilot/core's workspace dependency.
+const wsMod = await import("../packages/core/node_modules/ws/wrapper.mjs");
 const WebSocket = wsMod.default ?? wsMod.WebSocket;
 
 const RS = "\x1E";

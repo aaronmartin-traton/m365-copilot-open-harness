@@ -70,14 +70,26 @@ export function decodeJwt(token: string) {
   return JwtClaims.parse(raw);
 }
 
+/** One generated image carried by a GraphicArt progress frame. */
+export interface CapturedImage {
+  referenceUrls: string[];
+  fileToken?: string;
+  pollUrl?: string;
+  size?: string;
+  orientation?: string;
+  status?: number;
+}
+
 /**
  * The streaming result of one M365 Copilot turn. Implemented by
- * `CopilotSession.chat` (session.ts); async-iterate it for delta text and read
+ * CopilotSession.chat (session.ts); async-iterate it for delta text and read
  * the getters for the turn's diagnostic metadata after it completes.
  */
 export interface CopilotStream {
   [Symbol.asyncIterator](): AsyncIterator<string>;
   fullText: string;
+  /** Generated images captured during this turn. */
+  images: CapturedImage[];
   /** True if the server returned content (deltas or full text) */
   hasContent: boolean;
   /** Throttle info if provided by M365 */

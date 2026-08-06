@@ -1,5 +1,5 @@
 // End-to-end proxy verification against live M365. Run unsandboxed.
-// Usage: M365_DEBUG=1 node scripts/proxy-verify.mjs [--tools] [--agent]
+// Usage: M365_DEBUG=1 bun scripts/proxy-verify.mjs [--tools] [--agent]
 import { createApp } from "../packages/proxy-lib/dist/index.mjs";
 import { getToken } from "../packages/core/dist/index.mjs";
 

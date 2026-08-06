@@ -6,7 +6,7 @@
 // thread-rate throttle, F13). Reports disengaged count + dea_violation (the
 // classifier score that tracks Disengage proximity) + contentOrigin.
 //
-// Usage: nix develop --command node scripts/disengage-config-probe.mjs [repeat]
+// Usage: bun scripts/disengage-config-probe.mjs [repeat]
 import { getToken, decodeJwt } from "../packages/core/dist/index.mjs";
 import { oneTurn } from "./_probe-chat.mjs";
 

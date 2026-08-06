@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createApp } from "./index.js";
 
 // This whole suite hits real M365 (auth, WS, agent creation, ~600-msg quota),
-// so it has to be opt-in. Without the guard, `pnpm test` waits 2 min for an
+// so it has to be opt-in. Without the guard, Bun's unit command would wait 2 min for an
 // interactive login that no automated runner can provide. Matches the
 // convention in tools.test.ts (none of those tests need M365_LIVE because
 // they're pure).

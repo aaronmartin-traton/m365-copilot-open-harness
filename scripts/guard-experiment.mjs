@@ -2,7 +2,7 @@
 // separates content responses (a model writing a README full of ```bash fences)
 // from real agentic actions (a single shell command)? No quota — pure parsing.
 //
-//   nix develop --command node scripts/guard-experiment.mjs
+//   bun scripts/guard-experiment.mjs
 //
 // Result (June 2026): H2 "≥2 fences AND prose≥120" scored 7/7 and is what
 // isProseDocument() ships. See packages/core/src/tools.ts.

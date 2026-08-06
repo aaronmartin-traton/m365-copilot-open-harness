@@ -6,9 +6,9 @@
 # the bench), pinning the comply-rate F14 asked for (~10x).
 #
 # pi runs model-generated commands on the HOST in a throwaway /tmp dir (benign task).
-# python3 is absent from the nix shell, so we resolve it from nixpkgs and prepend it.
-# Must run inside `nix develop` so `pi` is on PATH:
-#   nix develop --command bash -c 'N=10 bash scripts/bench/pi-reliability.sh'
+# Resolve Python from the host; this benchmark does not require a package manager shell.
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || command -v python || true)}"
+[ -n "$PYTHON_BIN" ] || { echo "[pi-rel] python3/python is required on PATH"; exit 1; }
 set -u
 cd "$(dirname "$0")/../.." || exit 1
 
@@ -21,13 +21,12 @@ BASE="http://localhost:${PORT}/v1"
 CSV="${CSV:-/tmp/m365-pi-reliability.csv}"
 TASK="${TASK:-fix-bug}"   # fix-bug (find+fix) | edit-config (F17 "change X->Y" shape)
 
-command -v pi >/dev/null || { echo "[pi-rel] pi not on PATH — run inside nix develop"; exit 1; }
-PYBIN="$(nix build --no-link --print-out-paths nixpkgs#python3 2>/dev/null)/bin"
-[ -x "$PYBIN/python3" ] || { echo "[pi-rel] could not resolve python3 from nixpkgs"; exit 1; }
+command -v pi >/dev/null || { echo "[pi-rel] pi is not on PATH"; exit 1; }
+[ -n "$PYTHON_BIN" ] || { echo "[pi-rel] python3/python is required on PATH"; exit 1; }
 curl -s -m3 "http://localhost:${PORT}/health" >/dev/null || { echo "[pi-rel] proxy not answering on :$PORT"; exit 1; }
 
 [ -f "$CSV" ] || echo "run,iso_ts,outcome,elapsed_s,dir" > "$CSV"
-echo "[pi-rel] N=$N model=$MODEL base=$BASE python3=$PYBIN cooldown=${COOLDOWN}s"
+echo "[pi-rel] N=$N model=$MODEL base=$BASE python=$PYTHON_BIN cooldown=${COOLDOWN}s"
 
 for i in $(seq 1 "$N"); do
   D="$(mktemp -d /tmp/pi-task-XXXXXX)"
@@ -52,16 +51,16 @@ EOF
 {"defaultModel":"$MODEL","defaultProvider":"m365","enableInstallTelemetry":false}
 EOF
   t0=$(date +%s)
-  ( cd "$D" && HOME="$PIHOME" PI_OFFLINE=1 PATH="$PYBIN:$PATH" \
+  ( cd "$D" && HOME="$PIHOME" PI_OFFLINE=1 \
       timeout "$TIMEOUT" pi --provider m365 --model "$MODEL" -nc --print \
       -p "$PROMPT (run-nonce: ${i}-$(date +%s)-$RANDOM)" \
       > "$D/pi.out" 2>&1 )
   if [ "$TASK" = edit-config ]; then
-    "$PYBIN/python3" -c "import json,sys;c=json.load(open('$D/config.json'));sys.exit(0 if c.get('port')==8080 and c.get('name')=='app' and c.get('debug')==False else 1)" 2>/dev/null && ok=1 || ok=0
+    "$PYTHON_BIN" -c "import json,sys;c=json.load(open('$D/config.json'));sys.exit(0 if c.get('port')==8080 and c.get('name')=='app' and c.get('debug')==False else 1)" 2>/dev/null && ok=1 || ok=0
   elif [ "$TASK" = multi ]; then
-    "$PYBIN/python3" "$D/test.py" 2>/dev/null | grep -qx OK && ok=1 || ok=0
+    "$PYTHON_BIN" "$D/test.py" 2>/dev/null | grep -qx OK && ok=1 || ok=0
   else
-    "$PYBIN/python3" "$D/check.py" 2>/dev/null | grep -qx OK && ok=1 || ok=0
+    "$PYTHON_BIN" "$D/check.py" 2>/dev/null | grep -qx OK && ok=1 || ok=0
   fi
   if [ "$ok" = 1 ]; then outcome=SOLVED
   elif grep -qi 'disengag' "$D/pi.out" 2>/dev/null; then outcome=DISENGAGED

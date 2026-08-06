@@ -25,6 +25,15 @@ export const ClassifierScore = z.object({
   component: z.string(),
   score: z.number(),
 });
+export const ContentGenerationProgress = z.object({
+  contentType: z.string().optional(),
+  size: z.string().optional(),
+  orientation: z.string().optional(),
+  ImageReferenceUrls: z.array(z.string()).optional(),
+  fileToken: z.string().optional(),
+  pollUrl: z.string().optional(),
+  status: z.number().optional(),
+});
 
 export const BotMessage = z.object({
   text: z.string(),
@@ -37,6 +46,7 @@ export const BotMessage = z.object({
   offense: z.string().optional(),
   messageType: z.string().optional(),
   contentType: z.string().optional(),
+  contentGenerationProgressList: z.array(ContentGenerationProgress).optional(),
   hiddenText: z.string().optional(),
   adaptiveCards: z.array(z.any()).optional(),
   sourceAttributions: z.array(z.any()).optional(),

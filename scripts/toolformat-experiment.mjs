@@ -1,7 +1,7 @@
 // A/B tool-call format experiment. Fresh conversation per call, agent on.
 // Measures: does the model emit a parseable tool call (when expected),
 // is it the right tool, and how much stray prose surrounds it.
-// Run unsandboxed inside nix develop. Burns ~9 M365 messages.
+// Run unsandboxed with Bun. Burns ~9 M365 messages.
 import { ModelSession, parseToolCalls } from "../packages/core/dist/index.mjs";
 
 const TOOLS_TEXT = `- read_file(path): read a file from the filesystem

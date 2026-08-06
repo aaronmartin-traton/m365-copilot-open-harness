@@ -68,6 +68,17 @@ describe("parseToolCalls", () => {
     // The ```json fence markers must not survive as stray prose
     expect(result.textContent).toBeNull();
   });
+  it("routes JSON namespaced runtime tools to the supplied shell", () => {
+    const shell = {
+      type: "function" as const,
+      function: {
+        name: "run_command",
+        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+      },
+    };
+    const result = parseToolCalls('```container.exec\nls -la\n```', [shell]);
+    expect(result.toolCalls[0].function.name).toBe("run_command");
+  });
 
   it("should strip a bare ``` fence around a tool call", () => {
     const input = '```\n{"tool": "bash", "arguments": {"command": "ls"}}\n```';
@@ -105,7 +116,7 @@ describe("parseToolCalls", () => {
   });
 
   it("drops a premature {final} success claim emitted alongside a tool call", () => {
-    const input = '{"tool": "bash", "arguments": {"command": "nix build"}}{"final": "✅ SUCCESS\\nThe build passed."}';
+    const input = '{"tool": "bash", "arguments": {"command": "bun run build"}}{"final": "✅ SUCCESS\\nThe build passed."}';
     const result = parseToolCalls(input);
 
     expect(result.hasToolCalls).toBe(true);
@@ -223,12 +234,12 @@ A thing that does stuff.
 
 ## Install
 \`\`\`bash
-pnpm install && pnpm build
+bun install && bun run build
 \`\`\`
 
 ## Run
 \`\`\`bash
-pnpm run proxy 4141
+bun run proxy 4141
 \`\`\`
 That should be everything you need to get going quickly.`;
     expect(isProseDocument(parse(readme))).toBe(true);
@@ -253,7 +264,7 @@ That should be everything you need to get going quickly.`;
   });
 
   it("still flags a document with markdown headers (the F15 case)", () => {
-    const doc = "Here's a simplified README:\n\n## Install\n```bash\npnpm install\n```\n\n## Run\n```bash\npnpm start\n```";
+    const doc = "Here's a simplified README:\n\n## Install\n```bash\nbun install\n```\n\n## Run\n```bash\nbun start\n```";
     expect(isProseDocument(parse(doc))).toBe(true);
   });
 

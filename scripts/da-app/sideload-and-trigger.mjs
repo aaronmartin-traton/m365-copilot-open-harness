@@ -15,9 +15,9 @@ const SENTINEL = readFileSync(join(process.cwd(), "scripts", "sentinel-value.txt
 const APP_ID = "5e27c1a0-7b3d-4f2a-9c11-a1b2c3d4e5f6";
 const creds = loadSecrets();
 const ROOT = process.cwd();
-const pwMod = await import(`${ROOT}/node_modules/.pnpm/playwright@1.58.2/node_modules/playwright/index.js`);
+const pwMod = await import("../../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import(`${ROOT}/node_modules/.pnpm/otpauth@9.5.0/node_modules/otpauth/dist/otpauth.esm.js`);
+const { TOTP } = await import("../../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 const hitCount = () => { try { return readFileSync(HITLOG, "utf8").split("\n").filter(l => /\/sentinel\b/.test(l) && !/openapi/.test(l)).length; } catch { return 0; } };

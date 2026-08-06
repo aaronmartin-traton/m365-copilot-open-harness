@@ -2,7 +2,9 @@ export {
   getToken,
   getTokenSilent,
   getTokenForScope,
+  getImageArtifactToken,
   loginInteractive,
+  getBrowserProfileDir,
 } from "./auth.js";
 
 export {
@@ -10,24 +12,40 @@ export {
   awaitDegradationBackoff,
   isDegradationBackoff,
   createBackoffController,
+  getDegradationBackoffState,
   type BackoffController,
   type BackoffOptions,
+  type BackoffState,
 } from "./auth-recovery.js";
 
-export { getOrCreateAgent } from "./agent.js";
+export { getOrCreateAgent, getAgentAvailability } from "./agent.js";
 
 export {
   decodeJwt,
   getToneForModel,
   getAvailableModels,
   type CopilotStream,
+  type CapturedImage,
 } from "./copilot.js";
 
 export {
   CopilotSession,
   type CopilotSessionOptions,
   type NativeActionConfig,
+  type ChatTurnOptions,
 } from "./session.js";
+export {
+  generateImage,
+  fetchImageBytes,
+  buildImagePrompt,
+  classifyImageFailure,
+  ImageGenerationError,
+  type GeneratedImage,
+  type GenerateImageOptions,
+  type ImageOrientation,
+  type ImageStyle,
+  type ImageGenFailureReason,
+} from "./image.js";
 
 export {
   parseActionConfirmation,
@@ -50,6 +68,7 @@ export {
   formatToolDefinitions,
   formatToolChoiceInstruction,
   getMessageContent,
+  getMessageImages,
   parseToolCalls,
   looksLikeConfabulation,
   looksLikeHallucinatedCompletion,
@@ -60,6 +79,37 @@ export {
   type ToolChoice,
   type ParsedToolCall,
   type ParseResult,
+  type ImageContentPart,
+  type TextContentPart,
 } from "./tools.js";
+
+export {
+  getLocalShellBackend,
+  validateLocalShellBackend,
+  type LocalShellBackend,
+} from "./fenced.js";
+
+export {
+  M365WebConversationClient,
+  M365WebConversationError,
+  M365WebSessionUnavailableError,
+  type M365WebConversationClientLike,
+  type M365WebConversationClientOptions,
+} from "./web-conversations.js";
+
+export {
+  runCoworkProbe,
+  type CoworkProbeOptions,
+  type CoworkProbeResult,
+} from "./cowork.js";
+export { decodeSocketPacket, type CoworkSocketPacket } from "./cowork-protocol.js";
+
+export {
+  MAX_IMAGE_BYTES,
+  prepareImageAttachments,
+  type ImageMediaType,
+  type ImageInput,
+  type PreparedImageAttachment,
+} from "./images.js";
 
 export { createLogger, trunc, LOG_PATH } from "./log.js";

@@ -82,7 +82,7 @@ The `nativeclient` redirect URI is designed to be **intercepted by an embedded n
 ### Automated login quirks (Playwright)
 - The converged AAD login page keeps **hidden duplicate `<input type=password>` nodes**; a naive `fill()` can target a stale hidden one and submit an empty password. Fill the **visible** `name=`-selected field and verify the value landed (`fillVerified()`).
 - Field selectors: email `input[name="loginfmt"]`, password `input[name="passwd"]`, TOTP `input[name="otc"]`.
-- On NixOS, Playwright's bundled `chrome-headless-shell` fails (`libglib-2.0.so.0`); point it at a system Chromium via `CHROMIUM_PATH` (`resolveChromiumPath()`).
+- If the bundled Playwright browser is unavailable on the host, point `CHROMIUM_PATH` at a compatible system Chromium (`resolveChromiumPath()`).
 - TOTP codes are single-use per 30s window — space retries past the window.
 
 ---
@@ -335,6 +335,25 @@ conversation at `1/600`). Characterised behaviour:
 - Each **turn opens a fresh WebSocket** (with `invocationId:"0"`), but reuses the same `ConversationId`/`sessionId`, so the server threads them together. `isStartOfSession:true` only on turn 0.
 - Because the server remembers prior turns, follow-ups should send **only the new messages** (the delta), not the whole history. Re-sending the full history confuses it and burns quota. See `ModelSession`/`CopilotSession` and `SessionPool` (`handler.ts`).
 
+### Deleting a web conversation (validated August 3 2026, n=2)
+
+The `m365.cloud.microsoft` web UI deletes a conversation with `POST https://m365.cloud.microsoft/chat` and this JSON shape:
+
+```json
+{
+  "action": "DeleteConversation",
+  "conversationId": "<ConversationId>",
+  "state": {
+    "conversationPageHistoryList": "<current store value or null>",
+    "chatLandingPageHistoryList": "<current store value or null>",
+    "tasksHub": "<current store value or null>",
+    "tasksFlyout": "<current store value or null>"
+  }
+}
+```
+
+The disposable browser proof created one new chat in an authenticated headed Edge context, issued exactly one direct delete, received HTTP 200, and confirmed the ID was absent after a second `RefreshNavPane`. The current service returned an empty HTTP-200 body when only the four custom `X-*` headers were forwarded; the successful page-context request also forwarded the browser's non-sensitive `Referer`, `Accept`, and `User-Agent` headers. No bearer credential or cookie was copied. The proxy adapter allowlists those seven headers, keeps browser credentials page-owned, and must run with an authenticated profile without another process holding the profile lock. Bun's Playwright handshake timed out on this Windows host; Node 24 with Edge completed the browser proof. Automatic reaping remains opt-in via `M365_WEB_PRUNE_PROVEN=1` until a deployment's browser runtime is verified.
+
 ---
 
 ## 9. The "Disengaged" filter
@@ -391,7 +410,7 @@ Two behaviours of the chat-tuned model distort any naïve "is it tool-calling ye
   under the bench's short, blunt system prompt than under pi's longer, polished assistant
   prompt — a strategy can score well on the bench and still confabulate turn-1 ("I can't
   access the files, please paste them") under real pi (§9 F14). Consequence: the bench picks
-  the *direction*, but a win isn't real until a live **pi/openclaw** run confirms the model
+  the direction, but a win isn't real until a live pi or Codex run confirms the model
   actually drives the loop end-to-end.
 
 ### Creating the agent (`agent.ts`)

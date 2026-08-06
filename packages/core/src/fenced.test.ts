@@ -52,6 +52,27 @@ const editFile: ToolDef = {
 
 const ALL = [bash, readFile, writeFile, editFile];
 const specs = buildSpecMap(ALL);
+const singleEditSpecs = buildSpecMap([editFile]);
+
+describe("single edit aliases", () => {
+  it("maps edit and edit_file fences to the supplied tool name", () => {
+    expect(singleEditSpecs.has("edit")).toBe(true);
+    expect(singleEditSpecs.has("edit_file")).toBe(true);
+    const parsed = parseFencedToolCalls("before\n```edit\npath: app.ts\n\n<<<<<<< SEARCH\nold\n=======\nnew\n>>>>>>> REPLACE\n```\nafter", singleEditSpecs);
+    expect(parsed.calls).toHaveLength(1);
+    expect(parsed.calls[0].function.name).toBe("edit_file");
+    expect(JSON.parse(parsed.calls[0].function.arguments)).toEqual({ path: "app.ts", old: "old", new: "new" });
+    expect(parsed.leftover).toContain("before");
+    expect(parsed.leftover).toContain("after");
+  });
+
+  it("does not add aliases for multiple edit tools", () => {
+    const second = { ...editFile, function: { ...editFile.function, name: "replace_file" } };
+    const specs = buildSpecMap([editFile, second]);
+    expect(specs.has("edit")).toBe(false);
+    expect(specs.has("edit_file")).toBe(true);
+  });
+});
 
 describe("deriveFencedSpec", () => {
   it("maps a single-param tool's param to the body", () => {
@@ -102,6 +123,32 @@ describe("parseFencedToolCalls", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].function.name).toBe("bash");
     expect(args).toEqual({ command: "ls -la" });
+  });
+
+  it("maps a required body parameter when properties are omitted", () => {
+    const incompleteShell: ToolDef = {
+      type: "function",
+      function: {
+        name: "bash",
+        parameters: { type: "object", required: ["command"] },
+      },
+    };
+    const { calls } = parseFencedToolCalls("```bash\nprintf ok\n```", buildSpecMap([incompleteShell]));
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].function.arguments)).toEqual({ command: "printf ok" });
+  });
+
+  it("accepts omitted optional shell controls marked required by a client", () => {
+    const normalizedShell: ToolDef = {
+      type: "function",
+      function: {
+        name: "bash",
+        parameters: { type: "object", required: ["command", "cwd", "env", "timeout", "pty", "async", "workspace"] },
+      },
+    };
+    const { calls } = parseFencedToolCalls("```bash\nprintf ok\n```", buildSpecMap([normalizedShell]));
+    expect(calls).toHaveLength(1);
+    expect(JSON.parse(calls[0].function.arguments)).toEqual({ command: "printf ok" });
   });
 
   it("round-trips a write_file with a multi-line body", () => {
@@ -155,6 +202,35 @@ describe("parseFencedToolCalls", () => {
     const { args } = argsOf(rendered);
     expect(args.content).toBe(content);
   });
+
+  it("coerces declared boolean headers and rejects missing required arguments", () => {
+    const exec: ToolDef = {
+      type: "function",
+      function: {
+        name: "exec",
+        parameters: {
+          type: "object",
+          properties: { command: { type: "string" }, interactive: { type: "boolean" } },
+          required: ["command", "interactive"],
+        },
+      },
+    };
+    const execSpecs = buildSpecMap([exec]);
+    const parsed = parseFencedToolCalls("```exec\ninteractive: false\n\npwd\n```", execSpecs).calls;
+    expect(parsed).toHaveLength(1);
+    expect(JSON.parse(parsed[0].function.arguments)).toEqual({ command: "pwd", interactive: false });
+    expect(parseFencedToolCalls("```exec\npwd\n```", execSpecs).calls).toHaveLength(0);
+  });
+
+  it("accepts hyphenated tool names", () => {
+    const hyphenated: ToolDef = {
+      type: "function",
+      function: { name: "read-file", parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } },
+    };
+    const calls = parseFencedToolCalls("```read-file\nfile.txt\n```", buildSpecMap([hyphenated])).calls;
+    expect(calls).toHaveLength(1);
+    expect(calls[0].function.name).toBe("read-file");
+  });
 });
 
 describe("shell routing (Tier 1)", () => {
@@ -207,13 +283,19 @@ describe("shell routing (Tier 1)", () => {
   });
 
   it("warns Codex-backed prompts not to use the hosted /mnt/data sandbox", () => {
-    expect(formatFencedToolDefinitions([codexShell])).toContain("Do NOT use /mnt/data");
+    expect(formatFencedToolDefinitions([codexShell])).toContain("Never use /mnt/data");
   });
 
   it("routes ```sh and ```shell aliases too", () => {
     const specs = buildSpecMap([runCommand]);
     expect(parseFencedToolCalls("```sh\nls\n```", specs).calls[0]?.function.name).toBe("run_command");
     expect(parseFencedToolCalls("```shell\nls\n```", specs).calls[0]?.function.name).toBe("run_command");
+  });
+  it("routes leaked container execution fences to the harness shell", () => {
+    const specs = buildSpecMap([runCommand]);
+    const call = parseFencedToolCalls("```container.exec\nls -la\n```", specs).calls[0];
+    expect(call?.function.name).toBe("run_command");
+    expect(JSON.parse(call.function.arguments)).toEqual({ command: "ls -la" });
   });
 
   it("does not hijack ```bash when a real tool is literally named bash", () => {
@@ -223,8 +305,8 @@ describe("shell routing (Tier 1)", () => {
   });
 
   it("injects shell-first framing only when a shell tool is present", () => {
-    expect(formatFencedToolDefinitions([bash, readFile])).toContain("WRITING A SHELL SCRIPT");
-    expect(formatFencedToolDefinitions([readFile, writeFile])).not.toContain("WRITING A SHELL SCRIPT");
+    expect(formatFencedToolDefinitions([bash, readFile])).toContain("You have a real shell");
+    expect(formatFencedToolDefinitions([readFile, writeFile])).not.toContain("You have a real shell");
   });
 });
 

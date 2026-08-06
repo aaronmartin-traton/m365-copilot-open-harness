@@ -4,7 +4,7 @@
 // the new `softened` framing make agent-less Claude reliably emit tool fences without
 // disengaging? If yes → Claude Sonnet 4.5 as the coding model through the proxy.
 //
-// Usage: nix develop --command node scripts/claude-tools-probe.mjs [repeat]
+// Usage: bun scripts/claude-tools-probe.mjs [repeat]
 process.env.M365_FRAMING_VARIANT = process.env.M365_FRAMING_VARIANT || "softened";
 import { getToken, decodeJwt, formatMessages } from "../packages/core/dist/index.mjs";
 import { oneTurn } from "./_probe-chat.mjs";

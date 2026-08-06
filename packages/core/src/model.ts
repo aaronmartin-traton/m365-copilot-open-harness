@@ -3,6 +3,7 @@ import { getOrCreateAgent } from "./agent.js";
 import { CopilotSession } from "./session.js";
 import { createLogger, trunc } from "./log.js";
 import type { CopilotStream } from "./copilot.js";
+import type { ImageInput } from "./images.js";
 
 const log = createLogger("model");
 
@@ -11,6 +12,11 @@ export interface ModelSessionOptions {
   getToken?: () => Promise<string>;
   /** Whether to attempt agent resolution. Default: true. */
   useAgent?: boolean;
+  /** Stable transport IDs restored from the proxy session store. */
+  sessionId?: string;
+  conversationId?: string;
+  /** Completed M365 turns restored with the conversation. */
+  turnCount?: number;
 }
 
 /**
@@ -29,8 +35,9 @@ export class ModelSession {
   private cachedAgentId: string | null | undefined = undefined;
 
   /** Stable IDs reused across CopilotSession reconnections. */
-  readonly sessionId: string = crypto.randomUUID();
-  private _conversationId: string = crypto.randomUUID();
+  readonly sessionId: string;
+  private _conversationId: string;
+  private persistedTurnCount: number;
   /** Current M365 ConversationId (the throttle/Disengage state keys on this). */
   get conversationId(): string { return this._conversationId; }
   /**
@@ -40,18 +47,22 @@ export class ModelSession {
    * See docs §10 F22.
    */
   newConversation(): void {
-    this._conversationId = crypto.randomUUID();
     this.reset();
+    this._conversationId = crypto.randomUUID();
+    this.persistedTurnCount = 0;
   }
 
   constructor(options: ModelSessionOptions = {}) {
     this.resolveToken = options.getToken ?? getToken;
     this.useAgent = options.useAgent !== false;
+    this.sessionId = options.sessionId ?? crypto.randomUUID();
+    this._conversationId = options.conversationId ?? crypto.randomUUID();
+    this.persistedTurnCount = Math.max(0, Math.floor(options.turnCount ?? 0));
   }
 
   /** Number of turns completed in this session */
   get turnCount(): number {
-    return this.copilotSession?.turnCount ?? 0;
+    return this.copilotSession?.turnCount ?? this.persistedTurnCount;
   }
 
   /** Agent id baked into the current copilotSession (undefined = no agent). */
@@ -67,6 +78,7 @@ export class ModelSession {
       enableCodeInterpreter,
       sessionId: this.sessionId,
       conversationId: this.conversationId,
+      turnCount: this.persistedTurnCount,
     });
   }
 
@@ -84,7 +96,13 @@ export class ModelSession {
    * If `signal` aborts (the HTTP client disconnects) the in-flight turn is
    * cancelled by sending M365's Stop frame, mirroring the real UI's Stop button.
    */
-  async run(text: string, model: string = "m365-copilot", signal?: AbortSignal, useAgent: boolean = true): Promise<CopilotStream> {
+  async run(
+    text: string,
+    model: string = "m365-copilot",
+    signal?: AbortSignal,
+    useAgent: boolean = true,
+    images: ImageInput[] = [],
+  ): Promise<CopilotStream> {
     const token = await this.resolveToken();
     const wantAgent = this.useAgent && useAgent;
 
@@ -117,16 +135,17 @@ export class ModelSession {
       this.currentEnableCodeInterpreter = enableCodeInterpreter;
     }
 
+    const turnOptions = { generateImages: !agentForTurn && !process.env.M365_NO_IMAGE_GEN };
     log.info(`run: model=${model}, agent=${agentForTurn ?? "none"}, turn=${this.copilotSession.turnCount}, sid=${this.sessionId}, cid=${this.conversationId}, text=${JSON.stringify(trunc(text, 200))}`);
 
     try {
-      return await this.copilotSession.chat(token, text, model, signal);
-    } catch (err: any) {
+      return await this.copilotSession.chat(token, text, model, signal, images, turnOptions);
+    } catch (err: unknown) {
       // Session might be stale — reconnect with same IDs
-      log.info("Session error, reconnecting:", err.message);
+      log.info("Session error, reconnecting:", err instanceof Error ? err.message : String(err));
       this.copilotSession = this.createCopilotSession(agentForTurn, enableCodeInterpreter);
       this.currentAgentId = agentForTurn;
-      return await this.copilotSession.chat(token, text, model, signal);
+      return await this.copilotSession.chat(token, text, model, signal, images, turnOptions);
     }
   }
 
@@ -148,6 +167,7 @@ export class ModelSession {
       if (fresh !== this.cachedAgentId) {
         log.info(`Agent refreshed: ${this.cachedAgentId ?? "none"} -> ${fresh ?? "none"}`);
         this.cachedAgentId = fresh;
+        this.persistedTurnCount = this.turnCount;
         this.copilotSession = null; // reconnect so the new agent id takes effect
         this.currentAgentId = undefined;
         return true;
@@ -164,6 +184,7 @@ export class ModelSession {
    * re-resolves it (cheap cache fast-path in the normal case).
    */
   reset() {
+    this.persistedTurnCount = this.turnCount;
     this.copilotSession = null;
     this.cachedAgentId = undefined;
     this.currentAgentId = undefined;

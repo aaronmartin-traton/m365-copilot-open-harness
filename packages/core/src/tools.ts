@@ -7,6 +7,7 @@ import {
   parseFencedToolCalls,
   renderFencedCall,
 } from "./fenced.js";
+import type { ImageInput } from "./images.js";
 
 const log = createLogger("tools");
 
@@ -33,9 +34,20 @@ export interface ToolDef {
   function: ToolFunction;
 }
 
+export interface ImageContentPart {
+  type: "image_url";
+  image_url: { url: string; detail?: "auto" | "low" | "high" };
+  image: ImageInput;
+}
+
+export interface TextContentPart {
+  type: string;
+  text?: string;
+}
+
 export interface Message {
   role: string;
-  content?: string | Array<{ type: string; text?: string }> | null;
+  content?: string | Array<TextContentPart | ImageContentPart> | null;
   tool_calls?: Array<{
     id: string;
     function: { name: string; arguments: string };
@@ -100,10 +112,15 @@ export function formatToolChoiceInstruction(toolChoice: ToolChoice): string {
   return "";
 }
 
+export function getMessageImages(msg: Message): ImageInput[] {
+  if (!Array.isArray(msg.content)) return [];
+  return msg.content.flatMap((part) => "image" in part ? [part.image] : []);
+}
+
 export function getMessageContent(msg: Message): string {
   if (msg.content === null || msg.content === undefined) return "";
   if (typeof msg.content === "string") return msg.content;
-  return msg.content.map((p) => p.text || "").join("");
+  return msg.content.map((part) => "text" in part ? part.text || "" : "").join("");
 }
 
 /** A short one-line description of what a tool call did, for labelling its result
@@ -153,6 +170,18 @@ function maybeInjectReplyTool(tools: ToolDef[]): ToolDef[] {
     },
   };
   return [replyTool, ...tools];
+}
+
+const TOOL_RESULT_MAX_CHARS = Number(process.env.M365_TOOL_RESULT_MAX_CHARS ?? 12_000);
+
+function boundedToolResult(text: string): string {
+  if (!Number.isFinite(TOOL_RESULT_MAX_CHARS) || TOOL_RESULT_MAX_CHARS <= 0 || text.length <= TOOL_RESULT_MAX_CHARS) {
+    return text;
+  }
+  const marker = `\n...[tool output truncated: ${text.length - TOOL_RESULT_MAX_CHARS} chars omitted]...\n`;
+  const available = Math.max(0, TOOL_RESULT_MAX_CHARS - marker.length);
+  const head = Math.ceil(available * 0.7);
+  return text.slice(0, head) + marker + text.slice(text.length - (available - head));
 }
 
 export function formatMessages(
@@ -220,7 +249,7 @@ export function formatMessages(
       // Show the command/args that produced this output so the model reads it in
       // context (a directory listing vs file contents vs a command's stdout).
       const cmdAttr = meta?.summary ? ` command="${meta.summary}"` : "";
-      parts.push(`<tool_response tool="${name}"${cmdAttr}>\n${getMessageContent(m)}\n</tool_response>`);
+      parts.push(`<tool_response tool="${name}"${cmdAttr}>\n${boundedToolResult(getMessageContent(m))}\n</tool_response>`);
     } else {
       parts.push(`<${m.role}>\n${getMessageContent(m)}\n</${m.role}>`);
     }
@@ -268,8 +297,11 @@ const CONFABULATION_PATTERNS: RegExp[] = [
   /(?:can.?t|cannot|not\s+able\s+to|unable\s+to)\s+(?:directly\s+)?(?:edit|modify|write\s+to|change|save|create|open)\s+(?:the\s+|any\s+|to\s+)?files?/i,
   /paste\s+(?:the\s+)?(?:contents?|files?|code|them)/i,
   /provide\s+(?:the\s+)?(?:contents?|files?)/i,
+  /(?:current\s+working\s+directory|working\s+directory|cwd)[\s\S]{0,120}\/mnt\/data/i,
+  /(?:\bpwd\b|\bcd\b)[\s\S]{0,60}\/mnt\/data/i,
+  /(?:ran|used|executed|called)[\s\S]{0,80}container\.(?:exec|open_image|download)/i,
+  /container\.(?:exec|open_image|download)[\s\S]{0,120}(?:returned|output|shows?|result)/i,
   /(?:environment|shell|tool)\s+(?:isn.?t|is not|aren.?t|are not|appears? to be)\s+(?:return|provid|respond|work|access)/i,
-  /no\s+files?\s+(?:in|found|present|visible)/i,
   /(?:file|directory|folder|it)\s+(?:appears?|seems?|looks?)\s+(?:to\s+be\s+)?empty/i, // "the file appears to be empty"
   /nothing\s+to\s+(?:simplify|fix|do|change|show|read)/i,                               // "nothing to simplify"
   /(?:tool|command|it)\s+returned\s+(?:no|empty|nothing)/i,
@@ -351,12 +383,16 @@ export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
   // Fenced is the format: parse ```toolname blocks first. Needs the tool schemas
   // to map header/body args. The JSON parse below is only a tolerance fallback for
   // when M365 ignores the contract and emits a `{"tool":...}` object anyway.
-  if (tools && tools.length > 0) {
-    const { calls, leftover } = parseFencedToolCalls(text, buildSpecMap(tools));
+  const specMap = tools && tools.length > 0 ? buildSpecMap(tools) : null;
+  if (specMap) {
+    const { calls, leftover } = parseFencedToolCalls(text, specMap);
     if (calls.length > 0) {
       return { hasToolCalls: true, toolCalls: calls, textContent: cleanLooseText(leftover) };
     }
   }
+
+  const resolveName = (raw: unknown): string | undefined =>
+    typeof raw === "string" ? (specMap?.get(raw)?.name ?? raw) : undefined;
 
   const toolCalls: ParsedToolCall[] = [];
 
@@ -367,7 +403,7 @@ export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
   while ((match = jsonRegex.exec(text)) !== null) {
     try {
       const parsed = JSON.parse(match[0]);
-      const name = parsed.tool;
+      const name = resolveName(parsed.tool);
       if (name) {
         toolCalls.push({
           id: `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
@@ -391,7 +427,7 @@ export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
     while ((match = fencedRegex.exec(text)) !== null) {
       try {
         const parsed = JSON.parse(match[1]);
-        const name = parsed.tool || parsed.name;
+        const name = resolveName(parsed.tool || parsed.name);
         if (name) {
           toolCalls.push({
             id: `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,

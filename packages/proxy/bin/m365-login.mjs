@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 import { getTokenForScope, getTokenSilent, loginInteractive } from "@m365-copilot/core";
 
 const scopeSets = [

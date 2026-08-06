@@ -6,7 +6,7 @@
 // tools), then sends it two ways: agentId=null (agent-less / DeepLeo) and with the
 // real tool agent (control, expected to Disengage). n each, sequential.
 //
-// Usage: nix develop --command node scripts/disengage-agentless-probe.mjs [repeat]
+// Usage: bun scripts/disengage-agentless-probe.mjs [repeat]
 process.env.M365_FRAMING_VARIANT = process.env.M365_FRAMING_VARIANT || "minimal";
 
 import { getToken, decodeJwt, formatMessages, getOrCreateAgent } from "../packages/core/dist/index.mjs";

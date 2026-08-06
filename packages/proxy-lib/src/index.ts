@@ -1,10 +1,37 @@
-import { type ModelSessionOptions, getAvailableModels } from "@m365-copilot/core";
-import { ChatCompletionRequest } from "./schemas.js";
+import {
+  type ModelSessionOptions,
+  getAvailableModels,
+  getDegradationBackoffState,
+  getAgentAvailability,
+  isDegradationBackoff,
+} from "@m365-copilot/core";
 import { SessionPool, handleChatCompletion } from "./handler.js";
+import {
+  ResponsesRequest,
+  handleResponse,
+  type ResponsesRequestBody,
+} from "./responses.js";
 
-export { SessionPool, handleChatCompletion } from "./handler.js";
+export {
+  SessionPool,
+  handleChatCompletion,
+  type ConversationPruneSelector,
+  type RemoteConversationPruner,
+  type SessionPoolOptions,
+} from "./handler.js";
 export { ChatCompletionRequest, ChatMessage, ToolCall, ToolDefinition } from "./schemas.js";
 export { ResponsesRequest, handleResponse } from "./responses.js";
+export { RequestScheduler, SchedulerBusyError, type SchedulerStats } from "./scheduler.js";
+export { parseImageDataUrl, type ParsedImageInput } from "./images.js";
+export {
+  SessionStateStore,
+  type PersistedSessionState,
+} from "./session-store.js";
+export {
+  ConversationPruneSelectorSchema,
+  handleConversationPrune,
+  type ConversationPruneRequest,
+} from "./pruning.js";
 
 // Re-export tool utilities from core
 export {
@@ -19,10 +46,27 @@ export {
   type ParseResult,
 } from "@m365-copilot/core";
 
-// --- Shared response payloads (reused by the Nitro routes in @m365-copilot/proxy) ---
 
 /** Static body for `GET /health`. */
 export const HEALTH_PAYLOAD = { status: "ok" } as const;
+
+export function buildHealthPayload(pool?: SessionPool, reaper?: { lastRunAt: number | null; pruned: number; failed: number; disabled?: boolean }) {
+  const backoff = getDegradationBackoffState();
+  return {
+    status: "ok" as const,
+    ...(pool ? pool.diagnostics() : {}),
+    ...(reaper ? { reaper } : {}),
+    backoff: {
+      active: isDegradationBackoff(),
+      until: backoff.backoffUntil,
+      level: backoff.level,
+      recentEmptyConversations: new Set(backoff.empties.map((entry) => entry.conv)).size,
+    },
+    temporaryChat: process.env.M365_TEMPORARY_CHAT === "1",
+    toolModel: process.env.M365_TOOL_MODEL?.trim() || null,
+    agent: getAgentAvailability(),
+  };
+}
 
 // Window/output hints surfaced to harnesses on /v1/models so they can size
 // context packing and output expectations. These are ADVERTISED hints only — M365
@@ -61,7 +105,7 @@ export function buildModelsPayload() {
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-M365-Session-Key",
 };
 
 function withCors(res: Response): Response {
@@ -86,9 +130,10 @@ export interface FetchApp {
  * backed by M365 Copilot. Each distinct conversation automatically gets its own
  * M365 session via the SessionPool.
  *
- * This is the embeddable entry point used by the tests, `proxy-verify`, and the
- * openclaw-plugin. The standalone server is the Nitro app in `@m365-copilot/proxy`,
- * whose routes reuse the same `handleChatCompletion` / `buildModelsPayload` helpers.
+ * This is the embeddable entry point used by tests and `proxy-verify` for
+ * generic shell-capable clients. The standalone server is the Nitro app in
+ * `@m365-copilot/proxy`, whose routes reuse the same `handleChatCompletion` /
+ * `buildModelsPayload` helpers.
  */
 export function createApp(sessionOptions: ModelSessionOptions = {}): FetchApp {
   const pool = new SessionPool(sessionOptions);
@@ -102,7 +147,7 @@ export function createApp(sessionOptions: ModelSessionOptions = {}): FetchApp {
     }
 
     if (method === "GET" && pathname === "/health") {
-      return withCors(json(200, HEALTH_PAYLOAD));
+      return withCors(json(200, buildHealthPayload(pool)));
     }
 
     if (method === "GET" && pathname === "/v1/models") {
@@ -119,7 +164,26 @@ export function createApp(sessionOptions: ModelSessionOptions = {}): FetchApp {
         );
       }
       // req.signal aborts when the client disconnects → cancels the M365 turn.
-      return withCors(await handleChatCompletion(body, pool, { signal: req.signal }));
+      return withCors(await handleChatCompletion(body, pool, {
+        signal: req.signal,
+        sessionKey: req.headers.get("x-m365-session-key") ?? undefined,
+      }));
+    }
+
+    if (method === "POST" && pathname === "/v1/responses") {
+      let body: ResponsesRequestBody;
+      try {
+        body = ResponsesRequest.parse(await req.json());
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return withCors(
+          json(400, { error: { message, type: "invalid_request_error" } }),
+        );
+      }
+      return withCors(await handleResponse(body, pool, {
+        signal: req.signal,
+        sessionKey: req.headers.get("x-m365-session-key") ?? undefined,
+      }));
     }
 
     return withCors(

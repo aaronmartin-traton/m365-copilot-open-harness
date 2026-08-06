@@ -1,3 +1,6 @@
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 import { createLogger } from "./log.js";
 
 const log = createLogger("backoff");
@@ -15,7 +18,7 @@ const log = createLogger("backoff");
 // conversation empties we self-impose a paced delay before starting new backend turns,
 // giving the account room to self-heal.
 //
-// A real pi/openclaw session is ONE long thread, so it never trips the distinct-
+// A real pi/Codex session is ONE long thread, so it never trips the distinct-
 // conversation trigger — only bursty multi-conversation use (experiments, benches) does,
 // which is exactly the traffic that should slow down.
 //
@@ -23,6 +26,12 @@ const log = createLogger("backoff");
 // content-specific — a bad agent, a Disengage-shaped prompt — not throttle), a window so
 // stale empties expire, escalation so repeated triggers back off harder, and a clean
 // response that lifts the backoff immediately.
+
+export interface BackoffState {
+  empties: Array<{ t: number; conv: string }>;
+  backoffUntil: number | null;
+  level: number;
+}
 
 export interface BackoffOptions {
   /** Clock injection for tests. Defaults to Date.now. */
@@ -44,6 +53,8 @@ export interface BackoffOptions {
   jitterMaxMs?: number;
   /** Called when backoff opens/escalates (for logging/telemetry). */
   onTrigger?: (info: { distinctConversations: number; cooldownMs: number; level: number }) => void;
+  initialState?: BackoffState;
+  onStateChange?: (state: BackoffState) => void;
 }
 
 export interface BackoffController {
@@ -54,6 +65,7 @@ export interface BackoffController {
   waitForSlot: () => Promise<number>;
   /** Whether the controller is currently in a backoff window. */
   isBackingOff: () => boolean;
+  state: () => BackoffState;
 }
 
 export function createBackoffController(opts: BackoffOptions): BackoffController {
@@ -67,9 +79,15 @@ export function createBackoffController(opts: BackoffOptions): BackoffController
   const jitterMinMs = opts.jitterMinMs ?? 10_000;
   const jitterMaxMs = opts.jitterMaxMs ?? 25_000;
 
-  let empties: Array<{ t: number; conv: string }> = [];
-  let backoffUntil = -Infinity;
-  let level = 0; // escalation level; resets on a clean response
+  let empties: Array<{ t: number; conv: string }> = [...(opts.initialState?.empties ?? [])];
+  let backoffUntil = opts.initialState?.backoffUntil ?? -Infinity;
+  let level = opts.initialState?.level ?? 0;
+  const snapshot = (): BackoffState => ({
+    empties: [...empties],
+    backoffUntil: Number.isFinite(backoffUntil) ? backoffUntil : null,
+    level,
+  });
+  const changed = () => opts.onStateChange?.(snapshot());
 
   return {
     note(empty, conversationId) {
@@ -80,6 +98,7 @@ export function createBackoffController(opts: BackoffOptions): BackoffController
         empties = [];
         backoffUntil = -Infinity;
         level = 0;
+        changed();
         return;
       }
 
@@ -87,6 +106,7 @@ export function createBackoffController(opts: BackoffOptions): BackoffController
       empties = empties.filter((e) => t - e.t < windowMs);
 
       const distinct = new Set(empties.map((e) => e.conv)).size;
+      changed();
       if (distinct < threshold) return;
       // Already backing off within the current window — don't re-arm/escalate until it
       // elapses, so a burst of empties doesn't stack the delay unboundedly.
@@ -97,6 +117,7 @@ export function createBackoffController(opts: BackoffOptions): BackoffController
       backoffUntil = t + cooldownMs;
       empties = [];
       opts.onTrigger?.({ distinctConversations: distinct, cooldownMs, level });
+      changed();
     },
 
     async waitForSlot() {
@@ -111,17 +132,43 @@ export function createBackoffController(opts: BackoffOptions): BackoffController
     isBackingOff() {
       return now() < backoffUntil;
     },
+    state() {
+      return snapshot();
+    },
   };
 }
 
 const disabled = () =>
   !!(process.env.M365_NO_BACKOFF ?? process.env.M365_NO_AUTO_REAUTH); // legacy alias
 
+const BACKOFF_STATE_FILE = process.env.M365_BACKOFF_STATE_FILE ||
+  join(homedir(), ".config", "opencode-m365", "backoff-state.json");
+
+function loadBackoffState(): BackoffState | undefined {
+  if (!existsSync(BACKOFF_STATE_FILE)) return undefined;
+  try {
+    const parsed = JSON.parse(readFileSync(BACKOFF_STATE_FILE, "utf8"));
+    if (Array.isArray(parsed?.empties) && typeof parsed?.level === "number") return parsed;
+  } catch {}
+  return undefined;
+}
+
+function saveBackoffState(state: BackoffState): void {
+  try {
+    mkdirSync(dirname(BACKOFF_STATE_FILE), { recursive: true, mode: 0o700 });
+    const temp = `${BACKOFF_STATE_FILE}.${process.pid}.tmp`;
+    writeFileSync(temp, `${JSON.stringify(state, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+    renameSync(temp, BACKOFF_STATE_FILE);
+  } catch {}
+}
+
 const defaultController = createBackoffController({
   windowMs: Number(process.env.M365_BACKOFF_WINDOW_MS ?? 120_000),
   threshold: Number(process.env.M365_BACKOFF_THRESHOLD ?? process.env.M365_REAUTH_EMPTY_THRESHOLD ?? 3),
   baseCooldownMs: Number(process.env.M365_BACKOFF_BASE_MS ?? 90_000),
   maxCooldownMs: Number(process.env.M365_BACKOFF_MAX_MS ?? 600_000),
+  initialState: loadBackoffState(),
+  onStateChange: saveBackoffState,
   onTrigger: ({ distinctConversations, cooldownMs, level }) =>
     log.info(
       `Degradation backoff (level ${level}): ${distinctConversations} empty responses across distinct ` +
@@ -147,4 +194,8 @@ export async function awaitDegradationBackoff(): Promise<void> {
 /** Whether the global policy is currently backing off. */
 export function isDegradationBackoff(): boolean {
   return !disabled() && defaultController.isBackingOff();
+}
+
+export function getDegradationBackoffState(): BackoffState {
+  return defaultController.state();
 }

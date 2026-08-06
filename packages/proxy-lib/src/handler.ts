@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   ModelSession,
   type ModelSessionOptions,
@@ -10,13 +11,41 @@ import {
   looksLikeHallucinatedCompletion,
   isProseDocument,
   getMessageContent,
+  getMessageImages,
   noteRequestOutcome,
   awaitDegradationBackoff,
+  getImageArtifactToken,
+  fetchImageBytes,
+  type CapturedImage,
 } from "@m365-copilot/core";
 import { ChatCompletionRequest } from "./schemas.js";
+import { RequestScheduler, SchedulerBusyError, type ScheduleOptions, type SchedulerStats } from "./scheduler.js";
+import { SessionStateStore } from "./session-store.js";
 import type { z } from "zod/v4";
 
 const log = createLogger("handler");
+async function renderImagesMarkdown(images: CapturedImage[]): Promise<string> {
+  let artifactToken: string | null = null;
+  try { artifactToken = await getImageArtifactToken(); } catch (error: unknown) {
+    log.info(`image token failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  const parts: string[] = [];
+  for (const image of images) {
+    const url = image.referenceUrls[0];
+    if (!url) continue;
+    if (artifactToken) {
+      try {
+        const fetched = await fetchImageBytes(url, artifactToken);
+        parts.push(`![generated image](data:${fetched.contentType};base64,${fetched.data.toString("base64")})`);
+        continue;
+      } catch (error: unknown) {
+        log.info(`image fetch failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    parts.push(`![generated image](${url})`);
+  }
+  return parts.join("\n\n");
+}
 
 // Forcing follow-up sent (in the same conversation) when M365 confabulates an
 // inability to act instead of calling a tool. See the confab-retry loop below.
@@ -52,67 +81,250 @@ type ParsedMessage = ChatBody["messages"][number];
 // --- Per-conversation state ---
 
 interface ConversationState {
+  key: string;
+  persistent: boolean;
   session: ModelSession;
   sentMessageCount: number;
   lastAccessedAt: number;
 }
 
-// --- Session pool: maps conversation fingerprint → M365 session ---
+// --- Session pool: maps conversation fingerprint → managed M365 session ---
 
-const MAX_IDLE_MS = 30 * 60 * 1000; // evict after 30 min idle
+const MAX_IDLE_MS = Number(process.env.M365_SESSION_MEMORY_TTL_MS ?? 30 * 60 * 1000);
+const DEFAULT_PRUNE_RETRY_MS = 15 * 60 * 1000;
+
+export type ConversationPruneSelector = { sessionKey: string } | { conversationId: string };
+
+export type RemoteConversationPruner = (ids: {
+  sessionId: string;
+  conversationId: string;
+}) => Promise<void>;
+
+export interface SessionPoolOptions {
+  scheduler?: RequestScheduler;
+  stateStore?: SessionStateStore;
+  remotePruner?: RemoteConversationPruner;
+  now?: () => number;
+  pruneRetryMs?: number;
+}
 
 export class SessionPool {
   private conversations = new Map<string, ConversationState>();
+  private toolCallConversations = new Map<string, string>();
+  private gates = new Map<string, Promise<void>>();
   private sessionOptions: ModelSessionOptions;
+  private scheduler: RequestScheduler;
+  private stateStore: SessionStateStore;
+  private remotePruner?: RemoteConversationPruner;
+  private now: () => number;
+  private readonly pruneRetryMs: number;
 
-  constructor(sessionOptions: ModelSessionOptions = {}) {
+  constructor(sessionOptions: ModelSessionOptions = {}, options: SessionPoolOptions = {}) {
     this.sessionOptions = sessionOptions;
+    this.scheduler = options.scheduler ?? new RequestScheduler();
+    this.stateStore = options.stateStore ?? new SessionStateStore();
+    this.remotePruner = options.remotePruner;
+    this.now = options.now ?? (() => Date.now());
+    this.pruneRetryMs = Number.isFinite(options.pruneRetryMs) && options.pruneRetryMs! > 0
+      ? options.pruneRetryMs!
+      : DEFAULT_PRUNE_RETRY_MS;
+  }
+  async acquire(messages: ParsedMessage[], explicitKey?: string, managedKey?: string): Promise<() => void> {
+    const key = managedKey ?? this.managedKey(messages, explicitKey);
+    const previous = this.gates.get(key);
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => { release = resolve; });
+    this.gates.set(key, current);
+    if (previous) await previous;
+    return () => {
+      release();
+      if (this.gates.get(key) === current) this.gates.delete(key);
+    };
   }
 
-  /**
-   * Resolve the conversation state for an incoming request.
-   * Fingerprint is the hash of the first user message — same first user message = same conversation.
-   */
-  resolve(messages: ParsedMessage[]): ConversationState {
-    this.evictStale();
+  async withConversation<T>(messages: ParsedMessage[], explicitKey: string | undefined, task: () => Promise<T>): Promise<T> {
+    const release = await this.acquire(messages, explicitKey);
+    try {
+      return await task();
+    } finally {
+      release();
+    }
+  }
 
-    const fingerprint = this.fingerprint(messages);
-    const existing = this.conversations.get(fingerprint);
-
+  resolve(messages: ParsedMessage[], explicitKey?: string, managedKey?: string): ConversationState {
+    const key = managedKey ?? this.managedKey(messages, explicitKey);
+    const persistent = managedKey !== undefined || !!explicitKey?.trim();
+    const existing = this.conversations.get(key);
     if (existing) {
-      // Messages shrunk means client restarted this conversation — reset M365 session
       if (messages.length < existing.sentMessageCount) {
-        log.info(`Conversation ${fingerprint}: messages shrunk (${messages.length} < ${existing.sentMessageCount}), resetting`);
-        existing.session.reset();
+        log.info(`Conversation ${key}: messages shrunk (${messages.length} < ${existing.sentMessageCount}), rotating M365 conversation`);
+        existing.session.newConversation();
         existing.sentMessageCount = 0;
       }
-      existing.lastAccessedAt = Date.now();
       return existing;
     }
-
-    // New conversation
-    log.info(`New conversation ${fingerprint}, ${this.conversations.size} active`);
+    const persisted = persistent ? this.stateStore.get(key) : undefined;
+    log.info(`${persisted ? "Restoring" : "New"} ${persistent ? "keyed" : "ephemeral"} conversation ${key}, ${this.conversations.size} active`);
     const state: ConversationState = {
-      session: new ModelSession(this.sessionOptions),
-      sentMessageCount: 0,
-      lastAccessedAt: Date.now(),
+      key,
+      persistent,
+      session: new ModelSession({
+        ...this.sessionOptions,
+        ...(persisted?.restorable ? {
+          sessionId: persisted.sessionId,
+          conversationId: persisted.conversationId,
+          turnCount: persisted.turnCount,
+        } : {}),
+      }),
+      sentMessageCount: persisted?.restorable ? persisted.sentMessageCount : 0,
+      lastAccessedAt: persisted?.lastAccessedAt ?? this.now(),
     };
-    this.conversations.set(fingerprint, state);
+    this.conversations.set(key, state);
     return state;
   }
 
-  private fingerprint(messages: ParsedMessage[]): string {
-    const firstUser = messages.find(m => m.role === "user");
-    const text = firstUser ? getMessageContent(firstUser) : "";
-    return simpleHash(text);
+  markSent(state: ConversationState, messageCount: number): void {
+    state.sentMessageCount = messageCount;
+    state.lastAccessedAt = this.now();
+    this.stateStore.set(state.key, {
+      sessionId: state.session.sessionId,
+      conversationId: state.session.conversationId,
+      turnCount: state.session.turnCount,
+      sentMessageCount: state.sentMessageCount,
+      lastAccessedAt: state.lastAccessedAt,
+      restorable: state.persistent,
+      nextPruneAttemptAt: null,
+    });
   }
 
-  private evictStale() {
-    const now = Date.now();
+  registerToolCalls(state: ConversationState, calls: Array<{ id: string }>): void {
+    for (const call of calls) this.toolCallConversations.set(call.id, state.key);
+  }
+
+  bindResponseId(responseId: string, key: string): void {
+    this.stateStore.bindResponseId(responseId, key);
+  }
+
+  lookupResponseId(responseId: string): string | undefined {
+    return this.stateStore.lookupResponseId(responseId);
+  }
+  managedKeyForSessionKey(sessionKey: string): string {
+    return this.fingerprint(sessionKey);
+  }
+
+  async prune(selector: ConversationPruneSelector): Promise<{ deleted: true; conversationId: string } | null> {
+    const key = "sessionKey" in selector
+      ? this.fingerprint(selector.sessionKey)
+      : this.conversationsForConversationId(selector.conversationId);
+    if (!key) return null;
+    return this.withKey(key, async () => {
+      const state = this.conversations.get(key);
+      const persisted = this.stateStore.get(key);
+      const conversationId = state?.session.conversationId ?? persisted?.conversationId;
+      const sessionId = state?.session.sessionId ?? persisted?.sessionId;
+      if (!conversationId || !sessionId) return null;
+      if (!this.remotePruner) throw new Error("remote_prune_unavailable");
+      try {
+        await this.scheduler.schedule({ newConversation: false, maintenance: true }, () =>
+          this.remotePruner!({ sessionId, conversationId }));
+      } catch (error) {
+        const current = this.stateStore.get(key);
+        if (current) this.stateStore.set(key, { ...current, nextPruneAttemptAt: this.now() + this.pruneRetryMs });
+        throw error;
+      }
+      this.conversations.delete(key);
+      for (const [callId, conversationKey] of this.toolCallConversations) {
+        if (conversationKey === key) this.toolCallConversations.delete(callId);
+      }
+      this.stateStore.deleteConversation(key);
+      return { deleted: true as const, conversationId };
+    });
+  }
+
+  async reapIdle(): Promise<{ pruned: number; failed: number }> {
+    const minutes = Number(process.env.M365_SESSION_TTL_MINUTES ?? 180);
+    if (!Number.isFinite(minutes) || minutes <= 0) return { pruned: 0, failed: 0 };
+    const cutoff = this.now() - minutes * 60_000;
+    let pruned = 0;
+    let failed = 0;
+    for (const [key, state] of this.stateStore.entries()) {
+      if (state.lastAccessedAt > cutoff || (state.nextPruneAttemptAt !== null && state.nextPruneAttemptAt > this.now())) continue;
+      if (this.gates.has(key)) continue;
+      try {
+        const result = await this.prune({ conversationId: state.conversationId });
+        if (result) pruned++;
+      } catch {
+        failed++;
+        const current = this.stateStore.get(key);
+        if (current) this.stateStore.set(key, { ...current, nextPruneAttemptAt: this.now() + this.pruneRetryMs });
+      }
+    }
+    return { pruned, failed };
+  }
+
+  schedule<T>(options: ScheduleOptions, task: () => Promise<T>): Promise<T> {
+    return this.scheduler.schedule(options, task);
+  }
+
+  diagnostics(): { activeSessions: number; persistedSessions: number; scheduler: SchedulerStats } {
+    return {
+      activeSessions: this.conversations.size,
+      persistedSessions: this.stateStore.size,
+      scheduler: this.scheduler.stats(),
+    };
+  }
+
+  private async withKey<T>(key: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.gates.get(key);
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => { release = resolve; });
+    this.gates.set(key, current);
+    if (previous) await previous;
+    try {
+      return await task();
+    } finally {
+      release();
+      if (this.gates.get(key) === current) this.gates.delete(key);
+    }
+  }
+
+  private managedKey(messages: ParsedMessage[], explicitKey?: string): string {
+    this.evictStale();
+    const normalizedKey = explicitKey?.trim();
+    if (normalizedKey) return this.fingerprint(normalizedKey);
+    return this.linkedConversationKey(messages) ?? `ephemeral-${crypto.randomUUID()}`;
+  }
+
+  private fingerprint(explicitKey: string): string {
+    return createHash("sha256").update(`session:${explicitKey}`).digest("hex").slice(0, 24);
+  }
+
+  private conversationsForConversationId(conversationId: string): string | undefined {
     for (const [key, state] of this.conversations) {
-      if (now - state.lastAccessedAt > MAX_IDLE_MS) {
-        log.info(`Evicting idle conversation ${key}`);
-        this.conversations.delete(key);
+      if (state.session.conversationId === conversationId) return key;
+    }
+    return this.stateStore.findByConversationId(conversationId)?.[0];
+  }
+
+  private linkedConversationKey(messages: ParsedMessage[]): string | undefined {
+    for (let index = messages.length - 1; index >= 0; index--) {
+      const calls = messages[index].role === "assistant" ? messages[index].tool_calls : undefined;
+      for (const call of calls ?? []) {
+        const key = this.toolCallConversations.get(call.id);
+        if (key && this.conversations.has(key)) return key;
+      }
+    }
+    return undefined;
+  }
+
+  private evictStale(): void {
+    const cutoff = this.now() - MAX_IDLE_MS;
+    for (const [key, state] of this.conversations) {
+      if (this.gates.has(key) || cutoff <= state.lastAccessedAt) continue;
+      log.info(`Evicting idle in-memory conversation ${key}`);
+      this.conversations.delete(key);
+      for (const [callId, conversationKey] of this.toolCallConversations) {
+        if (conversationKey === key) this.toolCallConversations.delete(callId);
       }
     }
   }
@@ -122,30 +334,32 @@ export class SessionPool {
   }
 }
 
-function simpleHash(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-  }
-  return String(hash);
-}
 
 // --- Delta message formatting ---
 
-function formatDeltaMessages(messages: ParsedMessage[]): string {
-  const parts: string[] = [];
+const DELTA_TOOL_RESULT_MAX_CHARS = Number(process.env.M365_TOOL_RESULT_MAX_CHARS ?? 12_000);
+const LOCAL_TOOL_REMINDER = "<local_tool_context>LOCAL harness; use relative paths in the caller working directory. Never use /mnt/data or /workspace. Preserve errors and run one focused step.</local_tool_context>";
+
+function boundedDeltaResult(text: string): string {
+  if (!Number.isFinite(DELTA_TOOL_RESULT_MAX_CHARS) || DELTA_TOOL_RESULT_MAX_CHARS <= 0 || text.length <= DELTA_TOOL_RESULT_MAX_CHARS) return text;
+  const marker = `\n...[tool output truncated: ${text.length - DELTA_TOOL_RESULT_MAX_CHARS} chars omitted]...\n`;
+  const available = Math.max(0, DELTA_TOOL_RESULT_MAX_CHARS - marker.length);
+  const head = Math.ceil(available * 0.7);
+  return text.slice(0, head) + marker + text.slice(text.length - (available - head));
+}
+
+function formatDeltaMessages(messages: ParsedMessage[], taskAnchor: string, hasTools: boolean): string {
+  const parts: string[] = hasTools
+    ? [LOCAL_TOOL_REMINDER, `<task_anchor>${taskAnchor.slice(0, 3_000)}</task_anchor>`]
+    : [];
   for (const m of messages) {
     if (m.role === "assistant") {
-      // Skip assistant messages — M365 already has them server-side.
-      // Echoing them back as a user message confuses M365.
       continue;
     } else if (m.role === "tool") {
       const name = m.name || "unknown";
       const callId = m.tool_call_id || "?";
-      parts.push(`<tool_response name="${name}" call_id="${callId}">\n${getMessageContent(m)}\n</tool_response>`);
-    } else if (m.role === "system") {
-      // Skip system messages on follow-up turns
-    } else {
+      parts.push(`<tool_response name="${name}" call_id="${callId}">\n${boundedDeltaResult(getMessageContent(m))}\n</tool_response>`);
+    } else if (m.role !== "system") {
       parts.push(`<${m.role}>\n${getMessageContent(m)}\n</${m.role}>`);
     }
   }
@@ -161,12 +375,24 @@ function formatDeltaMessages(messages: ParsedMessage[]): string {
 export async function handleChatCompletion(
   body: ChatBody,
   pool: SessionPool,
-  opts: { signal?: AbortSignal } = {},
+  opts: { signal?: AbortSignal; sessionKey?: string; managedKey?: string } = {},
 ): Promise<Response> {
-  const conv = pool.resolve(body.messages);
+  const localMeta = localMetaResponse(body);
+  if (localMeta !== null) return renderLocalCompletion(body, localMeta);
+  const metadataSessionId = body.metadata && typeof body.metadata.session_id === "string"
+    ? body.metadata.session_id
+    : undefined;
+  const sessionKey = opts.sessionKey ?? body.conversation_id ?? metadataSessionId ?? body.user;
+  const release = await pool.acquire(body.messages, sessionKey, opts.managedKey);
+  try {
+  const conv = pool.resolve(body.messages, sessionKey, opts.managedKey);
   const { session } = conv;
   const hasTools = body.tools && body.tools.length > 0 && body.tool_choice !== "none";
+  const requestImages = body.messages.flatMap((message) => getMessageImages(message));
   const model = body.model;
+  const routedModel = hasTools && process.env.M365_TOOL_MODEL?.trim()
+    ? process.env.M365_TOOL_MODEL.trim()
+    : model;
 
   // Claude (Claude_Sonnet tone) tool-calls reliably AGENT-LESS (probe: 4/4 ```bash,
   // 0 disengage) and self-IDs as Claude Sonnet 4.5; the declarative agent would
@@ -183,9 +409,10 @@ export async function handleChatCompletion(
   // then keeps that request on the working agent-less path. The old
   // `/claude/i.test(model)` + `magic` fallback split a claude-* string into GPT-tone +
   // agent-suppressed — the confab quadrant we observed. One resolved tone drives both.
-  const tone = getToneForModel(model);
+  const tone = getToneForModel(routedModel);
   const isClaudeTone = /^Claude_/i.test(tone);
-  const useToolAgent = !!hasTools && (process.env.M365_FORCE_AGENT === "1" || !isClaudeTone);
+  const useToolAgent = !!hasTools && requestImages.length === 0 &&
+    (process.env.M365_FORCE_AGENT === "1" || !isClaudeTone);
 
   // Format message: full prompt on first turn, delta on follow-ups.
   // M365 is stateful — it remembers everything from prior turns,
@@ -195,22 +422,27 @@ export async function handleChatCompletion(
   let text: string;
   if (isFirstTurn || conv.sentMessageCount === 0) {
     text = formatMessages(body.messages, body.tools, body.tool_choice, convId);
-    log.info(`Chat completion: model=${model}, stream=${body.stream}, messages=${body.messages.length}, turn=${session.turnCount}, mode=full, cid=${convId}`);
+    log.info(`Chat completion: model=${model}, routed=${routedModel}, tone=${tone}, stream=${body.stream}, messages=${body.messages.length}, turn=${session.turnCount}, mode=full, cid=${convId}`);
   } else {
+    const firstUser = body.messages.find((message) => message.role === "user");
+    const taskAnchor = firstUser ? getMessageContent(firstUser) : "";
     const newMessages = body.messages.slice(conv.sentMessageCount);
-    const delta = newMessages.length > 0 ? formatDeltaMessages(newMessages) : "";
+    const delta = newMessages.length > 0
+      ? formatDeltaMessages(newMessages, taskAnchor, !!hasTools)
+      : "";
     if (delta.length > 0) {
       text = delta;
-      log.info(`Chat completion: model=${model}, stream=${body.stream}, messages=${body.messages.length}, new=${newMessages.length}, turn=${session.turnCount}, mode=delta, cid=${convId}`);
+      log.info(`Chat completion: model=${model}, routed=${routedModel}, tone=${tone}, stream=${body.stream}, messages=${body.messages.length}, new=${newMessages.length}, turn=${session.turnCount}, mode=delta, cid=${convId}`);
     } else {
       // No meaningful new content to send — nudge M365 to continue.
-      text = "Please continue.";
-      log.info(`Chat completion: model=${model}, stream=${body.stream}, messages=${body.messages.length}, turn=${session.turnCount}, mode=retry, cid=${convId}`);
+      text = hasTools ? `${LOCAL_TOOL_REMINDER}\n\nPlease continue.` : "Please continue.";
+      log.info(`Chat completion: model=${model}, routed=${routedModel}, tone=${tone}, stream=${body.stream}, messages=${body.messages.length}, turn=${session.turnCount}, mode=retry, cid=${convId}`);
     }
   }
 
   log.debug("Formatted prompt:", trunc(text, 1000));
 
+  let imagesSent = false;
   const completionId = `chatcmpl-${crypto.randomUUID()}`;
   const created = Math.floor(Date.now() / 1000);
 
@@ -235,6 +467,10 @@ export async function handleChatCompletion(
   async function runBuffered(
     onDelta?: (delta: string) => void,
   ): Promise<{ fullText: string } | { error: Response }> {
+    try {
+      return await pool.schedule(
+        { signal: opts.signal, newConversation: session.turnCount === 0 },
+        async () => {
     let agentRefreshed = false;
     let disengageRetried = false;
     const originalText = text;
@@ -247,11 +483,9 @@ export async function handleChatCompletion(
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       let copilotStream;
       try {
-        // Only attach the tool-calling agent when the request actually has tools.
-        // The agent overrides `tone` (forces GPT-5), so tool-less requests must
-        // skip it to reach the model the tone selects (e.g. Claude). See
-        // ModelSession.run / docs H8.6.
-        copilotStream = await session.run(text, model, opts.signal, useToolAgent);
+        const images = imagesSent ? [] : requestImages;
+        copilotStream = await session.run(text, routedModel, opts.signal, useToolAgent, images);
+        if (images.length > 0) imagesSent = true;
       } catch (err: any) {
         return { error: jsonResponse(502, { error: { message: err.message, type: "upstream_error" } }) };
       }
@@ -265,8 +499,18 @@ export async function handleChatCompletion(
         if (copilotStream.fullText && copilotStream.fullText.length > fullText.length) {
           fullText = copilotStream.fullText;
         }
-      } catch (err: any) {
-        return { error: jsonResponse(502, { error: { message: err.message, type: "upstream_error" } }) };
+      } catch (err: unknown) {
+        return { error: jsonResponse(502, { error: { message: err instanceof Error ? err.message : String(err), type: "upstream_error" } }) };
+      }
+
+      const capturedImages = copilotStream.images ?? [];
+      if (capturedImages.length > 0) {
+        const imageMarkdown = await renderImagesMarkdown(capturedImages);
+        if (imageMarkdown) {
+          const addition = fullText ? `\n\n${imageMarkdown}` : imageMarkdown;
+          fullText += addition;
+          onDelta?.(addition);
+        }
       }
 
       lastThrottle = copilotStream.throttle;
@@ -351,6 +595,17 @@ export async function handleChatCompletion(
     }
     noteRequestOutcome(true, convId);
     return { error: emptyResponseResponse(null) };
+        },
+      );
+    } catch (err: any) {
+      if (err instanceof SchedulerBusyError) {
+        return { error: schedulerBusyResponse(err) };
+      }
+      if (err?.name === "AbortError") {
+        return { error: jsonResponse(499, { error: { message: err.message, type: "request_aborted" } }) };
+      }
+      return { error: jsonResponse(502, { error: { message: err?.message ?? "scheduler error", type: "upstream_error" } }) };
+    }
   }
 
   // Produce the final turn result as DATA (not a Response), so the same logic
@@ -371,12 +626,19 @@ export async function handleChatCompletion(
   if (hasTools) {
     const result = await runBuffered();
     if ("error" in result) return { kind: "error", resp: result.error };
-    conv.sentMessageCount = body.messages.length;
+    pool.markSent(conv, body.messages.length);
     let fullText = result.fullText;
 
     log.debug("Raw response (tool mode):", trunc(fullText, 1000));
     let parsed = parseToolCalls(fullText, body.tools);
     log.info(`Parse result: hasToolCalls=${parsed.hasToolCalls}, count=${parsed.toolCalls.length}`);
+    if (!parsed.hasToolCalls) {
+      const fallback = readOnlyFallbackToolCall(body, fullText);
+      if (fallback) {
+        log.info(`Read-only fallback tool call: ${fallback.function.name}`);
+        parsed = { hasToolCalls: true, toolCalls: [fallback], textContent: null };
+      }
+    }
 
     // Salvage stochastic turn-1 confabulation: M365's chat model sometimes claims it
     // "can't access the files / commands return no output" and asks the user to paste
@@ -400,7 +662,7 @@ export async function handleChatCompletion(
       text = confab ? CONFAB_FORCE_PROMPT : HALLUCINATION_FORCE_PROMPT;
       const retry = await runBuffered();
       if ("error" in retry) return { kind: "error", resp: retry.error };
-      conv.sentMessageCount = body.messages.length;
+      pool.markSent(conv, body.messages.length);
       fullText = retry.fullText;
       parsed = parseToolCalls(fullText, body.tools);
       log.info(`After forcing retry: hasToolCalls=${parsed.hasToolCalls}, count=${parsed.toolCalls.length}`);
@@ -463,6 +725,7 @@ export async function handleChatCompletion(
     }
 
     if (parsed.hasToolCalls && parsed.toolCalls.length > 0) {
+      pool.registerToolCalls(conv, parsed.toolCalls);
       return { kind: "tools", toolCalls: parsed.toolCalls };
     }
     return { kind: "text", text: fullText };
@@ -470,14 +733,23 @@ export async function handleChatCompletion(
     // No tools — stream deltas live (onDelta) while buffering for the retry logic.
     const result = await runBuffered(onDelta);
     if ("error" in result) return { kind: "error", resp: result.error };
-    conv.sentMessageCount = body.messages.length;
+    pool.markSent(conv, body.messages.length);
     return { kind: "text", text: result.fullText };
   }
   } // end produce()
 
   // --- Render: JSON (non-stream) or an early-flushed SSE stream (stream) ---
   const includeUsage = !!body.stream_options?.include_usage;
-  const usage = () => buildUsage(lastThrottle, lastContentOrigin, lastMessageType, lastScores, lastTurnCount);
+  const usage = () => buildUsage(
+    lastThrottle,
+    lastContentOrigin,
+    lastMessageType,
+    lastScores,
+    lastTurnCount,
+    model,
+    routedModel,
+    tone,
+  );
 
   if (!body.stream) {
     const p = await produce();
@@ -555,6 +827,9 @@ export async function handleChatCompletion(
       }
     },
   }));
+  } finally {
+    release();
+  }
 }
 
 /**
@@ -575,12 +850,18 @@ function buildUsage(
   messageType?: string | null,
   scores?: Record<string, number> | null,
   turnCount?: number | null,
+  requestedModel?: string,
+  routedModel?: string,
+  tone?: string,
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
     prompt_tokens: 0,
     completion_tokens: 0,
     total_tokens: 0,
   };
+  if (requestedModel) base.x_m365_requested_model = requestedModel;
+  if (routedModel) base.x_m365_routed_model = routedModel;
+  if (tone) base.x_m365_tone = tone;
   if (throttle) {
     base.x_m365_conversation_messages = throttle.current;
     base.x_m365_conversation_max = throttle.max;
@@ -596,11 +877,107 @@ function buildUsage(
   // Disengaged filter firing — surface that explicitly so clients can monitor
   // their proximity to the threshold.
   if (scores) {
+
     base.x_m365_classifier_scores = scores;
     if (typeof scores.dea_violation === "number") base.x_m365_dea_score = scores.dea_violation;
     if (typeof scores.BotOffense === "number") base.x_m365_offense_score = scores.BotOffense;
   }
   return base;
+}
+
+function localMetaResponse(body: ChatBody): string | null {
+  const metadataType = body.metadata && typeof body.metadata.request_type === "string"
+    ? body.metadata.request_type.toLowerCase()
+    : "";
+  const lastUser = [...body.messages].reverse().find((message) => message.role === "user");
+  const prompt = lastUser ? getMessageContent(lastUser).trim().toLowerCase() : "";
+  const explicit = metadataType === "title" || metadataType === "title_generation";
+  const knownPrompt = prompt.includes("generate a concise, sentence-case title") ||
+    (prompt.startsWith("generate a concise title") && prompt.includes("conversation"));
+  if (!explicit && !knownPrompt) return null;
+  return '{"title":"New conversation"}';
+}
+
+function readOnlyFallbackToolCall(
+  body: ChatBody,
+  assistantText: string,
+): ReturnType<typeof parseToolCalls>["toolCalls"][number] | null {
+  const tools = body.tools ?? [];
+  if (tools.length === 0) return null;
+  let lastUserIndex = -1;
+  for (let index = body.messages.length - 1; index >= 0; index--) {
+    if (body.messages[index].role === "user") { lastUserIndex = index; break; }
+  }
+  if (lastUserIndex < 0 || body.messages.slice(lastUserIndex + 1).some((message) => message.role === "tool")) return null;
+
+  const userText = getMessageContent(body.messages[lastUserIndex]).trim().toLowerCase();
+  const staleSandbox = /\/mnt\/(?:data|workspace)|no (?:user )?files uploaded|nothing uploaded/i.test(assistantText) ||
+    ((assistantText.match(/(?:input|output|working)\//gi)?.length ?? 0) >= 2 && /empty|upload/i.test(assistantText));
+  const asksPwd = /^(?:pwd|where am i|current directory|working directory)[?.!\s]*$/.test(userText);
+  const asksGit = /\bgit status\b|^repo(?:sitory)? status[?.!\s]*$/.test(userText);
+  const asksFiles = /\b(?:list|show|what|which)\b[\w\s'",:.-]{0,50}\bfiles\b/.test(userText) ||
+    /^(?:ls|dir|tree)(?:\s|$)/.test(userText) || (staleSandbox && /files|workspace|repo/.test(userText));
+  if (!asksPwd && !asksGit && !asksFiles) return null;
+
+  if (asksFiles) {
+    const glob = tools.find((tool) => /^(?:glob|find_files|list_files)$/i.test(tool.function.name));
+    if (glob) {
+      const properties = Object.keys(glob.function.parameters?.properties ?? {});
+      const key = properties.find((name) => /^(?:pattern|glob)$/i.test(name)) ??
+        properties.find((name) => /^path$/i.test(name));
+      if (key) return makeDirectToolCall(glob.function.name, { [key]: key.toLowerCase() === "path" ? "." : "**/*" });
+    }
+  }
+
+  const shell = tools.find((tool) => /^(?:bash|sh|shell|shell_command|run|exec|command|run_command|execute_command)$/i.test(tool.function.name));
+  if (!shell) return null;
+  const properties = Object.keys(shell.function.parameters?.properties ?? {});
+  const commandKey = properties.find((name) => /^(?:command|cmd|script|input)$/i.test(name));
+  if (!commandKey) return null;
+  const powershell = /powershell/i.test(shell.function.description ?? "");
+  const command = asksPwd
+    ? (powershell ? "Get-Location" : "pwd")
+    : asksGit
+      ? "git status --short"
+      : powershell
+        ? "Get-ChildItem -Recurse -File | Select-Object -First 200 -ExpandProperty FullName"
+        : "find . -maxdepth 3 -type f | sort | sed -n '1,200p'";
+  return makeDirectToolCall(shell.function.name, { [commandKey]: command });
+}
+
+function makeDirectToolCall(name: string, args: Record<string, unknown>) {
+  return {
+    id: `call_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`,
+    type: "function" as const,
+    function: { name, arguments: JSON.stringify(args) },
+  };
+}
+
+function renderLocalCompletion(body: ChatBody, text: string): Response {
+  const id = `chatcmpl-${crypto.randomUUID()}`;
+  const created = Math.floor(Date.now() / 1000);
+  if (!body.stream) {
+    return jsonResponse(200, {
+      id,
+      object: "chat.completion",
+      created,
+      model: body.model,
+      choices: [{ index: 0, message: { role: "assistant", content: text }, finish_reason: "stop" }],
+      usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0, x_m365_local_response: true },
+    });
+  }
+  const enc = new TextEncoder();
+  return sseResponse(new ReadableStream({
+    start(controller) {
+      const send = (payload: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(payload)}\n\n`));
+      const base = { id, object: "chat.completion.chunk", created, model: body.model };
+      send({ ...base, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
+      send({ ...base, choices: [{ index: 0, delta: { content: text }, finish_reason: null }] });
+      send({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "stop" }] });
+      controller.enqueue(enc.encode("data: [DONE]\n\n"));
+      controller.close();
+    },
+  }));
 }
 
 // --- Helpers ---
@@ -626,6 +1003,22 @@ function rateLimitMessage(throttle: { current: number; max: number } | null): st
 
 function rateLimitResponse(throttle: { current: number; max: number } | null): Response {
   return jsonResponse(429, { error: { message: rateLimitMessage(throttle), type: "rate_limit_error" } });
+}
+
+function schedulerBusyResponse(error: SchedulerBusyError): Response {
+  return new Response(JSON.stringify({
+    error: {
+      message: error.message,
+      type: "rate_limit_error",
+      code: "m365_queue_full",
+    },
+  }), {
+    status: 429,
+    headers: {
+      "Content-Type": "application/json",
+      "Retry-After": String(error.retryAfterSeconds),
+    },
+  });
 }
 
 /** Empty upstream reply that is NOT an at-limit throttle — a distinct failure

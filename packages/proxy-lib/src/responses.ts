@@ -5,6 +5,8 @@ import { handleChatCompletion, type SessionPool } from "./handler.js";
 const ContentPart = z.object({
   type: z.string(),
   text: z.string().optional(),
+  image_url: z.string().optional(),
+  detail: z.enum(["auto", "low", "high"]).optional(),
 });
 
 const MessageItem = z.object({
@@ -46,6 +48,8 @@ export const ResponsesRequest = z.object({
   stream: z.boolean().optional().default(false),
   store: z.boolean().optional().default(false),
   prompt_cache_key: z.string().optional(),
+  client_metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const ChatCompletionResponse = z.object({
@@ -62,7 +66,7 @@ const ChatCompletionResponse = z.object({
   }).passthrough().optional(),
 });
 
-type ResponsesBody = z.infer<typeof ResponsesRequest>;
+export type ResponsesRequestBody = z.infer<typeof ResponsesRequest>;
 type ChatMessageInput = z.input<typeof ChatCompletionRequest>["messages"][number];
 type OutputItem =
   | {
@@ -86,12 +90,23 @@ function contentText(content: string | Array<z.infer<typeof ContentPart>>): stri
   return content.map((part) => part.text ?? "").filter(Boolean).join("\n");
 }
 
+function toChatContent(content: string | Array<z.infer<typeof ContentPart>>): ChatMessageInput["content"] {
+  if (typeof content === "string") return content;
+  return content.flatMap((part) => {
+    if ((part.type === "input_image" || part.type === "image_url") && part.image_url) {
+      return [{
+        type: "image_url" as const,
+        image_url: { url: part.image_url, detail: part.detail },
+      }];
+    }
+    if (part.text !== undefined) return [{ type: "text" as const, text: part.text }];
+    return [];
+  });
+}
+
 function toChatMessages(body: ResponsesBody): ChatMessageInput[] {
   const messages: ChatMessageInput[] = [];
   if (body.instructions) messages.push({ role: "system", content: body.instructions });
-  if (body.prompt_cache_key) {
-    messages.push({ role: "user", content: `<codex_session>${body.prompt_cache_key}</codex_session>` });
-  }
 
   if (typeof body.input === "string") {
     messages.push({ role: "user", content: body.input });
@@ -103,7 +118,7 @@ function toChatMessages(body: ResponsesBody): ChatMessageInput[] {
     if (message.success) {
       messages.push({
         role: message.data.role,
-        content: contentText(message.data.content),
+        content: toChatContent(message.data.content),
       });
       continue;
     }
@@ -284,11 +299,30 @@ function streamResponse(response: ResponseEnvelope): Response {
   });
 }
 
-export async function handleResponse(
+type BuiltResponse = { envelope: ResponseEnvelope } | { error: Response };
+
+async function buildResponse(
   body: ResponsesBody,
   pool: SessionPool,
-  options: { signal?: AbortSignal } = {},
-): Promise<Response> {
+  options: { signal?: AbortSignal; sessionKey?: string },
+): Promise<BuiltResponse> {
+  const id = `resp_${crypto.randomUUID().replaceAll("-", "")}`;
+  const metadataSessionId = body.client_metadata && typeof body.client_metadata.session_id === "string"
+    ? body.client_metadata.session_id
+    : undefined;
+  let sessionKey = options.sessionKey;
+  let managedKey: string | undefined;
+  if (!sessionKey && body.previous_response_id) {
+    managedKey = pool.lookupResponseId(body.previous_response_id);
+    if (!managedKey) {
+      return { error: new Response(JSON.stringify({ error: {
+        type: "invalid_request_error",
+        message: "Unknown or pruned previous_response_id",
+      } }), { status: 404, headers: { "Content-Type": "application/json" } }) };
+    }
+  }
+  sessionKey ??= body.prompt_cache_key ?? metadataSessionId ?? `response:${id}`;
+
   const chatBody = ChatCompletionRequest.parse({
     model: body.model,
     messages: toChatMessages(body),
@@ -296,8 +330,12 @@ export async function handleResponse(
     tools: toChatTools(body.tools),
     tool_choice: toChatToolChoice(body.tool_choice),
   });
-  const chatResponse = await handleChatCompletion(chatBody, pool, options);
-  if (!chatResponse.ok) return chatResponse;
+  const chatResponse = await handleChatCompletion(chatBody, pool, {
+    ...options,
+    sessionKey,
+    managedKey,
+  });
+  if (!chatResponse.ok) return { error: chatResponse };
 
   const completion = ChatCompletionResponse.parse(await chatResponse.json());
   const message = completion.choices[0].message;
@@ -317,12 +355,58 @@ export async function handleResponse(
         role: "assistant",
         content: [{ type: "output_text", text: message.content ?? "", annotations: [] }],
       }];
-  const id = `resp_${crypto.randomUUID().replaceAll("-", "")}`;
-  const response = responseEnvelope(body, id, Math.floor(Date.now() / 1000), output, completion.usage);
-  return body.stream
-    ? streamResponse(response)
-    : new Response(JSON.stringify(response), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      });
+  pool.bindResponseId(id, managedKey ?? pool.managedKeyForSessionKey(sessionKey));
+  return { envelope: responseEnvelope(body, id, Math.floor(Date.now() / 1000), output, completion.usage) };
+}
+
+function streamDeferredResponse(pending: Promise<BuiltResponse>): Response {
+  const enc = new TextEncoder();
+  return new Response(new ReadableStream({
+    async start(controller) {
+      const heartbeat = setInterval(() => {
+        try { controller.enqueue(enc.encode(": keepalive\n\n")); } catch {}
+      }, 15_000);
+      try {
+        const built = await pending;
+        if ("error" in built) {
+          let error: unknown = { message: "M365 upstream error", type: "upstream_error" };
+          try { error = JSON.parse(await built.error.text()).error ?? error; } catch {}
+          controller.enqueue(enc.encode(sse("response.failed", { type: "response.failed", error })));
+          return;
+        }
+        const source = streamResponse(built.envelope).body?.getReader();
+        if (!source) return;
+        while (true) {
+          const chunk = await source.read();
+          if (chunk.done) break;
+          controller.enqueue(chunk.value);
+        }
+      } finally {
+        clearInterval(heartbeat);
+        try { controller.close(); } catch {}
+      }
+    },
+  }), {
+    status: 200,
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
+}
+
+export async function handleResponse(
+  body: ResponsesBody,
+  pool: SessionPool,
+  options: { signal?: AbortSignal; sessionKey?: string } = {},
+): Promise<Response> {
+  const pending = buildResponse(body, pool, options);
+  if (body.stream) return streamDeferredResponse(pending);
+  const built = await pending;
+  if ("error" in built) return built.error;
+  return new Response(JSON.stringify(built.envelope), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
 }

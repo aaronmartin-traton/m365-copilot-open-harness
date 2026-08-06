@@ -11,8 +11,8 @@
 //   minimal        — agent does everything; per-request prompt is just <tools>
 //   tool_choice_req — current prompt + tool_choice: "required"
 //
-// Run unsandboxed inside `nix develop --command`.
-//   M365_NO_INTERACTIVE=1 node scripts/tool-compliance-experiment.mjs [--variants a,b] [--no-agent]
+// Run unsandboxed with Bun.
+//   M365_NO_INTERACTIVE=1 bun scripts/tool-compliance-experiment.mjs [--variants a,b] [--no-agent]
 //
 // Costs roughly N_variants * N_prompts M365 messages (each = fresh conversation).
 

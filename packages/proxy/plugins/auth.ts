@@ -1,4 +1,4 @@
-import { getToken } from "@m365-copilot/core";
+import { getToken, validateLocalShellBackend } from "@m365-copilot/core";
 
 /**
  * Authenticate against M365 once, at server startup. A failure here throws and
@@ -7,6 +7,7 @@ import { getToken } from "@m365-copilot/core";
  */
 export default defineNitroPlugin(async () => {
   console.log("Authenticating...");
+  validateLocalShellBackend();
   try {
     await getToken();
   } catch (err: any) {

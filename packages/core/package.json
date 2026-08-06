@@ -23,6 +23,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@types/node": "^22",
     "@types/ws": "^8.18.1"
   },
   "publishConfig": {

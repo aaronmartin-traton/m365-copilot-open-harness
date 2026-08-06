@@ -8,7 +8,7 @@ hypothesis-driven** sections. In short:
 1. Always run sequentially — one thread at a time; the rate limit tracks
    threads-started, not messages, and masquerades as `Disengaged`.
 2. Chase all hunches — tangents to test any idea are encouraged; test, don't guess.
-3. The end goal is always a usable agent in **pi or openclaw**.
+3. The end goal is always a usable agent in **pi, Codex, or standalone**.
 4. Be scientific: hypothesize → predict → test → conclude (log it in
    `docs/hypotheses.md`).
 5. Prompt tinkering: try **N wildly different** strategies at once, A/B them in one

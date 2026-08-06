@@ -1,6 +1,6 @@
 # m365-copilot-proxy
 
-Use Microsoft 365 Copilot as an LLM backend for OpenAI-compatible coding agents like [pi](https://pi.dev/) and [OpenClaw](https://docs.openclaw.ai/). Wraps M365 Copilot's WebSocket/SignalR API in an OpenAI-compatible interface with tool calling support.
+Use Microsoft 365 Copilot as an LLM backend for OpenAI-compatible coding agents like [pi](https://pi.dev/) and Codex. Wraps M365 Copilot's WebSocket/SignalR API in an OpenAI-compatible interface with tool calling support.
 
 > **Want the gory protocol details?** See [docs/m365-copilot-api.md](docs/m365-copilot-api.md) — a full write-up of M365 Copilot's undocumented WebSocket API: auth, SignalR frames, tones/models, throttling, the "Disengaged" filter, and the Copilot Studio agent trick that makes tool calling work.
 
@@ -8,8 +8,8 @@ Use Microsoft 365 Copilot as an LLM backend for OpenAI-compatible coding agents 
 
 M365 Copilot uses a SignalR WebSocket protocol, not the OpenAI API. This project translates between the two:
 
-1. **Standalone proxy** — HTTP server with `/v1/chat/completions`, `/v1/responses`, and `/v1/models` endpoints. Works with OpenAI-compatible clients including pi, Codex, and OpenClaw.
-2. **OpenClaw plugin** — Config generator + setup CLI for OpenClaw's provider system.
+1. **Standalone proxy** — HTTP server with `/v1/chat/completions`, `/v1/responses`, and `/v1/models` endpoints. Works with OpenAI-compatible clients including pi and Codex.
+2. **OpenClaw tombstone** — Retained as a private, disabled, non-publishable compatibility package.
 
 ### Tool calling
 
@@ -43,55 +43,61 @@ On first use, the system creates a **Copilot Studio agent** with tool-calling in
 
 ### Conversation reuse
 
-Each agent session reuses the same M365 conversation (same `sessionId` + `conversationId`). The WebSocket reconnects per turn but M365 maintains server-side context. This saves quota — the 600 message limit applies per-conversation.
+Each keyed client session reuses one M365 conversation (`sessionId` + `conversationId`). The WebSocket reconnects per turn while M365 keeps server-side context. This saves quota — the 600-message limit applies per conversation.
+
+For plain multi-turn chat, clients **must** provide a stable per-thread key through `X-M365-Session-Key`, Codex `prompt_cache_key`, or `client_metadata.session_id`. Keyed mappings persist in `session-state.json`. Unkeyed first turns are deliberately isolated and are not persisted, preventing two callers with the same prompt from sharing M365 context. Unkeyed tool loops remain linked in memory through their unique tool-call IDs.
+
+The proxy accepts concurrent HTTP requests but serializes M365 turns through a bounded process-wide queue. Continuations run before new threads. Set `M365_TEMPORARY_CHAT=1` only after validating the tenant-specific `disableMemory=1` behavior.
+
+### Image input
+
+Chat Completions `image_url` and Responses `input_image` accept bounded PNG, JPEG, and WebP data URLs. The proxy uploads each image through `POST /m365Copilot/UploadFile`, then sends the returned `docId` as an `ImageFile` message annotation. Remote image URLs and `file://` paths are rejected.
 
 ## Packages
 
 ```
 @m365-copilot/core          — Shared: auth, WebSocket client, tool formatting, proxy server, agent management, session
 ├── @m365-copilot/proxy     — Standalone HTTP proxy binary
-└── @m365-copilot/openclaw-plugin  — OpenClaw config generator + setup CLI + skill
+└── @m365-copilot/openclaw-plugin  — disabled, non-publishable compatibility tombstone
 ```
 
 ## Setup
 
 ### Prerequisites
 
-- Node.js 24+
-- pnpm 10+
+- Bun 1.3.14+ and Bun package manager
 - An M365 account with Copilot access
-- TOTP-based MFA (the automated login needs the base32 secret)
+- A visible browser session for Microsoft OAuth
+- Git for Windows when Codex/OMP will execute Bash-shaped local tool calls on Windows
 
 ### 1. Install
 
 ```sh
 git clone https://github.com/cramt/m365-copilot-proxy
 cd m365-copilot-proxy
-pnpm install
-pnpm build
+bun install
+bun run build
 ```
 
-### 2. Configure credentials
+### 2. Authorize Microsoft OAuth
 
-Create `~/.config/opencode-m365/secrets.json`:
+Run the interactive login before starting the proxy:
 
-```json
-{
-  "email": "you@company.com",
-  "password": "your-password",
-  "mfaSecret": "YOUR_TOTP_BASE32_SECRET"
-}
+```sh
+bun packages/proxy/bin/m365-login.mjs
 ```
 
-On first run, the system does an automated browser login (via Playwright/Chromium) to get OAuth tokens. After that, tokens refresh silently from the MSAL cache.
+Enter the password and MFA response only on Microsoft's page. The proxy stores the resulting MSAL token cache under `~/.config/opencode-m365/`; do not create a plaintext `secrets.json` containing a password or TOTP seed. Subsequent starts use silent token refresh.
 
 ### 3. Use with pi (or any OpenAI-compatible agent)
 
-Start the proxy:
+Start the loopback-only proxy:
 
 ```sh
-m365-proxy 4143        # or: pnpm run proxy 4143
+bun packages/proxy/bin/m365-proxy.mjs 4143
 ```
+
+The launcher defaults to `127.0.0.1`. Do not bind beyond loopback without adding a separate authenticated reverse proxy; this service spends the signed-in user's M365 quota and has no inbound client authentication.
 
 Point [pi](https://pi.dev/) at it via `~/.pi/agent/models.json`:
 
@@ -145,66 +151,18 @@ Then run `codex --profile m365`. On Windows, the local-shell bridge expects Git 
 Windows at its default installation path so Bash-shaped M365 commands can run through
 Codex's PowerShell `shell_command` tool.
 
+Codex Desktop uses the same user-level provider table in `~/.codex/config.toml`, with M365 model/profile overrides in `~/.codex/m365.config.toml`. Codex may warn and use fallback model metadata; its private catalog schema is not the standard `/v1/models` response, so do not point `model_catalog_json` at an OpenAI model-list payload.
 
-### 5. Use with OpenClaw
-
-```sh
-# Configure and start in one command
-m365-openclaw-setup --start
-
-# Or configure only, then start separately
-m365-openclaw-setup
-m365-proxy 4141
-```
-
-The proxy uses session reuse and delta messages — follow-up turns only send new messages, saving M365 quota. New conversations are detected automatically when the message array shrinks or the first user message changes.
-
-### 6. Use as standalone proxy
+### 5. Use as standalone proxy
 
 ```sh
-npx m365-proxy 4141
-# or
-pnpm run dev
+
+bun packages/proxy/bin/m365-proxy.mjs 4141
+# development server:
+bun run dev
 ```
 
-Then point any OpenAI-compatible client at `http://localhost:4141/v1`.
-
-### 7. Run on NixOS (systemd service)
-
-The proxy is a [Nitro](https://nitro.build/) service. The flake exposes a package
-(built from the workspace via [pnpm2nix](https://github.com/cramt/pnpm2nix)) and a NixOS
-module:
-
-```nix
-# flake.nix
-{
-  inputs.m365.url = "github:cramt/m365-copilot-proxy";
-
-  outputs = { nixpkgs, m365, ... }: {
-    nixosConfigurations.myhost = nixpkgs.lib.nixosSystem {
-      modules = [
-        m365.nixosModules.default
-        {
-          services.m365-copilot-proxy = {
-            enable = true;
-            # JSON with { email, password, mfaSecret } — kept out of the Nix store,
-            # delivered via systemd LoadCredential. Manage with sops-nix/agenix.
-            secretsFile = "/run/secrets/m365-copilot.json";
-            # port = 4141;          # default
-            # host = "127.0.0.1";   # default — do not expose; unauthenticated, paid account
-            # openFirewall = false;
-          };
-        }
-      ];
-    };
-  };
-}
-```
-
-The service runs as a hardened `DynamicUser` unit. Auth state (`msal-cache.json`,
-`agent-id.json`) persists in `/var/lib/m365-copilot-proxy`; a fresh deploy self-bootstraps
-via headless login using `secretsFile` + the bundled Chromium. To run the package directly
-without NixOS: `nix run github:cramt/m365-copilot-proxy -- 4141`.
+Then point an OpenAI-compatible client at `http://127.0.0.1:4141/v1`. The packaged launcher binds loopback by default; the development server should also be given an explicit loopback host when used outside a disposable workstation.
 
 ## Available models
 
@@ -234,13 +192,32 @@ without NixOS: `nix run github:cramt/m365-copilot-proxy -- 4141`.
 > injected prompt and can disengage from tools. Prefer `gpt-5.5-think-deeper`.
 > See [docs/m365-copilot-api.md](docs/m365-copilot-api.md) §5/§10.
 
+## Image generation
+
+M365 Copilot image generation is available through the core API and plain agent-less
+chat turns. `generateImage()` returns fetched artifact bytes plus base64 metadata:
+
+```ts
+import { generateImage } from "@m365-copilot/core";
+
+const [image] = await generateImage("A minimalist teal lighthouse logo", { style: "icon" });
+// image.data, image.base64, image.contentType, image.size, image.orientation
+```
+
+Supported options include `landscape`, `portrait`, or `square` orientation and
+`natural`, `icon`, `story`, or `designer` style. Plain chat requests can also ask to
+draw an image; the proxy embeds the artifact as a markdown data URI. Set
+`M365_NO_IMAGE_GEN=1` to disable implicit image generation. Image generation has a
+separate daily quota; quota failures surface as `ImageGenerationError` with
+`reason: "quota_exceeded"` from the core API.
+
 ## Authentication
 
-The auth flow uses Azure MSAL with PKCE:
+The auth flow uses Azure MSAL authorization-code + PKCE:
 
-1. **Silent refresh** — Uses cached tokens from `~/.config/opencode-m365/msal-cache.json`
-2. **Automated login** — Playwright-driven browser login using stored credentials + TOTP
-3. **Interactive login** — Opens browser for manual OAuth flow (fallback)
+1. **Interactive authorization** — `m365-login` opens visible Chromium; credentials and MFA stay on Microsoft's page.
+2. **Silent refresh** — cached OAuth tokens are refreshed from `~/.config/opencode-m365/msal-cache.json`.
+3. **Fail-closed startup** — the proxy refuses to start when no usable cached token exists.
 
 Three token scopes are acquired:
 - `substrate.office.com/sydney/*` — For M365 Copilot chat
@@ -254,15 +231,27 @@ Three token scopes are acquired:
 | `M365_DEBUG` | Set to `1` to enable debug logging to `~/.config/opencode-m365/debug.log` (truncated payloads) |
 | `M365_TRACE` | Set to `1` for full, untruncated debug logging (every WS frame/prompt/response) — implies `M365_DEBUG`. For reverse engineering. |
 | `M365_DUMP_FRAMES` | Set to `1` to write every WebSocket frame (both directions) to `~/.config/opencode-m365/frames/<requestId>.ndjson`. For offline diffing of new M365 fields. |
+| `M365_LOG_STDOUT` | Set to `1` with `M365_DEBUG` or `M365_TRACE` to mirror debug lines to proxy stdout. |
 | `M365_ALLOW_MULTI_TOOL` | Allow the model to emit multiple tool calls per turn (default: only the first is kept) |
 | `M365_INJECT_REPLY_TOOL` | Set to `1` to inject a synthetic `reply(text)` tool. Forces every turn to be a tool call, including pure-prose answers. Cleaner contract for the model, +1 tool to the prompt (watch the Disengaged threshold). Confirmed 5/5 compliance on June 9 2026 ([hypotheses §1.1](docs/hypotheses.md)). |
 | `M365_NO_CONFAB_RETRY` / `M365_CONFAB_RETRIES` | M365's chat model sometimes produces prose instead of a tool call when it should act — either confabulating an inability ("I can't access the files, please paste them") **or** claiming a completion it never did ("I've replaced the README", with no tool call). By default the proxy detects both and re-prompts forcefully **in the same conversation** (`M365_CONFAB_RETRIES`, default `1`) to force a real action. Set `M365_NO_CONFAB_RETRY=1` to disable. |
 | `M365_NO_BACKOFF` (alias `M365_NO_AUTO_REAUTH`) | Set to `1` to disable degradation backoff. By default, when empty/throttled responses span several **distinct conversations** in a short window (the thread-rate-throttle signature, [F13](docs/hypotheses.md)), the proxy **paces subsequent turns** (a jittered delay before starting new backend conversations) to let the account self-heal. This replaced the old auto-reauth: a fresh login does **not** clear this throttle (it's `oid`-keyed — [§11 H-R1](docs/hypotheses.md)) and raised our detection profile. A single long pi thread never trips the trigger. |
 | `M365_BACKOFF_THRESHOLD` / `M365_BACKOFF_WINDOW_MS` / `M365_BACKOFF_BASE_MS` / `M365_BACKOFF_MAX_MS` | Tune backoff: distinct-conversation empties to trigger (default `3`), the window they must fall in (default `120000`), the initial pacing window (default `90000`), and its escalation cap (default `600000`). |
-| `M365_BROWSER_PROFILE` / `M365_LOGIN_UA` | Override the persistent browser-profile dir and the login User-Agent used for the (rare) automated interactive login. The persistent profile keeps AAD SSO/device cookies so repeat logins are silent and look like a familiar device ([§11 H-R3](docs/hypotheses.md)). |
-| `M365_CACHE_FILE` | Override MSAL token cache location |
-| `M365_SECRETS_FILE` | Override credentials file location |
-| `CHROMIUM_PATH` | Path to Chromium binary for automated login |
+| `M365_MAX_UPSTREAM_CONCURRENCY` / `M365_MAX_QUEUE_LENGTH` | Bound active M365 turns and queued client requests (defaults `1` and `8`). |
+| `M365_NEW_THREADS_PER_MINUTE` / `M365_NEW_THREAD_BURST` | Limit fresh M365 conversations while allowing queued continuation turns first (defaults `2` and `1`). |
+| `M365_SESSION_STATE_FILE` / `M365_SESSION_TTL_MINUTES` | Override persisted client-session → M365-session mapping and TTL (default `180` minutes). |
+| `M365_TEMPORARY_CHAT` | Set to `1` to request stateless/hidden M365 chat with `disableMemory=1`. |
+| `M365_TOOL_MODEL` | Route tool-enabled turns through a separate model ID while preserving the requested model in the OpenAI response. |
+| `M365_TOOL_RESULT_MAX_CHARS` | Bound each tool result retained in the M365 prompt (default `12000`, preserving head and tail). |
+| `M365_LOCAL_SHELL` / `M365_GIT_BASH_PATH` | Select validated Windows shell backend (`git-bash`, default, or `wsl`) and override Git Bash path. |
+| `M365_AGENT_FAILURE_TTL_MS` | Cache unavailable Copilot Studio provisioning to avoid repeating dead tenant calls (default one hour). |
+| `M365_IMAGE_MAX_BYTES` | Maximum decoded bytes per PNG/JPEG/WebP data URL (default 20 MiB). |
+| `M365_COWORK_RUNTIME_HOST` | Enables the optional `scripts/cowork-probe.mjs` Aether/Trouter experiment; must be captured for the current tenant/region. |
+| `M365_BROWSER_PROFILE` | Override the dedicated interactive-login browser profile directory. |
+| `M365_WEB_PRUNE_PROVEN` | Set to `1` only after the disposable authenticated-browser deletion probe passes; enables automatic remote conversation reaping. Default disabled. |
+| `M365_WEB_HEADLESS` | Set to `0` for headed Edge when the tenant requires interactive browser state; default `1` for server/headless environments. |
+| `M365_CACHE_FILE` | Override the MSAL token-cache location. Treat it as a credential. |
+| `CHROMIUM_PATH` | Override the Chromium binary used by interactive login. |
 
 ### Usage / context-window % in responses
 
@@ -308,20 +297,27 @@ All stored in `~/.config/opencode-m365/`:
 
 | File | Description |
 |---|---|
-| `secrets.json` | Login credentials (email, password, mfaSecret) |
-| `msal-cache.json` | MSAL token cache (auto-managed) |
+| `msal-cache.json` | Credential-bearing MSAL token cache (auto-managed; never share or commit) |
 | `agent-id.json` | Cached Copilot Studio agent ID |
 | `debug.log` | Debug log (when `M365_DEBUG=1`) |
+| `session-state.json` | Persisted client-session → M365 conversation/session mapping (no tokens) |
+| `backoff-state.json` | Persisted degradation/backoff state across proxy restarts |
+
+`GET /health` reports queue depth, active/persisted sessions, backoff state, temporary-chat mode, routed tool model, and agent-provisioning availability.
 
 ## Development
 
 ```sh
-pnpm install
-pnpm build            # Build all packages
-pnpm run dev          # Start standalone proxy on :4141
-pnpm run test:unit    # Run vitest unit tests (no auth/network)
-pnpm run test:live    # Run live integration tests against M365
+bun install
+bun run build            # Build all packages
+bun run dev              # Start standalone proxy on :4141
+bun run test:unit        # Run vitest unit tests (no auth/network)
+bun run test:live        # Run live integration tests against M365
 ```
+
+### Research-script safety
+
+Files under `scripts/` are reverse-engineering utilities, not supported coworker workflows. Some scripts create Copilot Studio agents, install Teams apps, or capture tenant request bodies immediately when run. Do not execute them against a production tenant without reading the complete script, bounding the mutation, and obtaining explicit tenant-owner approval. The supported coworker entry points are `m365-login`, the loopback proxy launcher, and the client configurations above.
 
 ## Known limitations
 

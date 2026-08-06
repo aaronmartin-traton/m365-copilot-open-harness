@@ -25,6 +25,7 @@ than "we eyeballed one run." See §M (Methods) for the experimental rig.
 - §7 — Probe backlog, ordered by info-gain ÷ cost
 - §8 — Capability-expansion hypotheses (web-research dig: empty `optionsSets`, code interpreter, MCP actions, Claude tone, throttling levers, reference implementations)
 - §11 — Detection / anti-flagging science run (July 7 2026 — auto-reauth is loud AND probably useless)
+- §13 — Conversation deletion (captured web action; browser replay untested)
 
 ---
 
@@ -572,7 +573,7 @@ is *encouraged* behaviour. We stopped fighting the cage and used the one arm-hol
 open. **Fragile/adversarial** — a DeepLeo framing change could close it.
 
 **Shipped (Tier 1, `packages/core/src/fenced.ts`).** When the harness exposes a shell-like
-tool (`bash`/`sh`/`shell`/`run`/`run_command`/… — pi, opencode, hermes, openclaw all do),
+tool (`bash`/`sh`/`shell`/`run`/`run_command`/… — pi, Codex, and other clients provide),
 the proxy (a) injects shell-first framing into its own `<tools>` block ("do the whole step
 by writing ONE ```bash block: heredocs to create, sed to edit, python3 to run"), and
 (b) **aliases** ```bash/```sh/```shell to that tool whatever it's named, so the model's
@@ -742,7 +743,24 @@ executed" with 0 tools — the model "knows" the answer so it shortcuts. Unfakea
 proceed. Next lever: make even fakeable tasks require a real read (or detect 0-tool "done"
 claims and re-prompt "show me the tool_response that proves it").
 
+### H17 — OMP fenced Bash can fail at proxy schema normalization 🟡
+
+On 2026-08-03, `omp --model m365/gpt-5.6-think-deeper --tools bash` emitted a clean
+```bash block, but no tool result reached OMP. With `M365_DEBUG=1`, the proxy recorded
+`Intercepted hosted shell intent` followed by `[fenced] tool "bash" is missing required
+arguments`; the response therefore remained text. A direct OpenAI-compatible request
+with an explicit `bash.command` schema returned a structured `tool_calls` response and
+completed after its tool result was supplied, proving the M365 model and proxy route can
+produce tool calls. The parser now also maps a required body parameter when a client
+schema omits `parameters.properties`, covering the OMP schema shape without changing
+the normal path. Re-run one sequential OMP tool turn after the next OMP restart to
+confirm the client receives and executes the structured call.
+
+Evidence: `~/.config/opencode-m365/debug.log`, 2026-08-03T20:50:57Z; direct Herdr
+pane `w8:p7` Chat Completions response at 20:35:29Z and continuation at 20:35:57Z.
+
 ---
+
 
 ## M. Methods — how the June 9 2026 data was collected
 
@@ -2020,7 +2038,7 @@ with an MCP server actually connected (to diff the successful describe exchange)
 server-gated per-account — parked pending tenant flighting or a positive-example capture from a
 flighted desktop client. Register-by-Id (H-NATIVE-8) works but is static and needs the app installed.
 **So the shipping route stays the fenced + shell-routing path — confirmed working today (§12.5) for
-shell-inclusive toolsets, which every real harness (pi, openclaw, opencode) provides.** The native
+shell-inclusive toolsets, which supported harnesses (pi, Codex, and others) provide.** The native
 round-trip code (`native-actions.ts`, decompile-exact, 11 tests) and the LocalMCP probe are in place
 and ready the moment the gate opens; the §12.3 framing variants remain the highest-leverage shipping
 improvement.
@@ -2133,3 +2151,20 @@ across `fix-bug` + a confab-prone/shell-less task (softened's failure case), on 
 `gpt-5.5-think-deeper` and the magic model. If it holds, switch the default framing baseline→
 demo_only and the whole disengage→softened-retry round-trip becomes dead weight for the common
 case. n here is only 2 — strong signal, not yet ship-grade.
+
+## 13. Conversation deletion (August 3 2026)
+
+### H-D1 — The authenticated `m365.cloud.microsoft` browser context can delete a server-side conversation 🔴
+
+**Evidence (n=1 captured web action; HAR outside the repository).** Deleting one owned test conversation in the web UI sent `POST /chat` with `{"action":"DeleteConversation","conversationId":"<id>","state":<current UI state>}`. It returned HTTP 200 and the returned chat list dropped that ID (18 → 17). The request included UI-context headers but no visible bearer credential or HAR cookie, so this establishes the UI action—not that a raw Node request or the proxy's M365 chat token can invoke it.
+
+**Prediction / cheapest probe.** In the existing authenticated Playwright context, create a disposable conversation, obtain current UI state, invoke the action once, then confirm it is absent from a refreshed navigation list and cannot be resumed. Vary only the `state` field in a later disposable probe to determine whether it is required. Also remove the matching local `SessionPool`/`SessionStateStore` entry so a deleted remote conversation cannot be restored.
+
+**Falsification.** The action returns success but the conversation remains in a fresh navigation list or can still accept a turn; or it fails from the same authenticated browser context with a freshly created disposable conversation.
+
+**Initial adapter probe (2026-08-03, n=1 failed attempt).** The bounded `M365_NO_INTERACTIVE=1 bun scripts/web-conversation-prune-probe.mjs` run on the Windows workstation timed out after 180 seconds before emitting a redacted conversation ID; the cause was the Bun/Playwright browser handshake and an overly strict marker lookup. This attempt did not issue a delete. The later headed Edge/CDP proof below validated the direct action and state normalization.
+
+**Disposable proof completed (2026-08-03, n=1 successful direct action).** Using the already authenticated headed Edge context over CDP, the probe created one new chat, sent one marker turn, issued exactly one `DeleteConversation`, received HTTP 200, and confirmed the redacted ID was absent after `RefreshNavPane`. Forwarding only the four custom `X-*` headers returned HTTP 200 with an empty body; adding the browser's non-sensitive `Referer`, `Accept`, and `User-Agent` returned the full navigation store. The adapter now uses that seven-header allowlist. The probe established state normalization and the direct web action; automatic reaping can be enabled with `M365_WEB_PRUNE_PROVEN=1` in a verified deployment.
+
+
+**Managed prune/resume proof completed (2026-08-06, n=1 successful direct action).** A disposable OMP-managed conversation was identified in the isolated v2 session store, deleted through the authenticated headed Edge browser adapter, and confirmed absent after `RefreshNavPane`. The matching isolated session-store entry was then removed and verified absent. The running Bun proxy was not stopped. The protected HTTP route returned `404` because that process was started without `M365_PRUNE_TOKEN`; this run therefore validates the browser deletion boundary and local invalidation, not the live HTTP authorization path.
