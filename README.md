@@ -248,6 +248,8 @@ Three token scopes are acquired:
 | `M365_IMAGE_MAX_BYTES` | Maximum decoded bytes per PNG/JPEG/WebP data URL (default 20 MiB). |
 | `M365_COWORK_RUNTIME_HOST` | Enables the optional `scripts/cowork-probe.mjs` Aether/Trouter experiment; must be captured for the current tenant/region. |
 | `M365_BROWSER_PROFILE` | Override the dedicated interactive-login browser profile directory. |
+| `M365_ENABLE_INTERACTIVE_APPROVAL` | Set to `1` to let token acquisition open the existing visible, persistent-profile browser login when silent refresh has no usable token. This is opt-in so unattended hosts fail instead of waiting on an unseen sign-in window. |
+| `M365_NO_INTERACTIVE` | Set to `1` to veto the automatic visible-browser fallback even when `M365_ENABLE_INTERACTIVE_APPROVAL=1`. The explicit `m365-login` command remains the recommended first-run path. |
 | `M365_WEB_PRUNE_PROVEN` | Set to `1` only after the disposable authenticated-browser deletion probe passes; enables automatic remote conversation reaping. Default disabled. |
 | `M365_WEB_HEADLESS` | Set to `0` for headed Edge when the tenant requires interactive browser state; default `1` for server/headless environments. |
 | `M365_CACHE_FILE` | Override the MSAL token-cache location. Treat it as a credential. |

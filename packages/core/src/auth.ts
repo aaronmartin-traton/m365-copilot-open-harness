@@ -194,6 +194,18 @@ async function getCdpWebSocketUrl(endpoint: string): Promise<string> {
 
 export type AuthUrlHandler = (url: string) => void;
 
+function interactiveApprovalEnabled(): boolean {
+  return process.env.M365_ENABLE_INTERACTIVE_APPROVAL === "1";
+}
+
+function interactiveAllowed(): boolean {
+  return process.env.M365_NO_INTERACTIVE !== "1";
+}
+
+function canPromptForInteractiveApproval(): boolean {
+  return interactiveApprovalEnabled() && interactiveAllowed();
+}
+
 /**
  * Authenticate in a visible Chromium window through Microsoft's authorization-code
  * flow with PKCE. Bun drives Chromium through its native WebSocket implementation;
@@ -308,15 +320,34 @@ export function getTokenSilent(): Promise<string | null> {
   return acquireSilent(SCOPES);
 }
 
-export function getTokenForScope(scopes: string[]): Promise<string | null> {
-  return acquireSilent(scopes);
+export async function getTokenForScope(scopes: string[]): Promise<string | null> {
+  const token = await acquireSilent(scopes);
+  if (token || !canPromptForInteractiveApproval()) return token;
+
+  log.info(
+    `No cached token for [${scopes.join(", ")}]; opening interactive approval`,
+  );
+  return loginInteractive(scopes);
 }
 
 let inflightReauth: Promise<boolean> | null = null;
 
 export function forceReauth(): Promise<boolean> {
   return (inflightReauth ??= getTokenSilent()
-    .then((token) => !!token)
+    .then(async (token) => {
+      if (token) return true;
+      if (!canPromptForInteractiveApproval()) return false;
+      await loginInteractive(SCOPES);
+      return true;
+    })
+    .catch((error: unknown) => {
+      log.error(
+        `Interactive reauthentication failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    })
     .finally(() => {
       inflightReauth = null;
     }));
@@ -326,10 +357,14 @@ let inflightToken: Promise<string> | null = null;
 
 export function getToken(): Promise<string> {
   return (inflightToken ??= getTokenSilent()
-    .then((token) => {
+    .then(async (token) => {
       if (token) return token;
+      if (canPromptForInteractiveApproval()) {
+        log.info("No cached Microsoft token; opening interactive approval");
+        return loginInteractive(SCOPES);
+      }
       throw new Error(
-        "No cached Microsoft token. Run m365-login interactively, then restart the proxy.",
+        "No cached Microsoft token. Run m365-login interactively, or set M365_ENABLE_INTERACTIVE_APPROVAL=1 to allow a visible browser sign-in. M365_NO_INTERACTIVE=1 vetoes that fallback.",
       );
     })
     .finally(() => {
