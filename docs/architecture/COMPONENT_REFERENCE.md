@@ -1,71 +1,91 @@
 # Component Reference
 
-## Extracted Modules (Actual)
+## Extracted Modules
 
-These modules have been extracted from `handler.ts` and are the current architecture:
+These modules are now separate from `handler.ts`.
 
-### Core Proxy-Lib Modules
+### Proxy-Lib Modules
 
-- **session-pool.ts** - Session lifecycle management
-  - `SessionPool` class manages conversation state, tool call tracking, idle pruning
-  - Responsibilities: session acquisition, conversation resolution, state persistence
+**session-pool.ts** - Session management
+- The `SessionPool` class manages sessions.
+- It tracks conversations and tool calls.
+- It removes idle sessions.
 
-- **context-compiler.ts** - Request context compilation
-  - `ContextCompiler` interface with `compileFull()` and `compileDelta()`
-  - Handles message formatting for M365 API (full prompts and delta updates)
+**context-compiler.ts** - Message formatting
+- The `ContextCompiler` interface has two methods.
+- `compileFull()` formats the first message.
+- `compileDelta()` formats follow-up messages.
 
-- **usage-builder.ts** - Usage telemetry formatting
-  - `buildUsage()` constructs OpenAI-compatible usage objects
-  - Formats throttle status, classifier scores, model routing info
+**usage-builder.ts** - Usage data formatting
+- `buildUsage()` makes usage objects.
+- Usage objects work with OpenAI.
+- The function formats throttle data and scores.
 
-- **response-helpers.ts** - Response construction
-  - `jsonResponse()`, `sseResponse()`, `rateLimitResponse()`, etc.
-  - All OpenAI-compatible response formatting
+**response-helpers.ts** - Response creation
+- `jsonResponse()` makes JSON responses.
+- `sseResponse()` makes streaming responses.
+- Other functions make error responses.
 
-- **local-response-helpers.ts** - Local response handling
-  - `localMetaResponse()`, `readOnlyFallbackToolCall()`, `renderLocalCompletion()`
-  - Handles metadata responses and read-only fallback tool calls
+**local-response-helpers.ts** - Local response handling
+- `localMetaResponse()` handles metadata requests.
+- `readOnlyFallbackToolCall()` handles safe tool calls.
+- `renderLocalCompletion()` makes local responses.
 
-- **output-ceiling.ts** - Output truncation detection
-  - `outputFinishReason()` determines if response was truncated
-  - `OUTPUT_CHAR_CEILING` constant for empirical output limit
+**output-ceiling.ts** - Output length check
+- `outputFinishReason()` checks response length.
+- `OUTPUT_CHAR_CEILING` is the maximum length.
 
-### Core Package Modules (packages/core/src)
+**force-prompts.ts** - Force prompts
+- Force prompts make M365 continue.
+- `CONFAB_FORCE_PROMPT` handles confabulation.
+- `HALLUCINATION_FORCE_PROMPT` handles hallucinations.
+- `REMOTE_ARTIFACT_FORCE_PROMPT` handles remote files.
 
-- **tools.ts** - Tool formatting and parsing
-  - `formatMessages()` (used by ContextCompiler)
-  - `parseToolCalls()`, tool definitions formatting
+**image-renderer.ts** - Image rendering
+- `renderImagesMarkdown()` renders images.
+- It fetches images from M365.
+- It returns Markdown text.
 
-- **session.ts** - ModelSession class
-  - M365 session management, conversation lifecycle
+### Core Package Modules
 
-- **auth.ts** - Authentication handling
-  - M365 authentication and token management
+**tools.ts** - Tool handling
+- `formatMessages()` formats tool messages.
+- `parseToolCalls()` parses tool calls.
+
+**session.ts** - Session class
+- `ModelSession` manages one session.
+
+**auth.ts** - Authentication
+- Handles M365 authentication.
 
 ## Main Handler
 
-**handler.ts** (~570 lines) - Core request orchestration
-- `handleChatCompletion()` - Main entry point
-- Coordinates session acquisition, message compilation, M365 API calls
-- Handles streaming, retries, error recovery
+**handler.ts** (~540 lines) - Request handler
+- `handleChatCompletion()` is the main function.
+- It gets sessions.
+- It formats messages.
+- It calls the M365 API.
+- It handles streaming.
 
 ## Module Dependencies
 
 ```
 handler.ts
-  ├── session-pool.ts (SessionPool)
-  ├── context-compiler.ts (ContextCompiler)
-  ├── usage-builder.ts (buildUsage)
-  ├── response-helpers.ts (response construction)
-  ├── local-response-helpers.ts (local responses)
-  ├── output-ceiling.ts (outputFinishReason)
-  └── packages/core (tools, session, auth)
+  ├── session-pool.ts
+  ├── context-compiler.ts
+  ├── usage-builder.ts
+  ├── response-helpers.ts
+  ├── local-response-helpers.ts
+  ├── output-ceiling.ts
+  ├── force-prompts.ts
+  ├── image-renderer.ts
+  └── packages/core
 ```
 
-## Extraction Principles
+## Extraction Rules
 
-Each extracted module:
-- Has a single cohesive responsibility
-- Is independently testable
-- Preserves identical behavior
-- Is committed separately with clear commit message
+We follow these rules:
+- Each module has one job.
+- Each module is testable.
+- We do not change behavior.
+- We commit each extraction separately.
