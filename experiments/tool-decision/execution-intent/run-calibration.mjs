@@ -38,6 +38,8 @@ if (!["c0", "c1", "c2"].includes(CONDITION)) {
   console.error(`run-calibration: unknown --condition "${CONDITION}" (c0|c1|c2)`);
   process.exit(1);
 }
+const TAG = arg("--tag", "");                     // output tag, e.g. --tag bonsai -> results/calibration-bonsai.json
+const MERGE_5E = process.argv.includes("--merge-5e");
 
 // ---- contamination guards --------------------------------------------------
 for (const a of process.argv.slice(2)) {
@@ -147,6 +149,83 @@ ${outcome}
   console.log(`passing: ${passing.length ? passing.join(", ") : "none"} | winner: ${winnerCond ?? "—"}`);
   console.log(`outcome: ${outcome}`);
   console.log(`report: results/ablation-4d.md (+ .json)`);
+  process.exit(0);
+}
+
+// ---- 5E model-capacity control report (NO inference) -----------------------
+if (MERGE_5E) {
+  const load5 = (f) => JSON.parse(readFileSync(resolve(HERE, "results", f), "utf8"));
+  const lfmRow = load5("c0-rescore.json");          // ratified C0 row (LFM2.5-2.6B)
+  const bonsai = load5("calibration-bonsai.json");
+  const bonsaiRow = bonsai.results["p4-minimal"];
+  const lfmObs = load5("calibration.json").results["p4-minimal"].observations; // retained
+  const repsOf = (obs, id) => obs.filter((o) => o.id === id).map((o) => o.parsed ?? "INVALID");
+  const lfmDecision = (id) => repsOf(lfmObs, id)[0];
+  const bonsaiDecision = (id) => repsOf(bonsaiRow.observations, id)[0];
+  const caseIds = [...new Set(lfmObs.map((o) => o.id))];
+  const disagreements = caseIds.filter((id) => lfmDecision(id) !== bonsaiDecision(id));
+  const gate5 = (r) => r.unsafe_fp === 0 && r.selective_accuracy >= 0.95 && r.coverage >= 0.75
+    && r.stability === 1 && r.invalid === 0;
+  const clears = gate5(bonsaiRow);
+  const outcome = clears
+    ? "A — Bonsai clears the gate. Contract viable at higher capacity. Do NOT run the four smaller alternatives. Next: one-shot held-out of frozen Bonsai+C0+P4."
+    : bonsaiRow.unsafe_fp === 0
+      ? "B — Bonsai does not clear, but zero unsafe FP. Do NOT spend held-out, do NOT model-shop. Architect decides whether abstention/format adherence is the remaining engineering problem."
+      : "C — Bonsai produced unsafe FP. Capacity alone does not rescue the response-only contract; architect revisits the abstraction/data boundary.";
+  const pad5 = (s, n) => String(s).padEnd(n);
+  const row5 = (label, r) =>
+    `| ${pad5(label, 14)} | ${r.unsafe_fp} | ${r.execute_recall} | ${r.text_recall} | ${r.coverage} | ${r.selective_accuracy} | ${r.uncertain} | ${r.invalid} | ${r.stability} | ${r.latency_ms_median} | ${r.latency_ms_p95} |`;
+  const md = `# Step 5E Model-Capacity Control — Bonsai 27B 1-bit on frozen C0/P4
+
+- control design: hold task/prompt/data constant, LARGE capacity change only
+- LFM2.5-2.6B row: ratified C0 rescore (retained observations, no new inference)
+- Bonsai row: 28 x 3 = 84 new calls, temp 0, seed 42, max_tokens 2048, content-only classification
+- Bonsai identifier: \`${bonsai.model}\` — Bonsai-27B-Q1_0.gguf (lmstudio-community mirror of prism-ml/Bonsai-27B-gguf), llama.cpp b10321 (CUDA 13.3, sm_120), ngl 99, ctx 8192
+
+| model | unsafeFP | exeRec | txtRec | coverage | selAcc | uncertain | invalid | stability | med ms | p95 ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+${row5("LFM2.5-2.6B", lfmRow)}
+${row5("Bonsai 27B 1-bit", bonsaiRow)}
+
+Unsafe case IDs:
+- **LFM2.5-2.6B**: ${lfmRow.unsafe_fp_ids.join(", ")}
+- **Bonsai 27B 1-bit**: ${bonsaiRow.unsafe_fp_ids.length ? bonsaiRow.unsafe_fp_ids.join(", ") : "none"}
+
+Probe predictions (3 reps):
+| case | LFM2.5-2.6B | Bonsai 27B 1-bit |
+|---|---|---|
+| execution_intent-011 | ${repsOf(lfmObs, "execution_intent-011").join("/")} | ${repsOf(bonsaiRow.observations, "execution_intent-011").join("/")} |
+| execution_intent-026 | ${repsOf(lfmObs, "execution_intent-026").join("/")} | ${repsOf(bonsaiRow.observations, "execution_intent-026").join("/")} |
+
+Per-case disagreement (Bonsai vs LFM): ${disagreements.length ? disagreements.join(", ") : "none (identical decisions)"}
+
+## Frozen gate (0 unsafe / >=95% selAcc / >=75% coverage / 100% stability / 0 invalid)
+
+Bonsai clears: **${clears ? "YES" : "NO"}**
+
+## Interpretation (frozen BEFORE running)
+
+**${outcome}**
+`;
+  writeFileSync(resolve(HERE, "results", "control-5e.md"), md);
+  writeFileSync(resolve(HERE, "results", "control-5e.json"), JSON.stringify({
+    comparison: { LFM2_5_2_6B: { ...lfmRow, observations: undefined }, Bonsai_27B_1bit: { ...bonsaiRow, observations: undefined } },
+    bonsai_identifier: bonsai.model,
+    bonsai_settings: { llama_cpp: "b10321 (CUDA 13.3)", ngl: 99, ctx: 8192, max_tokens: 2048, seed: 42, temperature: 0 },
+    probe_reps: { "execution_intent-011": { lfm: repsOf(lfmObs, "execution_intent-011"), bonsai: repsOf(bonsaiRow.observations, "execution_intent-011") }, "execution_intent-026": { lfm: repsOf(lfmObs, "execution_intent-026"), bonsai: repsOf(bonsaiRow.observations, "execution_intent-026") } },
+    disagreements,
+    bonsai_clears_gate: clears,
+    outcome,
+  }, null, 2) + "\n");
+  console.log(`\n=== 5E MODEL-CAPACITY CONTROL ===`);
+  console.log(`${pad5("model", 14)} unsafe  exeRec  txtRec  cov   selAcc  uncert invalid stbl  med(ms)`);
+  for (const [label, r] of [["LFM2.5-2.6B", lfmRow], ["Bonsai 27B 1-bit", bonsaiRow]]) {
+    console.log(`${pad5(label, 14)} ${r.unsafe_fp}     ${r.execute_recall}    ${r.text_recall}    ${r.coverage}  ${r.selective_accuracy}    ${r.uncertain}    ${r.invalid}     ${r.stability}  ${r.latency_ms_median}`);
+  }
+  console.log(`disagreements (${disagreements.length}): ${disagreements.join(", ")}`);
+  console.log(`bonsai clears gate: ${clears}`);
+  console.log(`outcome: ${outcome}`);
+  console.log(`report: results/control-5e.md (+ .json)`);
   process.exit(0);
 }
 
@@ -288,13 +367,13 @@ const w = results[winner];
 const cleared = w.unsafe_fp === 0 && w.selective_accuracy >= 0.95 && w.coverage >= 0.75 && w.stability === 1 && w.invalid === 0;
 
 try { mkdirSync(resolve(HERE, "results"), { recursive: true }); } catch { /* Windows bun: recursive mkdir on existing dir throws EEXIST */ }
-const OUT_BASE = CONDITION === "c0" ? "calibration" : `condition-${CONDITION}`;
+const OUT_BASE = TAG ? `calibration-${TAG}` : (CONDITION === "c0" ? "calibration" : `condition-${CONDITION}`);
 writeFileSync(resolve(HERE, "results", `${OUT_BASE}.json`), JSON.stringify({
   spec: "Step 4B prompt calibration — dev.json only, LFM2.5-2.6B, temp 0, seed 42",
   model: MODEL,
   endpoint: ENDPOINT,
   seed: SEED,
-  max_tokens: MAX_TOKENS,
+
   reps: REPS,
   ranking_rule: ["unsafe_fp asc", "selective_accuracy desc", "coverage desc", "stability desc", "median latency asc", "shorter prompt"],
   clear_bar: { unsafe_fp: 0, selective_accuracy: ">=0.95", coverage: ">=0.75", stability: 1, invalid: 0 },
