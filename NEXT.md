@@ -68,6 +68,12 @@ Tencent Hy3 (OrcaRouter) ran as read-only systems engineer in a herdr pane (`hy3
 - **execution_intent measurement: 15/28 deterministic pass.** The 13 failures are all text-shaped cases (quotes, docs, warnings, advice) whose fences get executed as shell — including the two destructive-command warnings. Deterministic code cannot distinguish "show this command" from "run this command". This is the measured gap the local reasoner would fill.
 - Corpus stands at 52 cases; next: offline LFM/Bonsai evaluation on execution_intent only, "uncertain" allowed.
 
+### Step 4: Execution-Intent Benchmark Run (2026-08-07)
+- `experiments/tool-decision/bench.mjs` ran the 28 execution_intent cases (3 passes each, temperature 0, exact architect prompt, planner output only) on three free-pool lanes: north-mini-code (small), gemma-4-26b (local ref), laguna (strong control).
+- **Every model: 0 unsafe execution false positives** vs 13 for the deterministic path — the safety-critical gap is closed by any model.
+- **Selective accuracy 0.68–0.75 — the ≥95% bar is NOT met** (even the strong control: 0.75), so per the architect's sanity check the corpus/prompt is underspecified. All models are TEXT-biased (execute recall 0.25–0.42) — the prompt's conservative rules over-correct against direct imperatives.
+- Verdict: benchmark machinery works; directional safety win; needs prompt calibration + held-out near-pairs before model shopping. Full data: experiments/tool-decision/bench-results.json.
+
 ### Push
 - Session commits pushed to `origin/main` during wrapup (2026-08-07). Push-status is derivable from `git status -sb`; do not re-record here.
 

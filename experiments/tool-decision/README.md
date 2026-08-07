@@ -169,6 +169,54 @@ Give LFM/Bonsai a deliberately tiny contract:
   "I don't know." That is how the tactical reasoner stays a bounded helper
   instead of becoming an authority.
 
+## Step 4 results — execution-intent selective classification (2026-08-07)
+
+Benchmark spec (architect): 28 execution_intent cases, gold collapsed to
+EXECUTE/TEXT, model may answer UNCERTAIN; temperature 0, single token answer,
+no CoT, no JSON; user message is just `Assistant response:\n<planner_output>`
+(no tool schemas); 3 passes per case; run via `bench.mjs` against the local
+free pool (public corpus content only; no M365, no production changes).
+
+Lanes (deviations from the architect's ideal noted): A
+`lane-north-mini-code` (small classifier; no LFM2.5 in the pool — 6B instead
+of 2.6B); B `lane-gemma4-26b-or` (local-feasible reference; no Bonsai in the
+pool — 26B instead of 27B); C `lane-laguna-openrouter` (strong remote control;
+the Hy3 route could not complete a turn within any budget — replaced per "Hy3
+is fine if that's what's reliably available"). Reasoning lanes
+(north-mini-code) needed `max_tokens: 512`; direct-answer lanes used 8.
+
+| system | unsafe FP | exe recall | txt recall | coverage | sel. accuracy | raw | stability |
+|---|---|---|---|---|---|---|---|
+| current deterministic | 13 | 1.000 | 0.188 | 1.000 | 0.536 | 0.536 | — |
+| north-mini-code | 0 | 0.250 | 1.000 | 0.929 | 0.731 | 0.679 | 0.821 |
+| gemma-4-26b | 0 | 0.250 | 1.000 | 1.000 | 0.679 | 0.679 | 1.000 |
+| laguna (control) | 0 | 0.417 | 1.000 | 1.000 | 0.750 | 0.750 | 0.929 |
+
+Full per-case data: `bench-results.json`.
+
+Interpretation:
+- **Every model scores 0 unsafe execution false positives** vs 13 for the
+  deterministic path. The destructive-warning cases are never executed by any
+  model. The safety-critical gap the corpus identified is closed by any of
+  these models.
+- **All models are TEXT-biased**: txt recall 1.0 everywhere, execute recall
+  only 0.25–0.42. The prompt's conservative rules ("a code fence alone does
+  not imply execution", "prefer UNCERTAIN over EXECUTE when unclear")
+  over-correct against direct imperatives ("run this", "install them now") —
+  a calibration problem in the prompt or the gold labels, not just the models.
+- **Selective accuracy 0.68–0.75: none clears the ≥95% target**, including the
+  strong control (0.75). Per the architect's sanity check, that means the
+  corpus/prompt is still underspecified — refine near-pairs before model
+  shopping. The benchmark machinery itself works (deterministic baseline,
+  stability, per-case records).
+- Stability: gemma 1.0, laguna 0.93, north-mini 0.82 (reasoning model flips
+  more at temperature 0).
+
+Verdict: directional evidence that a small model can classify execution intent
+safely (0 unsafe FP), but the ≥95% selective-accuracy bar is NOT met. Next:
+calibrate the prompt (reduce the anti-execute bias), add held-out near-pairs,
+re-run.
+
 ## Rules
 
 - No production changes to enable corpus work.
