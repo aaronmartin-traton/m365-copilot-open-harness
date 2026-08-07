@@ -1,0 +1,23 @@
+{
+  "step": "7H",
+  "gate": {
+    "CLEAR_TEXT": "no parsed tool call AND no deterministic recovery trigger",
+    "CLEAR_EXECUTE": "parsed local tool call, EXCLUDING prose-document (isProseDocument) and reply-only cases",
+    "VERIFY": "residual tool-shaped/ambiguous cases",
+    "boundary": "produceToolPath() semantics: parseToolCalls, confabulation/hallucinated-completion/remote-artifact detection, isProseDocument, reply-only handling"
+  },
+  "verifier": {
+    "model": "bonsai-27b-q1",
+    "prompt": "prompts/p4-minimal.txt (byte-for-byte frozen)",
+    "framing": "Assistant response:\\n<planner_output> (C0)",
+    "temperature": 0,
+    "seed": 42,
+    "max_tokens": 2048,
+    "invalid_or_error_becomes": "UNCERTAIN (never EXECUTE)"
+  },
+  "arbitration": {
+    "CLEAR_TEXT": "TEXT",
+    "CLEAR_EXECUTE": "EXECUTE",
+    "VERIFY": "verifier EXECUTE -> EXECUTE; verifier TEXT -> TEXT; verifier UNCERTAIN/invalid/error -> UNCERTAIN"
+  }
+}
