@@ -1,5 +1,32 @@
 # NEXT.md - M365 Copilot Proxy
 
+## Session Handoff — 2026-08-07 (move to new session)
+
+**Where things stand.** The autonomous run is PAUSED at the user's instruction (no ChatGPT/architect prompts until the user says continue). `main` tracks `origin/main`, working tree clean; all run work pushed (`git status -sb` is the truth for push state). This handoff is what the new session needs to resume cold.
+
+### 1. Open decisions that need the USER first
+1. **Browser architect switch** (user proposed replacing the phone loop): feasibility verified — the harness browser renders chatgpt.com (logged-out); no relay extension, no regular Chrome/Edge on this box (only the tool's Chrome for Testing). Switch needs: (a) user confirmation, (b) which personal account, (c) ONE interactive login (user types credentials; agent never touches them). A NEW primed thread is required (the phone thread is not visible in the browser) — primer = NEXT.md + .autonomous/PROGRESS.md + repo state. On a Free/Go account chatgpt.com defaults to Luna; Plus defaults to Sol.
+2. **Free-pool architect is REJECTED** by the user (keelcode lanes ~10 req/day — too small). Do not re-propose; the phone or browser channel is the architect path.
+
+### 2. Next engineering steps (queued, do NOT need the architect)
+1. **Execution-intent prompt calibration** (architect's pending direction): all Step-4/4b models are TEXT-biased (execute recall 0.25–0.42) — the prompt's conservative rules over-correct direct imperatives. Then **held-out near-pairs** (the 28 execution_intent cases are no longer a valid test set — they were designed while reasoning; the architect flagged this).
+2. **Local reasoner candidate:** qwythos-9b proven (0 unsafe FP / sel-acc 0.808 / free). Untested: thinking-disabled 4B (e.g. `enable_thinking=False` path) and plain Qwen3.5-9B for latency/tightness.
+3. **When the architect channel reopens:** report Step-4b results — LFM2.5-2.6B (the architect's named candidate) is DISQUALIFIED on evidence (2 stable unsafe FPs + 2 tool-call emissions instead of classification tokens; raw 0.357 < deterministic 0.536). Expect a direction change from the architect.
+
+### 3. Verification & running (standing constraints)
+- **No live M365 verification this run** (user's instruction): verification = `bun run test:unit` (build + vitest — NOT plain `bun test`; bun's runner lacks vi.mock/resetModules) + `tsc --noEmit` in proxy-lib + code review. Baseline: 205 pass / 3 live-gated skip.
+- Local bench: LM Studio server (`lms server start`, CLI at `C:\Users\PC_HOST\.lmstudio\bin\lms.exe`); models `qwen3.5-4b`, `lfm2.5-2.6b`, `qwythos-9b-claude-mythos-5-1m` (Q4_K_M, installed 2026-08-07); run `bun run experiments/tool-decision/bench-local.mjs` (2048-token budget required — all GGUFs reason by default under LM Studio templates; identity guard built in).
+- Pool bench: `bun run experiments/tool-decision/bench.mjs` with `FREE_POOL_API_KEY` (LiteLLM on 127.0.0.1:8788).
+- Phone/ADB fallback: `/path/to\chatgpt-adb-parser\chatparse.py` (only if the phone channel returns).
+
+### 4. Operational footguns learned this session (write into skills when next attended)
+- **LM Studio silently serves the currently-loaded model for unknown model ids** → wrong-model data with no error. Always verify the echoed `model` field (bench-local.mjs now guards this).
+- **All small GGUFs reason by default** under LM Studio's chat-template handling (qwen3.5-4b, lfm2.5-2.6b, qwythos-9b) despite vendor "non-thinking default" claims → the 8-token single-token contract starves them; `reasoning_content` is separated since v0.3.9; budget ≥2048.
+- **`lms get` catalog lags new releases** (LFM2.5-2.6B absent ~10 days post-release) → use the direct HF resolve URL.
+- `lms ps` shows idle models auto-unload on TTL (60m); the LM Studio server on :1234 was left running.
+- Research notes (dated snapshots): `/path/to/local-models/RESEARCH-2026-08-07-mimo-minimax-command-code.md` (Mimo/M3 vs laguna verdicts) and `RESEARCH-2026-08-07-local-models-execution-intent.md` (small-model shortlist, reasoning-vs-direct-answer evidence, LM Studio ops). The 2.6B/4B/9B classifier task only needs the latter.
+- Run log (gitignored, local-only): `.autonomous/PROGRESS.md` (durable log), `CHARTER.md`, `DEFERRED.md`, `ICEBOX.md`, `REPORT.md`.
+
 ## Current State (2026-08-07)
 
 **Repository:** https://github.com/asmartin-ai/m365-copilot-proxy
