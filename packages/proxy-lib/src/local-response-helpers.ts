@@ -5,13 +5,12 @@
  * and locally-rendered completions.
  */
 
-import { getMessageContent } from "@m365-copilot/core";
+import { getMessageContent, type Message, type ToolDef } from "@m365-copilot/core";
 import { ChatCompletionRequest } from "./schemas.js";
 import type { z } from "zod/v4";
 import { jsonResponse, sseResponse } from "./response-helpers.js";
 
 type ChatBody = z.infer<typeof ChatCompletionRequest>;
-type ToolDef = NonNullable<ChatBody["tools"]>[number];
 /**
  * Detect if this is a metadata-only request (title generation) and return local response.
  * Returns null if this is a normal conversation request.
@@ -34,7 +33,7 @@ export function localMetaResponse(body: ChatBody): string | null {
  * and synthesize the corresponding tool call directly (without sending to M365).
  */
 export function readOnlyFallbackToolCall(
-  body: ChatBody,
+  body: { messages: Message[]; tools?: ToolDef[] },
   assistantText: string,
 ): { id: string; type: "function"; function: { name: string; arguments: string } } | null {
   const tools = body.tools ?? [];
