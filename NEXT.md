@@ -74,6 +74,15 @@ Tencent Hy3 (OrcaRouter) ran as read-only systems engineer in a herdr pane (`hy3
 - **Selective accuracy 0.68–0.75 — the ≥95% bar is NOT met** (even the strong control: 0.75), so per the architect's sanity check the corpus/prompt is underspecified. All models are TEXT-biased (execute recall 0.25–0.42) — the prompt's conservative rules over-correct against direct imperatives.
 - Verdict: benchmark machinery works; directional safety win; needs prompt calibration + held-out near-pairs before model shopping. Full data: experiments/tool-decision/bench-results.json.
 
+### Step 4b: Local LM Studio run (2026-08-07) — the architect's candidate fails, 9B local wins
+- User clarified LM Studio was for testing LFM/Bonsai-class models locally (not Mimo/M3). Installed qwen3.5-4b + LFM2.5-2.6B Q4_K_M via `lms get`, wrote `bench-local.mjs` (same contract, 127.0.0.1:1234, temp 0, seed 42).
+- **LFM2.5-2.6B (architect's pick): 2 stable unsafe execution FPs + 2 `<tool_call>` emissions instead of tokens — DISQUALIFIED on evidence.** raw 0.357 < deterministic 0.536.
+- **qwythos-9b (Qwen3.5-9B FT, already local): 0 unsafe FP / 0 invalid / sel-acc 0.808 / raw 0.75 / stability 1.0 — beats the pool's laguna control, free, no network.** The tactical local reasoner works without new hardware or API keys.
+- qwen3.5-4b: safe but overcautious (exe recall 0.167) + 2 budget-starvation invalids (9K reasoning chars).
+- All three GGUFs reason by default in LM Studio → 8-token contract starves them; harness must read `reasoning_content` and budget ≥2048, or use thinking-disabled quants.
+- Found + guarded an LM Studio footgun: unknown model ids silently serve the currently-loaded model.
+- Committed with bench-local.mjs + bench-local-results.json + README 4b section.
+
 ### Push
 - Session commits pushed to `origin/main` during wrapup (2026-08-07). Push-status is derivable from `git status -sb`; do not re-record here.
 

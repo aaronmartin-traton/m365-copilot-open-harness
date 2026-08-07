@@ -217,6 +217,60 @@ safely (0 unsafe FP), but the ≥95% selective-accuracy bar is NOT met. Next:
 calibrate the prompt (reduce the anti-execute bias), add held-out near-pairs,
 re-run.
 
+## Step 4b — Local LM Studio run (2026-08-07, real LFM/Bonsai-class candidates)
+
+The Step-4 pool run used proxy lanes because LFM2.5-2.6B / Bonsai 27B were not
+in the free pool. The user's LM Studio install + this box (Ryzen 9 7900X, RX
+9070 XT 16 GB, 64 GB RAM) made the real local test possible. `bench-local.mjs`
+reuses the identical contract (same 28 cases, same system prompt, temp 0,
+seed 42, 3 passes) against `http://127.0.0.1:1234/v1` (LM Studio).
+
+Models: `qwen3.5-4b` (Qwen3.5-4B Q4_K_M, research top-1), `lfm2.5-2.6b`
+(Liquid LFM2.5-2.6B Q4_K_M — the architect's named candidate), and
+`qwythos-9b-claude-mythos-5-1m` (Qwen3.5-9B fine-tune already on the box).
+All three run thinking-by-default in LM Studio's template handling, so
+`max_tokens` had to be 2048 (the architect's tiny 8-token contract starves
+them; qwen3.5-4b still starved twice at 2048 — see below).
+
+| system | unsafe FP | exe recall | txt recall | coverage | sel. accuracy | raw | stability | invalid |
+|---|---|---|---|---|---|---|---|---|
+| current deterministic | 13 | 1.000 | 0.188 | 1.000 | 0.536 | 0.536 | — | 0 |
+| qwen3.5-4b | 0 | 0.167 | 1.000 | 0.929 | 0.692 | 0.643 | 1.000 | 2 |
+| lfm2.5-2.6b (architect's pick) | **2** | 0.500 | 0.250 | 0.571 | 0.625 | 0.357 | 1.000 | 2 |
+| qwythos-9b (Qwen3.5-9B FT) | **0** | 0.417 | 1.000 | 0.929 | **0.808** | 0.750 | 1.000 | **0** |
+
+Full per-case data (incl. raw outputs + reasoning-char counts): `bench-local-results.json`.
+
+Findings:
+- **The architect's named candidate is disqualified by evidence.** LFM2.5-2.6B
+  produced **2 stable unsafe execution FPs** (execution_intent-001, -015: gold
+  TEXT → EXECUTE ×3) and, on 2 more cases (008, -017), **emitted
+  `<|tool_call_start|>` tool calls instead of a classification token** — its
+  always-on `<think>` + agentic tool-use RL make it both unsafe and
+  format-violating for a single-token classifier. Raw 0.357 is below
+  deterministic (0.536).
+- **The local winner is the 9B reasoning fine-tune already on the box:**
+  qwythos-9b scored **0 unsafe FP / 0 invalid / sel. acc 0.808 / raw 0.75 /
+  stability 1.0** — beating the pool's strong remote control (laguna: 0.75 /
+  0.75) with zero network and zero cost. The tactical local reasoner role is
+  validated; it needs no new hardware and no API key.
+- qwen3.5-4b is safe (0 unsafe FP, txt recall 1.0) but overcautious (execute
+  recall 0.167 — 10 of 12 EXECUTE cases answered TEXT) and starved twice at
+  2048 tokens (9,095 reasoning chars, empty content: the documented
+  reasoning-model budget-starvation mode).
+- Architecture lesson: all three GGUFs reason by default under LM Studio's
+  template handling, so the 8-token contract is unusable as specified for
+  these models — the harness must separate `reasoning_content` (LM Studio
+  does since v0.3.9) and budget ≥2048, or prefer thinking-disabled quants.
+- Model-identity guard: LM Studio silently serves the currently-loaded model
+  for unknown ids (requesting `qwythos-9b` returned lfm2.5-2.6b output);
+  `bench-local.mjs` now verifies the echoed model id and fails loudly on
+  mismatch.
+
+Verdict: the execution-intent reasoner runs locally, safely, for free — the
+question is which model: qwythos-9b (proven here) or a thinking-disabled 4B
+for tighter latency. Held-out near-pairs + prompt calibration still pending.
+
 ## Rules
 
 - No production changes to enable corpus work.
