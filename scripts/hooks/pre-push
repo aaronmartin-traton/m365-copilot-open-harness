@@ -1,0 +1,12 @@
+#!/bin/sh
+# pre-push hook template — installed by scripts/install-hooks.mjs.
+# Scans the pushed commit range for secrets at the egress point.
+# __REPO_ROOT__ is replaced at install time.
+REPO=__REPO_ROOT__
+if [ -f "$REPO/scripts/secret-scan.mjs" ]; then
+  if ! bun "$REPO/scripts/secret-scan.mjs"; then
+    echo "pre-push: secret scan FAILED — push aborted."
+    exit 1
+  fi
+fi
+exit 0
