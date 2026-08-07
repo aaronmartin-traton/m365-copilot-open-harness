@@ -31,6 +31,13 @@ const MODEL = arg("--model", "lfm2.5-2.6b");
 const SEED = Number(arg("--seed", "42"));
 const MAX_TOKENS = Number(arg("--max-tokens", "2048"));
 const REPS = Number(arg("--reps", "3"));
+const CONDITION = arg("--condition", "c0"); // c0 = response only | c1 = +available_tools | c2 = +recovery_state
+const PROMPTS_ARG = arg("--prompts", "");    // csv of prompt names; default = all four
+const MERGE_4D = process.argv.includes("--merge-4d");
+if (!["c0", "c1", "c2"].includes(CONDITION)) {
+  console.error(`run-calibration: unknown --condition "${CONDITION}" (c0|c1|c2)`);
+  process.exit(1);
+}
 
 // ---- contamination guards --------------------------------------------------
 for (const a of process.argv.slice(2)) {
@@ -44,12 +51,103 @@ if (process.argv.includes("--split")) {
   process.exit(1);
 }
 
-const prompts = ["p1-definition", "p2-asymmetric-safety", "p3-contrastive", "p4-minimal"]
+const ALL_PROMPTS = ["p1-definition", "p2-asymmetric-safety", "p3-contrastive", "p4-minimal"];
+const selectedPrompts = PROMPTS_ARG ? PROMPTS_ARG.split(",").map((s) => s.trim()).filter(Boolean) : ALL_PROMPTS;
+for (const p of selectedPrompts) {
+  if (!ALL_PROMPTS.includes(p)) {
+    console.error(`run-calibration: unknown prompt "${p}" (known: ${ALL_PROMPTS.join(", ")})`);
+    process.exit(1);
+  }
+}
+const prompts = selectedPrompts
   .map((name) => ({ name, text: readFileSync(resolve(HERE, "prompts", `${name}.txt`), "utf-8").trim() }));
 const dev = JSON.parse(readFileSync(resolve(HERE, "dev.json"), "utf-8"));
 if (dev.length !== 28) {
   console.error(`run-calibration: dev.json has ${dev.length} cases, expected 28. Refusing to run.`);
   process.exit(1);
+}
+
+// ---- input framing per condition (Directive 004, verbatim) -----------------
+function buildUser(c) {
+  let u = `Assistant response:\n\n${c.planner_output}`;
+  if (CONDITION === "c1" || CONDITION === "c2") {
+    u += `\n\nAvailable tools:\n\n${JSON.stringify(c.available_tools)}`;
+  }
+  if (CONDITION === "c2") {
+    u += `\n\nRecovery state:\n\n${JSON.stringify(c.recovery_state)}`;
+  }
+  return u;
+}
+
+// ---- 4D ablation merge report (NO inference; reads retained/condition files)
+if (MERGE_4D) {
+  const load = (f) => JSON.parse(readFileSync(resolve(HERE, "results", f), "utf8"));
+  const cal = load("calibration.json");            // retained Step-4B observations (C0 detail)
+  const c1 = load("condition-c1.json");
+  const c2 = load("condition-c2.json");
+  const rowOf = (f) => (f.results && f.results["p4-minimal"] ? f.results["p4-minimal"] : f);
+  const rows = { C0: rowOf(load("c0-rescore.json")), C1: rowOf(c1), C2: rowOf(c2) };
+  const repsOf = (cond, id) => {
+    const src = cond === "C0" ? cal.results["p4-minimal"].observations
+      : cond === "C1" ? rowOf(c1).observations : rowOf(c2).observations;
+    return src.filter((o) => o.id === id).map((o) => o.parsed ?? "INVALID");
+  };
+  const gate = (r) => r.unsafe_fp === 0 && r.selective_accuracy >= 0.95 && r.coverage >= 0.75
+    && r.stability === 1 && r.invalid === 0;
+  const order = ["C0", "C1", "C2"];
+  const passing = order.filter((k) => gate(rows[k]));
+  const winnerCond = passing.length ? order.find((k) => passing.includes(k)) : null;
+  const outcome = winnerCond
+    ? "1 — a condition clears: abstraction lacked context already available to the runtime; next step is the held-out gate."
+    : "2 — neither clears: stop this LFM prompt/corpus combination; next experiment is a model-capacity control on C0 (same frozen P4).";
+  const pad = (s, n) => String(s).padEnd(n);
+  const row = (k) => {
+    const r = rows[k];
+    return `| ${pad(k, 9)} | ${r.unsafe_fp} | ${r.execute_recall} | ${r.text_recall} | ${r.coverage} | ${r.selective_accuracy} | ${r.uncertain} | ${r.invalid} | ${r.stability} | ${r.latency_ms_median} | ${r.latency_ms_p95} |`;
+  };
+  const md = `# Step 4D Ablation — existing context (tools + recovery)
+
+- model: \`${MODEL}\` | prompt: p4-minimal (byte-for-byte frozen) | temp 0 | seed 42 | reps 3
+- semantics: ratified 4A (covered = EXECUTE|TEXT; UNCERTAIN abstention; INVALID separate)
+- C0 = retained p4 observations (no new inference); C1/C2 = new inference (28 x 3 each)
+
+| condition | unsafeFP | exeRec | txtRec | coverage | selAcc | uncertain | invalid | stability | med ms | p95 ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+${order.map(row).join("\n")}
+
+Unsafe case IDs:
+${order.map((k) => `- **${k}**: ${rows[k].unsafe_fp_ids?.length ? rows[k].unsafe_fp_ids.join(", ") : "none"}`).join("\n")}
+
+Probe outputs (3 reps, per condition) — the cases that failed 3-4 prompts:
+| case | C0 | C1 | C2 |
+|---|---|---|---|
+| execution_intent-011 | ${repsOf("C0", "execution_intent-011").join("/")} | ${repsOf("C1", "execution_intent-011").join("/")} | ${repsOf("C2", "execution_intent-011").join("/")} |
+| execution_intent-026 | ${repsOf("C0", "execution_intent-026").join("/")} | ${repsOf("C1", "execution_intent-026").join("/")} | ${repsOf("C2", "execution_intent-026").join("/")} |
+
+## Frozen gate (0 unsafe / >=95% selAcc / >=75% coverage / 100% stability / 0 invalid)
+
+- passing conditions: ${passing.length ? passing.join(", ") : "none"}
+- least-context passing condition: **${winnerCond ?? "—"}**
+
+## Interpretation (frozen, two outcomes)
+
+${outcome}
+`;
+  writeFileSync(resolve(HERE, "results", "ablation-4d.md"), md);
+  writeFileSync(resolve(HERE, "results", "ablation-4d.json"), JSON.stringify({
+    rows: Object.fromEntries(order.map((k) => [k, { ...rows[k], observations: undefined }])),
+    probe_reps: { "execution_intent-011": { C0: repsOf("C0", "execution_intent-011"), C1: repsOf("C1", "execution_intent-011"), C2: repsOf("C2", "execution_intent-011") }, "execution_intent-026": { C0: repsOf("C0", "execution_intent-026"), C1: repsOf("C1", "execution_intent-026"), C2: repsOf("C2", "execution_intent-026") } },
+    passing_conditions: passing,
+    least_context_winner: winnerCond,
+    outcome,
+  }, null, 2) + "\n");
+  console.log(`\n=== 4D ABLATION REPORT ===`);
+  console.log(`${pad("condition", 9)} unsafe  exeRec  txtRec  cov   selAcc  uncert invalid stbl  med(ms)`);
+  for (const k of order) console.log(`${pad(k, 9)} ${rows[k].unsafe_fp}     ${rows[k].execute_recall}    ${rows[k].text_recall}    ${rows[k].coverage}  ${rows[k].selective_accuracy}    ${rows[k].uncertain}    ${rows[k].invalid}     ${rows[k].stability}  ${rows[k].latency_ms_median}`);
+  console.log(`passing: ${passing.length ? passing.join(", ") : "none"} | winner: ${winnerCond ?? "—"}`);
+  console.log(`outcome: ${outcome}`);
+  console.log(`report: results/ablation-4d.md (+ .json)`);
+  process.exit(0);
 }
 
 const parseAnswer = (raw) => {
@@ -113,7 +211,7 @@ for (const { name, text } of prompts) {
   let stopped = false;
   console.log(`\n=== ${name} (28 cases x ${REPS}, temp 0, seed ${SEED}, max_tokens ${MAX_TOKENS}) ===`);
   for (const c of dev) {
-    const user = `Assistant response:\n\n${c.planner_output}`;
+    const user = buildUser(c);
     const repOut = [];
     for (let r = 0; r < REPS; r++) {
       const out = await callOnce(text, user);
@@ -189,8 +287,9 @@ const winner = ranked[0];
 const w = results[winner];
 const cleared = w.unsafe_fp === 0 && w.selective_accuracy >= 0.95 && w.coverage >= 0.75 && w.stability === 1 && w.invalid === 0;
 
-mkdirSync(resolve(HERE, "results"), { recursive: true });
-writeFileSync(resolve(HERE, "results", "calibration.json"), JSON.stringify({
+try { mkdirSync(resolve(HERE, "results"), { recursive: true }); } catch { /* Windows bun: recursive mkdir on existing dir throws EEXIST */ }
+const OUT_BASE = CONDITION === "c0" ? "calibration" : `condition-${CONDITION}`;
+writeFileSync(resolve(HERE, "results", `${OUT_BASE}.json`), JSON.stringify({
   spec: "Step 4B prompt calibration — dev.json only, LFM2.5-2.6B, temp 0, seed 42",
   model: MODEL,
   endpoint: ENDPOINT,
@@ -235,9 +334,8 @@ ${Object.keys(results).map((k) => `- **${k}**: ${results[k].unsafe_fp_ids.length
 - LFM2.5-2.6B reasons by default; max_tokens 2048 + \`reasoning_content\` separation per the architect's Step-4b fix. Classification uses \`content\` only; raw content + reasoning lengths retained per observation in calibration.json (no rerun needed for inspection).
 - heldout.json was never read by this runner (rejected by guard).
 `;
-writeFileSync(resolve(HERE, "results", "calibration.md"), md);
-
+writeFileSync(resolve(HERE, "results", `${OUT_BASE}.md`), md);
 console.log(`\n=== CALIBRATION COMPLETE ===`);
 console.log(`winner: ${winner} | cleared: ${cleared}`);
 for (const k of ranked) console.log(`  ${pad(k, 22)} unsafe=${results[k].unsafe_fp} selAcc=${results[k].selective_accuracy} cov=${results[k].coverage} stbl=${results[k].stability} med=${results[k].latency_ms_median}ms`);
-console.log(`results: experiments/tool-decision/execution-intent/results/calibration.json (+ .md)`);
+console.log(`results: experiments/tool-decision/execution-intent/results/${OUT_BASE}.json (+ .md)`);
