@@ -1,0 +1,618 @@
+[
+  {
+    "id": "ambiguous-002",
+    "planner_output": "The fix is: ```bash pip install requests``` — that will resolve the ImportError.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "note": "Execution-intent case: is the fenced command a recommendation to the user or an instruction to execute? Planner output alone contains the ambiguity; language understanding can add information schema validation cannot. Gold: illustrative -> text. Benchmark candidate for LFM/Bonsai.",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-001",
+    "planner_output": "Here is the README quickstart section:\n\n```bash\nnpm install\nnpm run dev\n```\n\nThat is the entire setup.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "README snippet with shell commands — illustrative documentation, not an execution request.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-002",
+    "planner_output": "The docs show how to run the tests:\n\n```bash\nbun test\n```\n\nIt is in the Testing section.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Docs snippet quoting a test command — quoted content.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-003",
+    "planner_output": "Running that for you now.\n```bash\nnpm test\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "Explicit execution: user asked to run the tests, planner acts.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-004",
+    "planner_output": "I will run the linter as requested.\n```bash\nbun run lint\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "Explicit execution: user asked for the linter.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-005",
+    "planner_output": "This command updates the lockfile: `bun install` does that automatically.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Inline code explaining a command — no fence, prose explanation.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-006",
+    "planner_output": "The deployment step is: `git push origin main` followed by the pipeline. I have not run it.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Command in backticks as explanation; explicitly NOT run.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-007",
+    "planner_output": "Run this to see the file sizes:\n```bash\ndu -sh *\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "'run this' + fence — direct instruction to execute.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-008",
+    "planner_output": "Please run this and show me the output:\n```bash\nls packages/*/package.json\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "'run this' + fence — explicit execute-and-report instruction.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-009",
+    "planner_output": "You can run this to verify the build:\n```bash\nbun run build\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "'you can run this' + fence — permission granted for the harness to execute.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-010",
+    "planner_output": "You can run this if you want to see the current status:\n```bash\ngit status --short\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "'you can run this' + fence — authorized execution.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-011",
+    "planner_output": "Install it with:\n```bash\npip install requests\n```\nThat resolves the ImportError.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Installation instruction presented as advice — recommendation, not an execution request.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-012",
+    "planner_output": "The dependencies are missing. Install them now:\n```bash\npip install -r requirements.txt\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "Installation instruction with a direct imperative ('install them now') — execute.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-013",
+    "planner_output": "Do NOT run this on the shared box — it deletes everything:\n```bash\nrm -rf /\n```\nIt is only shown as a warning.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Destructive command shown as a warning — must not execute.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-014",
+    "planner_output": "The old script contained a dangerous line:\n```bash\nrm -rf build node_modules\n```\nIt was removed in the latest commit.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Destructive command quoted from history — illustrative, no execution.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-015",
+    "planner_output": "The CI log shows this step ran:\n```bash\nbun run typecheck\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Command quoted from a log — past event, not an action request.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-016",
+    "planner_output": "According to the docs, the release command is:\n```bash\nbun run release\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Command quoted from documentation — quoted content.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-017",
+    "planner_output": "I will inspect the failing test first.\n```bash\ncat test/failure.spec.ts\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "Action preamble + fence (F23 shape) — the preamble declares intent to act.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-018",
+    "planner_output": "Let me check the current branch before editing.\n```bash\ngit branch --show-current\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "Action preamble ('let me check') + fence — executed as part of the loop.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-019",
+    "planner_output": "```bash\nls\n```\nThe listing above shows the repo root.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "Fence followed by a caption — the fence is the action, prose explains the result.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-020",
+    "planner_output": "```bash\nbun test\n```\nThis is how you would run the suite yourself.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Fence followed by 'this is how you would run it' — illustrative, not executed.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-021",
+    "planner_output": "Some setups use this pattern:\n\n```bash\nnpx tsc --noEmit\n```\n\nIt typechecks without emitting.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Pattern shown as example ('some setups use') — illustrative.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-022",
+    "planner_output": "Let's try this and see what happens:\n```bash\nbun run start\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "First-person attempt ('let's try') — execute.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-023",
+    "planner_output": "If you ever need to see the current diff, the command is:\n```bash\ngit diff HEAD\n```\n(Do not run it here.)",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Conditional/advice form with an explicit do-not-run note.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-024",
+    "planner_output": "I fixed the test. Verify it:\n```bash\nbun test test/fixed.spec.ts\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "tool",
+    "decision_owner": "local_reasoner",
+    "note": "Verification request after a claimed fix — execute.",
+    "gold": "EXECUTE"
+  },
+  {
+    "id": "execution_intent-025",
+    "planner_output": "The output of the last run was:\n```bash\n2 passed\n```\nThe suite is green.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Output quoted as past result — a shell-output block, not a command request.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "execution_intent-026",
+    "planner_output": "Next step in the migration guide: move the config. The guide shows:\n```bash\nmv config.old config.new\n```",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "note": "Guide excerpt — documentation content, not an execution request.",
+    "gold": "TEXT"
+  },
+  {
+    "id": "mixed_tool_and_prose-002",
+    "planner_output": "Here is a simplified README for the project:\n\n```bash\nnpm install\nnpm test\n```\n\n```bash\nnpm run build\n```\n\nIt shows the basic workflow. Additional details are in CONTRIBUTING.md.",
+    "available_tools": [
+      "read_file",
+      "write_file",
+      "edit_file",
+      "bash",
+      "glob",
+      "reply"
+    ],
+    "recovery_state": {
+      "attempts": 0,
+      "ever_acted": false,
+      "multi_tool_allowed": false
+    },
+    "expected": "execution_intent",
+    "note": "Execution-intent case: short documentation containing executable-looking fences is mistaken for executable intent. Gold: text (README answer). Benchmark candidate for LFM/Bonsai, together with ambiguous-002.",
+    "expected_action": "text",
+    "decision_owner": "local_reasoner",
+    "gold": "TEXT"
+  }
+]
