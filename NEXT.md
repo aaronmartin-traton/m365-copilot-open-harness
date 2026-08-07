@@ -4,9 +4,9 @@
 
 **Repository:** https://github.com/asmartin-ai/m365-copilot-proxy
 
-**Branch:** main
+**Branch:** main (tracks `origin/main` on GitHub)
 **Status:** Clean working directory
-**Pushed to remote:** No (3 new commits local)
+**Remote:** GitHub `origin`; the stale internal GitLab remote was removed 2026-08-07.
 
 ## Completed Work
 
@@ -24,8 +24,8 @@
 
 **Handler.ts reduced:** ~1065 → 342 lines (723+ lines extracted)
 
-### Baseline Repair (commit 8a3d0a0)
-The committed baseline did not typecheck (missing `log`/`ChatBody` declarations in handler.ts, corrupted re-exports in index.ts/responses.ts/pruning.ts/tests, broken `minutes` in session-pool.ts, missing `types: ["node"]`). All repaired; `tsc --noEmit` clean across proxy-lib.
+### Baseline Repair
+The committed baseline did not typecheck (missing `log`/`ChatBody` declarations in handler.ts, corrupted re-exports in index.ts/responses.ts/pruning.ts/tests, broken `minutes` in session-pool.ts, missing `types: ["node"]`). All repaired; `tsc --noEmit` clean across proxy-lib. Committed as the first session commit on 2026-08-07.
 
 ### Environment Repair
 - `node_modules` was corrupted (bun store not hoisted). Fixed with `bun install --linker=hoisted --force --ignore-scripts`.
@@ -52,7 +52,7 @@ Tencent Hy3 (OrcaRouter) ran as read-only systems engineer in a herdr pane (`hy3
 - Only `context-compiler.test.ts` covers an extracted module directly.
 
 ### Push
-- 3 local commits (8a3d0a0, 0d88190, 98b8c33) not yet pushed to remote.
+- Session commits pushed to `origin/main` during wrapup (2026-08-07). Push-status is derivable from `git status -sb`; do not re-record here.
 
 ## Warnings / Caveats
 - None
