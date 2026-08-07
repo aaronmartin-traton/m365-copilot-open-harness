@@ -38,7 +38,8 @@ vi.mock("@m365-copilot/core", async (importActual) => {
 });
 
 const { ChatCompletionRequest } = await import("./schemas.js");
-const { SessionPool, handleChatCompletion } = await import("./handler.js");
+const { handleChatCompletion } = await import("./handler.js");
+const { SessionPool } = await import("./session-pool.js");
 
 function body(messages: Array<Record<string, unknown>>, extra: Record<string, unknown> = {}) {
   return ChatCompletionRequest.parse({ model: "gpt-5.5-think-deeper", messages, ...extra });

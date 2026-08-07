@@ -1,5 +1,5 @@
 import { z } from "zod/v4";
-import type { ConversationPruneSelector, SessionPool } from "./handler.js";
+import type { ConversationPruneSelector, SessionPool } from "./session-pool.js";
 
 export const ConversationPruneSelectorSchema = z.union([
   z.object({ session_key: z.string().min(1) }).strict(),

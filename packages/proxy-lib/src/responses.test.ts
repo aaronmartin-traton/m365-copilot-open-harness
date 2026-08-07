@@ -39,7 +39,7 @@ vi.mock("@m365-copilot/core", async (importActual) => {
 });
 
 const { handleResponse, ResponsesRequest } = await import("./responses.js");
-const { SessionPool } = await import("./handler.js");
+const { SessionPool } = await import("./session-pool.js");
 
 function base(input: unknown, extra: Record<string, unknown> = {}) {
   return ResponsesRequest.parse({ model: "gpt-5.5-think-deeper", input, ...extra });

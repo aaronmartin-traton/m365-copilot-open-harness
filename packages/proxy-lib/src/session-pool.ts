@@ -175,6 +175,7 @@ export class SessionPool {
   }
 
   async reapIdle(): Promise<{ pruned: number; failed: number }> {
+    const minutes = Number(process.env.M365_SESSION_TTL_MINUTES ?? Number.NaN);
     if (!Number.isFinite(minutes) || minutes <= 0) return { pruned: 0, failed: 0 };
     const cutoff = this.now() - minutes * 60_000;
     let pruned = 0;

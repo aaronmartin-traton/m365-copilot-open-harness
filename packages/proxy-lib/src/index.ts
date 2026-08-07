@@ -5,16 +5,18 @@ import {
   getAgentAvailability,
   isDegradationBackoff,
 } from "@m365-copilot/core";
-import { SessionPool, handleChatCompletion } from "./handler.js";
+import { handleChatCompletion } from "./handler.js";
+import { SessionPool } from "./session-pool.js";
+import { ChatCompletionRequest } from "./schemas.js";
 import {
   ResponsesRequest,
   handleResponse,
   type ResponsesRequestBody,
 } from "./responses.js";
 
+export { handleChatCompletion } from "./handler.js";
 export {
   SessionPool,
-  handleChatCompletion,
   type ConversationState,
   type ConversationPruneSelector,
   type RemoteConversationPruner,
@@ -28,6 +30,7 @@ export {
   type ContextCompiler,
   type FullContextInput,
   type DeltaContextInput,
+} from "./context-compiler.js";
 export { buildUsage, type UsageInput } from "./usage-builder.js";
 export {
   jsonResponse,

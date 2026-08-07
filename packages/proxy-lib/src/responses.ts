@@ -1,6 +1,7 @@
 import { z } from "zod/v4";
 import { ChatCompletionRequest, ToolCall } from "./schemas.js";
-import { handleChatCompletion, type SessionPool } from "./handler.js";
+import { handleChatCompletion } from "./handler.js";
+import type { SessionPool } from "./session-pool.js";
 
 const ContentPart = z.object({
   type: z.string(),
@@ -92,7 +93,7 @@ function contentText(content: string | Array<z.infer<typeof ContentPart>>): stri
 
 function toChatContent(content: string | Array<z.infer<typeof ContentPart>>): ChatMessageInput["content"] {
   if (typeof content === "string") return content;
-  return content.flatMap((part) => {
+  return content.flatMap((part): Array<{ type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } } | { type: "text"; text: string }> => {
     if ((part.type === "input_image" || part.type === "image_url") && part.image_url) {
       return [{
         type: "image_url" as const,
@@ -104,7 +105,7 @@ function toChatContent(content: string | Array<z.infer<typeof ContentPart>>): Ch
   });
 }
 
-function toChatMessages(body: ResponsesBody): ChatMessageInput[] {
+function toChatMessages(body: ResponsesRequestBody): ChatMessageInput[] {
   const messages: ChatMessageInput[] = [];
   if (body.instructions) messages.push({ role: "system", content: body.instructions });
 
@@ -182,7 +183,7 @@ interface ResponseEnvelope {
   [key: string]: unknown;
 }
 
-function responseEnvelope(body: ResponsesBody, id: string, createdAt: number, output: OutputItem[], usage: z.infer<typeof ChatCompletionResponse>["usage"]): ResponseEnvelope {
+function responseEnvelope(body: ResponsesRequestBody, id: string, createdAt: number, output: OutputItem[], usage: z.infer<typeof ChatCompletionResponse>["usage"]): ResponseEnvelope {
   return {
     id,
     object: "response" as const,
@@ -302,7 +303,7 @@ function streamResponse(response: ResponseEnvelope): Response {
 type BuiltResponse = { envelope: ResponseEnvelope } | { error: Response };
 
 async function buildResponse(
-  body: ResponsesBody,
+  body: ResponsesRequestBody,
   pool: SessionPool,
   options: { signal?: AbortSignal; sessionKey?: string },
 ): Promise<BuiltResponse> {
@@ -397,7 +398,7 @@ function streamDeferredResponse(pending: Promise<BuiltResponse>): Response {
 }
 
 export async function handleResponse(
-  body: ResponsesBody,
+  body: ResponsesRequestBody,
   pool: SessionPool,
   options: { signal?: AbortSignal; sessionKey?: string } = {},
 ): Promise<Response> {

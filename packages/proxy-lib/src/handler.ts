@@ -30,11 +30,11 @@ import { outputFinishReason, OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
 import { renderImagesMarkdown } from "./image-renderer.js";
 import { CONFAB_FORCE_PROMPT, HALLUCINATION_FORCE_PROMPT, REMOTE_ARTIFACT_FORCE_PROMPT, getForcePrompt } from "./force-prompts.js";
 import type { z } from "zod/v4";
-  return parts.join("\n\n");
-}
 
+const log = createLogger("handler");
 
-
+// The OpenAI-compatible request body shape accepted by the proxy.
+type ChatBody = z.infer<typeof ChatCompletionRequest>;
 
 // --- Main handler ---
 

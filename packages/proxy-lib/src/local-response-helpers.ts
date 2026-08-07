@@ -6,11 +6,12 @@
  */
 
 import { getMessageContent } from "@m365-copilot/core";
-import type { ChatCompletionRequest } from "./schemas.js";
+import { ChatCompletionRequest } from "./schemas.js";
+import type { z } from "zod/v4";
 import { jsonResponse, sseResponse } from "./response-helpers.js";
 
-type ChatBody = ChatCompletionRequest;
-type ToolDef = ChatBody["tools"][number];
+type ChatBody = z.infer<typeof ChatCompletionRequest>;
+type ToolDef = NonNullable<ChatBody["tools"]>[number];
 /**
  * Detect if this is a metadata-only request (title generation) and return local response.
  * Returns null if this is a normal conversation request.
