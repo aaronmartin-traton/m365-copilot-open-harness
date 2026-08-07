@@ -29,11 +29,45 @@ Each case classifies the planner output:
 | `hallucinated_completion` | mutation claim with no tool call |
 | `remote_artifact` | Teams/sandbox artifact instead of a local tool call |
 | `mixed_tool_and_prose` | tool call(s) plus surrounding text |
-| `ambiguous` | deterministic logic has no high-confidence answer |
+| `ambiguous` | residual uncertainty that no deterministic component owns |
+| `execution_intent` | is tool-shaped text an action request or quoted/illustrative content? |
 
-The critical category is `ambiguous`. It is the only category intended for a
-local model. A tactical reasoner gets exactly the `ambiguous` cases — nothing
-else — and "uncertain" is always a valid answer.
+## Disposition (Step 3 finding — the `ambiguous` hypothesis is retired)
+
+The original hypothesis — *ambiguous is the only category intended for a local
+model* — was too broad. The Step 3 run showed all seven original `ambiguous`
+cases receive concrete deterministic actions, but they are several different
+kinds of uncertainty that only grouped together because `tool-path.ts` sees
+planner output alone. The better taxonomy is based on where the missing
+information lives:
+
+```
+Planner output ambiguity
+        │
+        ├── language intent ──────────► Local reasoner candidate
+        ├── world-state ambiguity ────► Tool / environment
+        ├── authorization ────────────► Policy
+        ├── schema invalidity ────────► Validator
+        └── execution dependency ─────► Scheduler / planner
+```
+
+Every case carries a `decision_owner` recording which component should own it:
+
+| owner | meaning |
+|---|---|
+| `deterministic_recovery` | current tool-path recovery handles it |
+| `local_reasoner` | execution-intent disambiguation benchmark candidate |
+| `tool_executor` | fact lives in the environment (e.g. duplicate SEARCH matches) |
+| `policy` | authorization (e.g. write outside the workspace) |
+| `validation` | schema invalidity — detection is deterministic; repair may use reasoning |
+| `scheduling` | dependency between calls — deterministic sequentialization |
+| `output_policy` | protocol/output limits (e.g. oversized reply) |
+
+The one remaining local-model class is `execution_intent`: **did the planner
+intend this tool-shaped text to execute, or is it merely discussing/showing
+it?** It is a small classification task — exactly what "prefer deterministic
+software" was supposed to leave behind. The corpus currently holds 28
+execution_intent cases (expanded from the two the Step 3 run identified).
 
 ## Case schema (JSONL)
 
@@ -67,12 +101,15 @@ One JSON object per line in `cases.jsonl`:
   - `retry_planner` — force a re-prompt of the planner
   - `fail_closed` — refuse with a 502
   - `uncertain` — no gold answer; the case is genuinely ambiguous
+- `decision_owner` — which component should own the case (see Disposition
+  section): `deterministic_recovery`, `local_reasoner`, `tool_executor`,
+  `policy`, `validation`, `scheduling`, `output_policy`.
 - `note` — provenance: which test fixture, hypothesis entry, or observed
   failure mode seeded the case.
 
-The two fields answer different questions. `expected` records the input shape;
+The two answer fields differ. `expected` records the input shape;
 `expected_action` records the desired behavior. The mixed cases demonstrate
-why: both are `mixed_tool_and_prose`, but one resolves to a tool and the other
+why: both were `mixed_tool_and_prose`, but one resolves to a tool and the other
 to text. Ambiguous cases use `expected_action: "uncertain"` — do not force a
 gold answer where none is known.
 

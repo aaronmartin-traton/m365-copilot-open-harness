@@ -128,6 +128,7 @@ async function runCase(c) {
     id: c.id,
     expected: c.expected,
     expected_action: c.expected_action,
+    decision_owner: c.decision_owner ?? "deterministic_recovery",
     observed_class: observedClass(c.planner_output, tools, everActed),
     observed_action: observedAction,
     observed_terminal: observedTerminal,
@@ -162,17 +163,19 @@ writeFileSync(resolve(HERE, "results.json"), JSON.stringify(results, null, 2) + 
 const pad = (s, n) => String(s).padEnd(n);
 const line = (row) => row.join("  ");
 
+const RECORDED_CLASSES = new Set(["ambiguous", "execution_intent"]);
 console.log("=== A. Classification coverage (deterministic detection vs expected) ===");
 console.log(line([pad("class", 26), "cases", "match"]));
 const byClassA = new Map();
 for (const r of results) {
   const e = byClassA.get(r.expected) ?? { cases: 0, match: 0 };
   e.cases += 1;
-  if (r.expected === "ambiguous" || r.observed_class === r.expected) e.match += 1;
+  if (RECORDED_CLASSES.has(r.expected) || r.observed_class === r.expected) e.match += 1;
   byClassA.set(r.expected, e);
 }
 for (const [cls, e] of [...byClassA.entries()].sort()) {
-  console.log(line([pad(cls, 26), String(e.cases).padStart(5), String(e.match).padStart(5)]));
+  const note = RECORDED_CLASSES.has(cls) ? " (recorded — benchmark class, not a deterministic assertion)" : "";
+  console.log(line([pad(cls, 26), String(e.cases).padStart(5), `${e.match}${note}`]));
 }
 
 console.log("\n=== B. Action correctness (deterministic action vs expected_action) ===");

@@ -61,11 +61,12 @@ Tencent Hy3 (OrcaRouter) ran as read-only systems engineer in a herdr pane (`hy3
 - Deliver the corpus design for architectural review before any model integration.
 
 ### Step 3: Deterministic Coverage Measured (2026-08-07)
-- Offline harness `experiments/tool-decision/run.mjs` ran all 26 corpus cases through production `produceToolPath()` (no network/M365/LM). Full per-case data: `experiments/tool-decision/results.json`.
-- **Classification coverage (table A): 26/26** — deterministic detection identifies every input category.
-- **Action correctness (table B): 18 pass, 1 fail, 7 uncertain.** The one failure: `mixed_tool_and_prose-002` — a compact 2-fence README answer does not trigger `isProseDocument` (needs >=4 fences, markdown headers, or >=300 chars prose) and gets executed as shell. Desired action is text. Genuine deterministic gap.
-- **All 7 ambiguous cases receive a concrete deterministic action (never "uncertain")**: 4 execute tools (incl. a write to `/etc/hosts` and a multi-match SEARCH/REPLACE), 1 forced retry, 2 text. Whether those are correct is the open question for the local-reasoner investigation.
-- Corpus held at 26 cases (not expanded) until the evaluation machinery is validated.
+- Offline harness `experiments/tool-decision/run.mjs` ran all corpus cases through production `produceToolPath()` (no network/M365/LM). Full per-case data: `experiments/tool-decision/results.json`.
+- **Classification coverage (table A): 26/26** on the deterministic classes — detection identifies every input category.
+- **Disposition: the "ambiguous-only" hypothesis is retired.** The 7 original ambiguous cases were reclassified by `decision_owner` (deterministic_recovery / local_reasoner / tool_executor / policy / validation / scheduling / output_policy). Only ambiguous-002 + mixed-002 remained local-model candidates → the `execution_intent` class.
+- **execution_intent corpus expanded to 28 cases** (10 adversarial categories: README snippets, explicit runs, explanatory code, "run this", "you can run this", install instructions, destructive warnings, log/doc quotes, action preambles, post-fence prose).
+- **execution_intent measurement: 15/28 deterministic pass.** The 13 failures are all text-shaped cases (quotes, docs, warnings, advice) whose fences get executed as shell — including the two destructive-command warnings. Deterministic code cannot distinguish "show this command" from "run this command". This is the measured gap the local reasoner would fill.
+- Corpus stands at 52 cases; next: offline LFM/Bonsai evaluation on execution_intent only, "uncertain" allowed.
 
 ### Push
 - Session commits pushed to `origin/main` during wrapup (2026-08-07). Push-status is derivable from `git status -sb`; do not re-record here.
