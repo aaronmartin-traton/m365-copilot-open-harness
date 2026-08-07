@@ -27,6 +27,7 @@ import { buildUsage, type UsageInput } from "./usage-builder.js";
 import { jsonResponse, sseResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse } from "./response-helpers.js";
 import { localMetaResponse, readOnlyFallbackToolCall, makeDirectToolCall, renderLocalCompletion } from "./local-response-helpers.js";
 import { outputFinishReason, OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
+import { CONFAB_FORCE_PROMPT, HALLUCINATION_FORCE_PROMPT, REMOTE_ARTIFACT_FORCE_PROMPT, getForcePrompt } from "./force-prompts.js";
 import type { z } from "zod/v4";
 
 const log = createLogger("handler");
