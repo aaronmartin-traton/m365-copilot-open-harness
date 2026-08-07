@@ -46,6 +46,21 @@ These modules are now separate from `handler.ts`.
 - It fetches images from M365.
 - It returns Markdown text.
 
+**tool-path.ts** - Tool result production
+- `produceToolPath()` makes the final tool result.
+- It parses tool calls from the buffered response.
+- It retries on confabulation, hallucinations, and remote artifacts.
+- It applies the prose-document guard.
+- It handles reply tool calls and one-call-per-turn.
+- The handler injects `runTurn`, `markSent`, and `registerToolCalls`.
+
+**response-renderer.ts** - Response rendering
+- `renderResponse()` makes the final Response.
+- It renders JSON for non-streaming requests.
+- It renders an early-flushed SSE stream for `stream: true`.
+- It emits keepalives, live deltas, tool calls, and usage.
+- The handler injects `produce()` so the renderer is testable without M365.
+
 ### Core Package Modules
 
 **tools.ts** - Tool handling
@@ -60,12 +75,14 @@ These modules are now separate from `handler.ts`.
 
 ## Main Handler
 
-**handler.ts** (~540 lines) - Request handler
+**handler.ts** (~340 lines) - Request handler
 - `handleChatCompletion()` is the main function.
 - It gets sessions.
 - It formats messages.
 - It calls the M365 API.
 - It handles streaming.
+- It is orchestration only: request setup, message compilation, the buffered retry loop, and response rendering.
+- Architect verdict (2026-08-07): cohesive at 340 lines; no further extractions.
 
 ## Module Dependencies
 
@@ -79,6 +96,8 @@ handler.ts
   ├── output-ceiling.ts
   ├── force-prompts.ts
   ├── image-renderer.ts
+  ├── tool-path.ts
+  ├── response-renderer.ts
   └── packages/core
 ```
 
