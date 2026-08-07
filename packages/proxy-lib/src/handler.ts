@@ -27,47 +27,12 @@ import { buildUsage, type UsageInput } from "./usage-builder.js";
 import { jsonResponse, sseResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse } from "./response-helpers.js";
 import { localMetaResponse, readOnlyFallbackToolCall, makeDirectToolCall, renderLocalCompletion } from "./local-response-helpers.js";
 import { outputFinishReason, OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
+import { renderImagesMarkdown } from "./image-renderer.js";
 import { CONFAB_FORCE_PROMPT, HALLUCINATION_FORCE_PROMPT, REMOTE_ARTIFACT_FORCE_PROMPT, getForcePrompt } from "./force-prompts.js";
 import type { z } from "zod/v4";
-
-const log = createLogger("handler");
-async function renderImagesMarkdown(images: CapturedImage[]): Promise<string> {
-  let artifactToken: string | null = null;
-  try { artifactToken = await getImageArtifactToken(); } catch (error: unknown) {
-    log.info(`image token failed: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  const parts: string[] = [];
-  for (const image of images) {
-    const url = image.referenceUrls[0];
-    if (!url) continue;
-    if (artifactToken) {
-      try {
-        const fetched = await fetchImageBytes(url, artifactToken);
-        parts.push(`![generated image](data:${fetched.contentType};base64,${fetched.data.toString("base64")})`);
-        continue;
-      } catch (error: unknown) {
-        log.info(`image fetch failed: ${error instanceof Error ? error.message : String(error)}`);
-      }
-    }
-    parts.push(`![generated image](${url})`);
-  }
   return parts.join("\n\n");
 }
 
-// Forcing follow-up sent (in the same conversation) when M365 confabulates an
-// inability to act instead of calling a tool. See the confab-retry loop below.
-const CONFAB_FORCE_PROMPT =
-  "The working directory and the files named in the task ARE present on a real filesystem right now. Do NOT ask me to paste anything, and do NOT say commands return no output — you have not run any command yet. Emit ONE ```bash block this turn: run `ls -la` and `cat` the relevant files. Output only the ```bash block, nothing else.";
-
-// Forcing follow-up when the model CLAIMS it did a file change but ran no tool.
-const HALLUCINATION_FORCE_PROMPT =
-  "You have NOT actually done that — no tool ran this turn, so nothing changed on disk. Do not claim a file was created, replaced, or updated until a <tool_response> confirms it. Emit ONE ```bash block now that performs the change for real (write the file with a `cat > path <<'EOF' … EOF` heredoc), and nothing else.";
-
-// A Teams artifact belongs to M365's remote runtime and cannot be applied by a
-// local agent using only its basename. Force the intended mutation through the
-// harness tools instead of letting the remote patch leak into the conversation.
-const REMOTE_ARTIFACT_FORCE_PROMPT =
-  "The patch or download link you produced exists only in M365's remote environment and is NOT a file in the caller's working directory. Do NOT create, download, or apply a patch, and do NOT use a Teams artifact link. Use the provided local edit/write tool directly; if needed, emit ONE ```bash block that modifies the named local file in place. Output only that single local tool call, nothing else.";
 
 
 
