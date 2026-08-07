@@ -26,6 +26,7 @@ import { contextCompiler, LOCAL_TOOL_REMINDER } from "./context-compiler.js";
 import { buildUsage, type UsageInput } from "./usage-builder.js";
 import { jsonResponse, sseResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse } from "./response-helpers.js";
 import { localMetaResponse, readOnlyFallbackToolCall, makeDirectToolCall, renderLocalCompletion } from "./local-response-helpers.js";
+import { outputFinishReason, OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
 import type { z } from "zod/v4";
 
 const log = createLogger("handler");
@@ -67,24 +68,6 @@ const HALLUCINATION_FORCE_PROMPT =
 const REMOTE_ARTIFACT_FORCE_PROMPT =
   "The patch or download link you produced exists only in M365's remote environment and is NOT a file in the caller's working directory. Do NOT create, download, or apply a patch, and do NOT use a Teams artifact link. Use the provided local edit/write tool directly; if needed, emit ONE ```bash block that modifies the named local file in place. Output only that single local tool call, nothing else.";
 
-// M365 soft-caps output around ~3k tokens (~12k chars) and — critically —
-// CONCLUDES EARLY rather than truncating mid-stream, so a too-long answer comes
-// back clean-looking but incomplete with no error to detect (docs/hypotheses.md
-// F9). We can't see token counts, so we heuristically flag responses at/over the
-// observed ceiling with finish_reason:"length" — the standard signal a harness
-// uses to ask for a continuation. Tune/disable via env (0 disables).
-const OUTPUT_CHAR_CEILING = process.env.M365_OUTPUT_CHAR_CEILING !== undefined
-  ? Number(process.env.M365_OUTPUT_CHAR_CEILING)
-  : 12_000;
-
-/** "length" when the answer is at/over the empirical output ceiling, else "stop". */
-function outputFinishReason(text: string): "stop" | "length" {
-  if (OUTPUT_CHAR_CEILING > 0 && text.length >= OUTPUT_CHAR_CEILING) {
-    log.info(`Output at ceiling (${text.length} ≥ ${OUTPUT_CHAR_CEILING} chars) — finish_reason=length (likely truncated; harness should continue)`);
-    return "length";
-  }
-  return "stop";
-}
 
 
 // --- Main handler ---
