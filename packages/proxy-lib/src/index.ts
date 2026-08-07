@@ -22,6 +22,20 @@ export {
 export { ChatCompletionRequest, ChatMessage, ToolCall, ToolDefinition } from "./schemas.js";
 export { ResponsesRequest, handleResponse } from "./responses.js";
 export { RequestScheduler, SchedulerBusyError, type SchedulerStats } from "./scheduler.js";
+export {
+  contextCompiler,
+  type ContextCompiler,
+  type FullContextInput,
+  type DeltaContextInput,
+export { buildUsage, type UsageInput } from "./usage-builder.js";
+export {
+  jsonResponse,
+  sseResponse,
+  rateLimitMessage,
+  rateLimitResponse,
+  schedulerBusyResponse,
+  emptyResponseResponse,
+} from "./response-helpers.js";
 export { parseImageDataUrl, type ParsedImageInput } from "./images.js";
 export {
   SessionStateStore,

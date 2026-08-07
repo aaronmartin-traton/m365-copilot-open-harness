@@ -5,7 +5,6 @@ import {
   createLogger,
   trunc,
   getToneForModel,
-  formatMessages,
   parseToolCalls,
   looksLikeConfabulation,
   looksLikeHallucinatedCompletion,
@@ -22,6 +21,9 @@ import {
 import { ChatCompletionRequest } from "./schemas.js";
 import { RequestScheduler, SchedulerBusyError, type ScheduleOptions, type SchedulerStats } from "./scheduler.js";
 import { SessionStateStore } from "./session-store.js";
+import { contextCompiler, LOCAL_TOOL_REMINDER } from "./context-compiler.js";
+import { buildUsage, type UsageInput } from "./usage-builder.js";
+import { jsonResponse, sseResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse } from "./response-helpers.js";
 import type { z } from "zod/v4";
 
 const log = createLogger("handler");
@@ -342,37 +344,6 @@ export class SessionPool {
 }
 
 
-// --- Delta message formatting ---
-
-const DELTA_TOOL_RESULT_MAX_CHARS = Number(process.env.M365_TOOL_RESULT_MAX_CHARS ?? 12_000);
-const LOCAL_TOOL_REMINDER = "<local_tool_context>LOCAL harness; use relative paths in the caller working directory. Never use /mnt/data or /workspace. Preserve errors and run one focused step.</local_tool_context>";
-
-function boundedDeltaResult(text: string): string {
-  if (!Number.isFinite(DELTA_TOOL_RESULT_MAX_CHARS) || DELTA_TOOL_RESULT_MAX_CHARS <= 0 || text.length <= DELTA_TOOL_RESULT_MAX_CHARS) return text;
-  const marker = `\n...[tool output truncated: ${text.length - DELTA_TOOL_RESULT_MAX_CHARS} chars omitted]...\n`;
-  const available = Math.max(0, DELTA_TOOL_RESULT_MAX_CHARS - marker.length);
-  const head = Math.ceil(available * 0.7);
-  return text.slice(0, head) + marker + text.slice(text.length - (available - head));
-}
-
-function formatDeltaMessages(messages: ParsedMessage[], taskAnchor: string, hasTools: boolean): string {
-  const parts: string[] = hasTools
-    ? [LOCAL_TOOL_REMINDER, `<task_anchor>${taskAnchor.slice(0, 3_000)}</task_anchor>`]
-    : [];
-  for (const m of messages) {
-    if (m.role === "assistant") {
-      continue;
-    } else if (m.role === "tool") {
-      const name = m.name || "unknown";
-      const callId = m.tool_call_id || "?";
-      parts.push(`<tool_response name="${name}" call_id="${callId}">\n${boundedDeltaResult(getMessageContent(m))}\n</tool_response>`);
-    } else if (m.role !== "system") {
-      parts.push(`<${m.role}>\n${getMessageContent(m)}\n</${m.role}>`);
-    }
-  }
-  return parts.join("\n\n");
-}
-
 // --- Main handler ---
 
 /**
@@ -428,14 +399,19 @@ export async function handleChatCompletion(
   const convId = session.conversationId;
   let text: string;
   if (isFirstTurn || conv.sentMessageCount === 0) {
-    text = formatMessages(body.messages, body.tools, body.tool_choice, convId);
+    text = contextCompiler.compileFull({
+      messages: body.messages,
+      tools: body.tools,
+      toolChoice: body.tool_choice,
+      conversationId: convId,
+    });
     log.info(`Chat completion: model=${model}, routed=${routedModel}, tone=${tone}, stream=${body.stream}, messages=${body.messages.length}, turn=${session.turnCount}, mode=full, cid=${convId}`);
   } else {
     const firstUser = body.messages.find((message) => message.role === "user");
     const taskAnchor = firstUser ? getMessageContent(firstUser) : "";
     const newMessages = body.messages.slice(conv.sentMessageCount);
     const delta = newMessages.length > 0
-      ? formatDeltaMessages(newMessages, taskAnchor, !!hasTools)
+      ? contextCompiler.compileDelta({ messages: newMessages, taskAnchor, hasTools: !!hasTools })
       : "";
     if (delta.length > 0) {
       text = delta;
@@ -546,7 +522,13 @@ export async function handleChatCompletion(
         if (hasTools && !disengageRetried && !process.env.M365_NO_DISENGAGE_RETRY) {
           disengageRetried = true;
           session.newConversation();
-          text = formatMessages(body.messages, body.tools, body.tool_choice, session.conversationId, "softened");
+          text = contextCompiler.compileFull({
+            messages: body.messages,
+            tools: body.tools,
+            toolChoice: body.tool_choice,
+            conversationId: session.conversationId,
+            framingVariant: "softened",
+          });
           log.info("Upstream Disengaged — retrying once with 'softened' framing in a fresh conversation (F22)");
           attempt--; // free retry; bounded — disengageRetried flips once
           continue;
@@ -766,16 +748,16 @@ export async function handleChatCompletion(
 
   // --- Render: JSON (non-stream) or an early-flushed SSE stream (stream) ---
   const includeUsage = !!body.stream_options?.include_usage;
-  const usage = () => buildUsage(
-    lastThrottle,
-    lastContentOrigin,
-    lastMessageType,
-    lastScores,
-    lastTurnCount,
-    model,
-    routedModel,
-    tone,
-  );
+  const usage = () => buildUsage({
+    throttle: lastThrottle,
+    contentOrigin: lastContentOrigin,
+    messageType: lastMessageType,
+    scores: lastScores,
+    turnCount: lastTurnCount,
+    requestedModel: model,
+    routedModel: routedModel,
+    tone: tone,
+  });
 
   if (!body.stream) {
     const p = await produce();
@@ -858,58 +840,6 @@ export async function handleChatCompletion(
   }
 }
 
-/**
- * Build the OpenAI-style `usage` block from whatever diagnostic info M365 gave
- * us. Token counts are NOT exposed by M365's WebSocket API (we'd need to count
- * locally with a tokenizer that matches the underlying model — see the doc on
- * token-usage hypotheses). What M365 does send is a **conversation quota**:
- * how many user messages out of the 600-per-conversation cap have been spent.
- *
- * That's a different axis from token-window utilisation, but it's the closest
- * thing we have to "remaining budget", so we surface it as extension fields
- * (`x_m365_*`) alongside the zeroed standard counters. Real OpenAI clients
- * ignore unknown extension fields; curious users can read them.
- */
-function buildUsage(
-  throttle: { current: number; max: number } | null,
-  contentOrigin?: string | null,
-  messageType?: string | null,
-  scores?: Record<string, number> | null,
-  turnCount?: number | null,
-  requestedModel?: string,
-  routedModel?: string,
-  tone?: string,
-): Record<string, unknown> {
-  const base: Record<string, unknown> = {
-    prompt_tokens: 0,
-    completion_tokens: 0,
-    total_tokens: 0,
-  };
-  if (requestedModel) base.x_m365_requested_model = requestedModel;
-  if (routedModel) base.x_m365_routed_model = routedModel;
-  if (tone) base.x_m365_tone = tone;
-  if (throttle) {
-    base.x_m365_conversation_messages = throttle.current;
-    base.x_m365_conversation_max = throttle.max;
-    base.x_m365_conversation_pct = Math.min(100, Math.round((throttle.current / throttle.max) * 100));
-    base.x_m365_conversation_remaining = Math.max(0, throttle.max - throttle.current);
-  }
-  if (contentOrigin) base.x_m365_content_origin = contentOrigin;
-  if (messageType) base.x_m365_message_type = messageType;
-  if (typeof turnCount === "number") base.x_m365_turn_count = turnCount;
-  // Disengaged-classifier scores. Empirically: clean tool calls sit at
-  // ~1e-13 / ~1e-8, jailbreak-shaped prompts climb to ~1e-3 / ~1e-3. The
-  // `dea_violation` component is the one that actually correlates with the
-  // Disengaged filter firing — surface that explicitly so clients can monitor
-  // their proximity to the threshold.
-  if (scores) {
-
-    base.x_m365_classifier_scores = scores;
-    if (typeof scores.dea_violation === "number") base.x_m365_dea_score = scores.dea_violation;
-    if (typeof scores.BotOffense === "number") base.x_m365_offense_score = scores.BotOffense;
-  }
-  return base;
-}
 
 function localMetaResponse(body: ChatBody): string | null {
   const metadataType = body.metadata && typeof body.metadata.request_type === "string"
@@ -1006,59 +936,6 @@ function renderLocalCompletion(body: ChatBody, text: string): Response {
   }));
 }
 
-// --- Helpers ---
-
-function jsonResponse(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-function sseResponse(stream: ReadableStream): Response {
-  return new Response(stream, {
-    headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" },
-  });
-}
-
-function rateLimitMessage(throttle: { current: number; max: number } | null): string {
-  return throttle
-    ? `M365 Copilot rate limited (${throttle.current}/${throttle.max} messages used). Please wait and try again.`
-    : "M365 Copilot returned an empty response. You may be rate limited. Please wait and try again.";
-}
-
-function rateLimitResponse(throttle: { current: number; max: number } | null): Response {
-  return jsonResponse(429, { error: { message: rateLimitMessage(throttle), type: "rate_limit_error" } });
-}
-
-function schedulerBusyResponse(error: SchedulerBusyError): Response {
-  return new Response(JSON.stringify({
-    error: {
-      message: error.message,
-      type: "rate_limit_error",
-      code: "m365_queue_full",
-    },
-  }), {
-    status: 429,
-    headers: {
-      "Content-Type": "application/json",
-      "Retry-After": String(error.retryAfterSeconds),
-    },
-  });
-}
-
-/** Empty upstream reply that is NOT an at-limit throttle — a distinct failure
- *  (content filter, invalid agent/session, transient error) we surface clearly
- *  instead of hanging on a long retry loop. */
-function emptyResponseResponse(throttle: { current: number; max: number } | null): Response {
-  const detail = throttle ? ` (throttle ${throttle.current}/${throttle.max})` : "";
-  return jsonResponse(502, {
-    error: {
-      message: `M365 Copilot returned an empty response${detail} — likely a content filter, an invalid agent/session, or a transient upstream error.`,
-      type: "upstream_empty_response",
-    },
-  });
-}
 
 // (streaming is emitted inline by the early-flushed SSE renderer in
 // handleChatCompletion; the old streamText/streamToolCalls helpers were removed.)
