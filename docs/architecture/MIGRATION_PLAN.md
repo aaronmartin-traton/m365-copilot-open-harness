@@ -1,0 +1,1 @@
+Completed: analyses. Current: Context Compiler extraction. Next: incremental handler.ts extraction.
