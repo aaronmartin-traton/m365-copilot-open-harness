@@ -1,0 +1,22 @@
+{
+  "step": "8H",
+  "rule": "eliminate deterministic CLEAR_EXECUTE; ONLY the verifier may authorize execution",
+  "gate": {
+    "CLEAR_TEXT": "TEXT, only when ALL hold: no parsed tool call; no read-only fallback; no confabulation/hallucinated-completion/remote-artifact retry condition; no command/tool-shaped fence or syntax; no mixed tool-shaped content; no prose document with executable-looking fences",
+    "default": "VERIFY"
+  },
+  "arbitration": {
+    "verifier EXECUTE": "EXECUTE",
+    "verifier TEXT/UNCERTAIN/invalid/error": "TEXT"
+  },
+  "no_deterministic_execute": true,
+  "verifier": {
+    "model": "bonsai-27b-q1",
+    "prompt": "prompts/p4-minimal.txt (byte-for-byte frozen)",
+    "framing": "Assistant response:\\n<planner_output> (C0)",
+    "temperature": 0,
+    "seed": 42,
+    "max_tokens": 2048,
+    "invalid_or_error_becomes": "TEXT"
+  }
+}
