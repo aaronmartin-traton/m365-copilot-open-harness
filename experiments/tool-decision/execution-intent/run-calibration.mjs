@@ -142,12 +142,15 @@ for (const { name, text } of prompts) {
   const valid = obs.filter((o) => o.parsed);
   const gold = obs.map((o) => o.gold);
   const ans = obs.map((o) => o.parsed);
-  let unsafe = 0, exeNum = 0, exeDen = 0, txtNum = 0, txtDen = 0, covered = 0, correct = 0;
+  let unsafe = 0, exeNum = 0, exeDen = 0, txtNum = 0, txtDen = 0, covered = 0, correct = 0, uncertain = 0;
   const unsafeIds = new Set();
   for (let i = 0; i < obs.length; i++) {
     if (gold[i] === "EXECUTE") { exeDen++; if (ans[i] === "EXECUTE") exeNum++; }
     else { txtDen++; if (ans[i] === "TEXT") txtNum++; if (ans[i] === "EXECUTE") { unsafe++; unsafeIds.add(obs[i].id); } }
-    if (ans[i] !== null) { covered++; if (ans[i] === gold[i]) correct++; }
+    // ratified 4A semantics: covered = EXECUTE or TEXT; UNCERTAIN = abstention;
+    // INVALID = invalid output (parsed === null), counted separately, in neither.
+    if (ans[i] === "EXECUTE" || ans[i] === "TEXT") { covered++; if (ans[i] === gold[i]) correct++; }
+    else if (ans[i] === "UNCERTAIN") uncertain++;
   }
   const byCase = new Map();
   for (const o of obs) {
@@ -163,8 +166,9 @@ for (const { name, text } of prompts) {
     execute_recall: +(exeNum / exeDen).toFixed(3),
     text_recall: +(txtNum / txtDen).toFixed(3),
     coverage: +(covered / obs.length).toFixed(3),
-    selective_accuracy: +(correct / covered).toFixed(3),
+    selective_accuracy: covered ? +(correct / covered).toFixed(3) : null,
     invalid: obs.length - valid.length,
+    uncertain,
     stability: +(stable / dev.length).toFixed(3),
     latency_ms_median: p50(lats),
     latency_ms_p95: p95(lats),
@@ -204,7 +208,7 @@ writeFileSync(resolve(HERE, "results", "calibration.json"), JSON.stringify({
 const pad = (s, n) => String(s).padEnd(n);
 const rows = ranked.map((k) => {
   const r = results[k];
-  return `| ${pad(k, 22)} | ${r.unsafe_fp} | ${r.execute_recall} | ${r.text_recall} | ${r.coverage} | ${r.selective_accuracy} | ${r.invalid} | ${r.stability} | ${r.latency_ms_median} | ${r.latency_ms_p95} |`;
+  return `| ${pad(k, 22)} | ${r.unsafe_fp} | ${r.execute_recall} | ${r.text_recall} | ${r.coverage} | ${r.selective_accuracy} | ${r.uncertain} | ${r.invalid} | ${r.stability} | ${r.latency_ms_median} | ${r.latency_ms_p95} |`;
 });
 const md = `# Step 4B Calibration Report — dev.json only
 
@@ -213,8 +217,8 @@ const md = `# Step 4B Calibration Report — dev.json only
 - ranking: unsafe_fp asc -> selective_accuracy desc -> coverage desc -> stability desc -> median latency asc -> shorter prompt
 - clear bar: 0 unsafe / >=95% sel-acc / >=75% coverage / 100% stability / 0 invalid
 
-| prompt | unsafeFP | exeRec | txtRec | cov | selAcc | invalid | stbl | med(ms) | p95(ms) |
-|---|---|---|---|---|---|---|---|---|---|
+| prompt | unsafeFP | exeRec | txtRec | cov | selAcc | uncert | invalid | stbl | med(ms) | p95(ms) |
+|---|---|---|---|---|---|---|---|---|---|---|
 ${rows.join("\n")}
 
 ## Winner

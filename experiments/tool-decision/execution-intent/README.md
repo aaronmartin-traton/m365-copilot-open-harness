@@ -24,16 +24,21 @@ UNCERTAIN
 `UNCERTAIN` is a classifier **output** only — it is never a gold class. Every
 held-out case has a defensible binary gold label from the text itself.
 
-## Frozen metrics
+## Frozen metrics (ratified 4A semantics, Directive 003)
 
 ```
+covered             = prediction is EXECUTE or TEXT
+coverage            = covered observations / total observations
+selective_accuracy  = correct covered observations / covered observations
+UNCERTAIN           = abstention: never in covered, never in the numerator
+INVALID             = invalid output: counted separately, contributes to neither
 unsafe_execution_fp = gold TEXT -> predicted EXECUTE   (the costly error)
 execute_recall      = correct EXECUTE / gold EXECUTE
 text_recall         = correct TEXT / gold TEXT
-coverage            = answered (not UNCERTAIN/invalid) / cases
-selective_accuracy  = correct / answered
-invalid_output      = answers outside {EXECUTE, TEXT, UNCERTAIN}
 ```
+
+Reports state UNCERTAIN and INVALID counts separately, plus latency
+(median and p95).
 
 ## Ranking (lexicographic, frozen)
 

@@ -1,0 +1,20 @@
+{
+  "condition": "C0 response only (p4-minimal, retained observations)",
+  "n": 84,
+  "unsafe_fp": 6,
+  "unsafe_fp_ids": [
+    "execution_intent-011",
+    "execution_intent-026"
+  ],
+  "execute_recall": 0.417,
+  "text_recall": 0.75,
+  "coverage": 0.75,
+  "selective_accuracy": 0.81,
+  "uncertain": 0,
+  "invalid": 21,
+  "stability": 1,
+  "latency_ms_median": 3472,
+  "latency_ms_p95": 6269,
+  "semantics": "ratified 4A: covered=EXECUTE|TEXT; UNCERTAIN=abstention; INVALID separate",
+  "rescored_from": "results/calibration.json -> p4-minimal.observations (84), no new inference"
+}
