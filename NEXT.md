@@ -41,15 +41,24 @@ Tencent Hy3 (OrcaRouter) ran as read-only systems engineer in a herdr pane (`hy3
 
 ## Next Actions
 
-### No Further Extractions
-- Architect verdict (2026-08-07): handler.ts is cohesive orchestration at 342 lines.
+### Characterization Phase Complete (2026-08-07)
+- `tool-path.ts`: 17 characterization tests — normal path (7) + recovery loop (10: confabulation, hallucinated completion, remote artifact, precedence, fail-closed 502s). See `tool-path.test.ts`.
+- `response-renderer.ts`: 14 characterization tests — non-stream JSON (3) + streaming SSE (10) + fully-buffered finalization (1). See `response-renderer.test.ts`.
+- `context-compiler.ts`: 3 characterization tests (pre-existing).
+- **Current baseline: 205 pass / 3 live-gated skipped. proxy-lib TypeScript clean.**
+- No live M365 verification for these slices (not performed — M365 backend unavailable 2026-08-07 night).
+
+### Extraction Phase Closed
+- Architect verdict (2026-08-07): handler.ts is cohesive orchestration at 342 lines. No further extractions unless a future concrete requirement exposes a new boundary.
 - Remaining blocks (request setup ~40 lines, message compilation ~30 lines, runBuffered ~155 lines) are too small or too core to extract.
 - runBuffered stays by design: the retry loop IS the orchestration.
 
-### Test Coverage
-- Add unit tests for `tool-path.ts` (feed scripted buffered turns, assert parse/retry/fallback/doc-guard/reply/one-call-per-turn outcomes). Highest-value gap.
-- Add unit tests for `response-renderer.ts` (feed a fake produce(), assert chunk sequence for JSON/SSE/error/tools paths).
-- Only `context-compiler.test.ts` covers an extracted module directly.
+### Next Phase: Local Tactical Reasoner Investigation
+- Do NOT integrate LM Studio yet, and do not introduce a local reasoner at runtime.
+- Create the offline decision corpus: `experiments/tool-decision/README.md` + `cases.jsonl` (schema + taxonomy + seeded cases derived from the characterized behaviors).
+- Measure deterministic coverage of the corpus through today's tool-path logic BEFORE involving any model.
+- Only after the corpus exists and is reviewed: test LFM/Bonsai offline on the narrow `ambiguous` category only, with "uncertain" as a valid answer.
+- Deliver the corpus design for architectural review before any model integration.
 
 ### Push
 - Session commits pushed to `origin/main` during wrapup (2026-08-07). Push-status is derivable from `git status -sb`; do not re-record here.

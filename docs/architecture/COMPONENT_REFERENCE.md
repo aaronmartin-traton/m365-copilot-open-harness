@@ -75,14 +75,14 @@ These modules are now separate from `handler.ts`.
 
 ## Main Handler
 
-**handler.ts** (~340 lines) - Request handler
+**handler.ts** - Request handler
 - `handleChatCompletion()` is the main function.
 - It gets sessions.
 - It formats messages.
 - It calls the M365 API.
 - It handles streaming.
 - It is orchestration only: request setup, message compilation, the buffered retry loop, and response rendering.
-- Architect verdict (2026-08-07): cohesive at 340 lines; no further extractions.
+- Architect verdict (2026-08-07): cohesive orchestration; extraction phase closed. Characterization coverage: tool-path.ts (17 tests) and response-renderer.ts (14 tests). Mutable counts live in `NEXT.md`.
 
 ## Module Dependencies
 

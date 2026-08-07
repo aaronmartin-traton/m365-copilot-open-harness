@@ -1,47 +1,16 @@
 # Continuation Prompt
 
-Continue development of the extracted m365-copilot-proxy architecture.
+Current project state and next actions live in **`NEXT.md`** — read that file first.
 
-## Current State (as of 2026-08-07)
+## Current State (as of 2026-08-07 night)
 
-**Extractions completed** (6 modules extracted from handler.ts):
-1. Context Compiler - message formatting
-2. Usage Builder - telemetry formatting
-3. Response Helpers - response construction
-4. Local Response Helpers - local response handling
-5. SessionPool - session lifecycle
-6. Output Ceiling - truncation detection
+- Characterization phase complete: tool-path.ts (17 tests), response-renderer.ts (14 tests), context-compiler.ts (3 tests).
+- Baseline: 205 tests pass / 3 live-gated skipped; proxy-lib TypeScript clean.
+- Handler extraction is CLOSED (cohesive orchestration at 342 lines).
+- Next phase: local tactical reasoner investigation via an offline tool-decision corpus (`experiments/tool-decision/`). No LM Studio, no runtime local model yet.
 
-**Handler.ts reduced**: ~1065 → 572 lines (493+ lines extracted)
+## Working Rules
 
-**Repository**: https://github.com/asmartin-ai/m365-copilot-proxy
-
-## Guiding Principles
-
-- Preserve existing behavior
-- Extract architecture from existing code (not imagination)
-- Earn every abstraction
-- One small extraction per commit
-- Tests must continue to pass
-
-## Next Steps
-
-Continue responsibility-by-responsibility extraction from handler.ts:
-- Identify cohesive responsibilities in the remaining ~570 lines
-- Extract with tests
-- Commit separately
-- Update architecture docs to be descriptive (not prescriptive)
-
-## Architecture Docs
-
-Located in `docs/architecture/`. Update these as extractions progress:
-- `COMPONENT_REFERENCE.md` - describe what actually exists
-- `REQUEST_LIFECYCLE.md` - document actual request flow
-- `TARGET_ARCHITECTURE.md` - evolve based on extractions
-
-## For Every Proposed Change
-
-Answer:
-- What responsibility is moving?
-- What problem does it solve?
-- Does behavior remain identical?
+- Preserve existing behavior; earn every abstraction; extract from existing code.
+- Prefer deterministic software; characterize before changing.
+- Mutable status belongs in `NEXT.md`, not architecture docs.
