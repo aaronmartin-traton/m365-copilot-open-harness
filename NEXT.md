@@ -60,6 +60,13 @@ Tencent Hy3 (OrcaRouter) ran as read-only systems engineer in a herdr pane (`hy3
 - Only after the corpus exists and is reviewed: test LFM/Bonsai offline on the narrow `ambiguous` category only, with "uncertain" as a valid answer.
 - Deliver the corpus design for architectural review before any model integration.
 
+### Step 3: Deterministic Coverage Measured (2026-08-07)
+- Offline harness `experiments/tool-decision/run.mjs` ran all 26 corpus cases through production `produceToolPath()` (no network/M365/LM). Full per-case data: `experiments/tool-decision/results.json`.
+- **Classification coverage (table A): 26/26** — deterministic detection identifies every input category.
+- **Action correctness (table B): 18 pass, 1 fail, 7 uncertain.** The one failure: `mixed_tool_and_prose-002` — a compact 2-fence README answer does not trigger `isProseDocument` (needs >=4 fences, markdown headers, or >=300 chars prose) and gets executed as shell. Desired action is text. Genuine deterministic gap.
+- **All 7 ambiguous cases receive a concrete deterministic action (never "uncertain")**: 4 execute tools (incl. a write to `/etc/hosts` and a multi-match SEARCH/REPLACE), 1 forced retry, 2 text. Whether those are correct is the open question for the local-reasoner investigation.
+- Corpus held at 26 cases (not expanded) until the evaluation machinery is validated.
+
 ### Push
 - Session commits pushed to `origin/main` during wrapup (2026-08-07). Push-status is derivable from `git status -sb`; do not re-record here.
 

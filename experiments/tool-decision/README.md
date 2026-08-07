@@ -46,6 +46,7 @@ One JSON object per line in `cases.jsonl`:
   "available_tools": ["read_file", "write_file", "edit_file", "bash", "glob", "reply"],
   "recovery_state": { "attempts": 0, "ever_acted": false, "multi_tool_allowed": false },
   "expected": "confabulation",
+  "expected_action": "retry_planner",
   "note": "Derived from tool-path.test.ts CONFAB_TEXT fixture."
 }
 ```
@@ -57,10 +58,30 @@ One JSON object per line in `cases.jsonl`:
 - `recovery_state` — `attempts` (forced retries already done), `ever_acted`
   (whether a real tool call ran this conversation), `multi_tool_allowed`
   (M365_ALLOW_MULTI_TOOL).
-- `expected` — one taxonomy class; for `ambiguous` cases the note explains the
-  tension.
+- `expected` — the classification: what came OUT of M365. One taxonomy class.
+- `expected_action` — what the system should DO about it. Deliberately small
+  vocabulary:
+  - `tool` — execute the tool call(s)
+  - `text` — return as plain text
+  - `reply_as_text` — convert the reply call to text
+  - `retry_planner` — force a re-prompt of the planner
+  - `fail_closed` — refuse with a 502
+  - `uncertain` — no gold answer; the case is genuinely ambiguous
 - `note` — provenance: which test fixture, hypothesis entry, or observed
   failure mode seeded the case.
+
+The two fields answer different questions. `expected` records the input shape;
+`expected_action` records the desired behavior. The mixed cases demonstrate
+why: both are `mixed_tool_and_prose`, but one resolves to a tool and the other
+to text. Ambiguous cases use `expected_action: "uncertain"` — do not force a
+gold answer where none is known.
+
+### recovery_state.attempts note
+`produceToolPath()` does not accept an arbitrary "retries already consumed"
+value as an input. The corpus adapts to production, never the reverse. The Step
+3 harness interprets `attempts` via the existing configuration surface
+(M365_CONFAB_RETRIES) and scripted `runTurn` responses; if that mapping does
+not hold, the field is simplified or removed.
 
 ## Methodology
 
@@ -75,20 +96,29 @@ review before any model work.
 
 ### Step 3 — Measure deterministic coverage
 Before involving a model, run the corpus through today's `produceToolPath()`
-logic and produce a coverage table:
+logic. Measure TWO things:
 
-| classification | cases | deterministic success |
+**A. Classification coverage** — can deterministic logic identify the input
+category?
+
+**B. Action correctness** — does the deterministic path take the desired
+action? This is the table that tells us whether a local model has a job:
+
+| classification | cases | correct action |
 |---|---|---|
-| valid_tool | 30 | 30 |
-| confabulation | 20 | 20 |
-| hallucination | 20 | 19 |
-| remote artifact | 15 | 15 |
-| mixed output | 20 | 18 |
-| ambiguous | 25 | — |
+| valid_tool | 3 | 3 |
+| plain_text | 2 | 2 |
+| reply | 2 | 2 |
+| confabulation | 4 | 4 |
+| hallucinated_completion | 3 | 3 |
+| remote_artifact | 3 | 3 |
+| mixed_tool_and_prose | 2 | 2 |
+| ambiguous | 7 | ? |
 
-The rows that are not fully deterministic define the remaining problem. If
-deterministic handling already solves most of the corpus, there is no local
-model to add yet.
+Ambiguous cases are not counted as deterministic failures merely because their
+`expected_action` is `uncertain`; the report separately identifies cases where
+deterministic behavior takes a concrete action on an uncertain case. The rows
+that are not fully correct define the remaining problem.
 
 ### Step 4 — Test local models offline (only after the corpus exists)
 Give LFM/Bonsai a deliberately tiny contract:

@@ -1,0 +1,262 @@
+[
+  {
+    "id": "valid_tool-001",
+    "expected": "valid_tool",
+    "expected_action": "tool",
+    "observed_class": "valid_tool",
+    "observed_action": "tool",
+    "observed_terminal": "tools(bash)",
+    "run_turns": 1,
+    "status": "pass"
+  },
+  {
+    "id": "valid_tool-002",
+    "expected": "valid_tool",
+    "expected_action": "tool",
+    "observed_class": "valid_tool",
+    "observed_action": "tool",
+    "observed_terminal": "tools(write_file)",
+    "run_turns": 1,
+    "status": "pass"
+  },
+  {
+    "id": "valid_tool-003",
+    "expected": "valid_tool",
+    "expected_action": "tool",
+    "observed_class": "valid_tool",
+    "observed_action": "tool",
+    "observed_terminal": "tools(edit_file)",
+    "run_turns": 1,
+    "status": "pass"
+  },
+  {
+    "id": "plain_text-001",
+    "expected": "plain_text",
+    "expected_action": "text",
+    "observed_class": "plain_text",
+    "observed_action": "text",
+    "observed_terminal": "text",
+    "run_turns": 1,
+    "status": "pass"
+  },
+  {
+    "id": "plain_text-002",
+    "expected": "plain_text",
+    "expected_action": "text",
+    "observed_class": "plain_text",
+    "observed_action": "text",
+    "observed_terminal": "text",
+    "run_turns": 1,
+    "status": "pass"
+  },
+  {
+    "id": "reply-001",
+    "expected": "reply",
+    "expected_action": "reply_as_text",
+    "observed_class": "reply",
+    "observed_action": "text",
+    "observed_terminal": "text",
+    "run_turns": 1,
+    "status": "pass"
+  },
+  {
+    "id": "reply-002",
+    "expected": "reply",
+    "expected_action": "reply_as_text",
+    "observed_class": "reply",
+    "observed_action": "text",
+    "observed_terminal": "text",
+    "run_turns": 1,
+    "status": "pass"
+  },
+  {
+    "id": "confabulation-001",
+    "expected": "confabulation",
+    "expected_action": "retry_planner",
+    "observed_class": "confabulation",
+    "observed_action": "retry_planner",
+    "observed_terminal": "text",
+    "run_turns": 2,
+    "status": "pass"
+  },
+  {
+    "id": "confabulation-002",
+    "expected": "confabulation",
+    "expected_action": "retry_planner",
+    "observed_class": "confabulation",
+    "observed_action": "retry_planner",
+    "observed_terminal": "text",
+    "run_turns": 2,
+    "status": "pass"
+  },
+  {
+    "id": "confabulation-003",
+    "expected": "confabulation",
+    "expected_action": "retry_planner",
+    "observed_class": "confabulation",
+    "observed_action": "retry_planner",
+    "observed_terminal": "text",
+    "run_turns": 2,
+    "status": "pass"
+  },
+  {
+    "id": "confabulation-004",
+    "expected": "confabulation",
+    "expected_action": "retry_planner",
+    "observed_class": "confabulation",
+    "observed_action": "retry_planner",
+    "observed_terminal": "text",
+    "run_turns": 3,
+    "status": "pass"
+  },
+  {
+    "id": "hallucinated_completion-001",
+    "expected": "hallucinated_completion",
+    "expected_action": "retry_planner",
+    "observed_class": "hallucinated_completion",
+    "observed_action": "retry_planner",
+    "observed_terminal": "fail_closed(502:file_mutation_without_local_tool)",
+    "run_turns": 2,
+    "status": "pass"
+  },
+  {
+    "id": "hallucinated_completion-002",
+    "expected": "hallucinated_completion",
+    "expected_action": "retry_planner",
+    "observed_class": "hallucinated_completion",
+    "observed_action": "retry_planner",
+    "observed_terminal": "fail_closed(502:file_mutation_without_local_tool)",
+    "run_turns": 2,
+    "status": "pass"
+  },
+  {
+    "id": "hallucinated_completion-003",
+    "expected": "hallucinated_completion",
+    "expected_action": "retry_planner",
+    "observed_class": "hallucinated_completion",
+    "observed_action": "retry_planner",
+    "observed_terminal": "fail_closed(502:file_mutation_without_local_tool)",
+    "run_turns": 2,
+    "status": "pass"
+  },
+  {
+    "id": "remote_artifact-001",
+    "expected": "remote_artifact",
+    "expected_action": "retry_planner",
+    "observed_class": "remote_artifact",
+    "observed_action": "retry_planner",
+    "observed_terminal": "fail_closed(502:file_mutation_without_local_tool)",
+    "run_turns": 2,
+    "status": "pass"
+  },
+  {
+    "id": "remote_artifact-002",
+    "expected": "remote_artifact",
+    "expected_action": "retry_planner",
+    "observed_class": "remote_artifact",
+    "observed_action": "retry_planner",
+    "observed_terminal": "fail_closed(502:file_mutation_without_local_tool)",
+    "run_turns": 2,
+    "status": "pass"
+  },
+  {
+    "id": "remote_artifact-003",
+    "expected": "remote_artifact",
+    "expected_action": "retry_planner",
+    "observed_class": "remote_artifact",
+    "observed_action": "retry_planner",
+    "observed_terminal": "fail_closed(502:file_mutation_without_local_tool)",
+    "run_turns": 2,
+    "status": "pass"
+  },
+  {
+    "id": "mixed_tool_and_prose-001",
+    "expected": "mixed_tool_and_prose",
+    "expected_action": "tool",
+    "observed_class": "mixed_tool_and_prose",
+    "observed_action": "tool",
+    "observed_terminal": "tools(bash)",
+    "run_turns": 1,
+    "status": "pass"
+  },
+  {
+    "id": "mixed_tool_and_prose-002",
+    "expected": "mixed_tool_and_prose",
+    "expected_action": "text",
+    "observed_class": "mixed_tool_and_prose",
+    "observed_action": "tool",
+    "observed_terminal": "tools(bash)",
+    "run_turns": 1,
+    "status": "fail"
+  },
+  {
+    "id": "ambiguous-001",
+    "expected": "ambiguous",
+    "expected_action": "uncertain",
+    "observed_class": "confabulation",
+    "observed_action": "retry_planner",
+    "observed_terminal": "text",
+    "run_turns": 2,
+    "status": "uncertain"
+  },
+  {
+    "id": "ambiguous-002",
+    "expected": "ambiguous",
+    "expected_action": "uncertain",
+    "observed_class": "plain_text",
+    "observed_action": "text",
+    "observed_terminal": "text",
+    "run_turns": 1,
+    "status": "uncertain"
+  },
+  {
+    "id": "ambiguous-003",
+    "expected": "ambiguous",
+    "expected_action": "uncertain",
+    "observed_class": "valid_tool",
+    "observed_action": "tool",
+    "observed_terminal": "tools(edit_file)",
+    "run_turns": 1,
+    "status": "uncertain"
+  },
+  {
+    "id": "ambiguous-004",
+    "expected": "ambiguous",
+    "expected_action": "uncertain",
+    "observed_class": "valid_tool",
+    "observed_action": "tool",
+    "observed_terminal": "tools(write_file)",
+    "run_turns": 1,
+    "status": "uncertain"
+  },
+  {
+    "id": "ambiguous-005",
+    "expected": "ambiguous",
+    "expected_action": "uncertain",
+    "observed_class": "valid_tool",
+    "observed_action": "tool",
+    "observed_terminal": "tools(bash)",
+    "run_turns": 1,
+    "status": "uncertain"
+  },
+  {
+    "id": "ambiguous-006",
+    "expected": "ambiguous",
+    "expected_action": "uncertain",
+    "observed_class": "valid_tool",
+    "observed_action": "tool",
+    "observed_terminal": "tools(bash,edit_file)",
+    "run_turns": 1,
+    "status": "uncertain"
+  },
+  {
+    "id": "ambiguous-007",
+    "expected": "ambiguous",
+    "expected_action": "uncertain",
+    "observed_class": "reply",
+    "observed_action": "text",
+    "observed_terminal": "text",
+    "run_turns": 1,
+    "status": "uncertain"
+  }
+]
