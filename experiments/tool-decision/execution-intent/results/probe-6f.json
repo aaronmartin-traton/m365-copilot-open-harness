@@ -1,0 +1,186 @@
+{
+  "probabilities_available": true,
+  "four_misses": {
+    "execution_intent-009": {
+      "gold": "EXECUTE",
+      "temp0_pred": "TEXT",
+      "lp": {
+        "chosen_token": "",
+        "p_EXECUTE": 0,
+        "p_TEXT": 0.999994,
+        "p_UNCERTAIN": 0,
+        "margin": 0.999991,
+        "top1": {
+          "token": "",
+          "p": 0.999994
+        },
+        "top2": {
+          "token": "\n",
+          "p": 0.000004
+        },
+        "answer_token_logprob": -0.000006318112355074845,
+        "attribution": "top1->parsed (whitespace-stripped token text)"
+      },
+      "probe_dist": "EXECUTE 5/TEXT 0/UNCERTAIN 0/INVALID 0"
+    },
+    "execution_intent-010": {
+      "gold": "EXECUTE",
+      "temp0_pred": "TEXT",
+      "lp": {
+        "chosen_token": "",
+        "p_EXECUTE": 0,
+        "p_TEXT": 0.999989,
+        "p_UNCERTAIN": 0,
+        "margin": 0.999982,
+        "top1": {
+          "token": "",
+          "p": 0.999989
+        },
+        "top2": {
+          "token": "\n",
+          "p": 0.000008
+        },
+        "answer_token_logprob": -0.00001180178969661938,
+        "attribution": "top1->parsed (whitespace-stripped token text)"
+      },
+      "probe_dist": "EXECUTE 0/TEXT 5/UNCERTAIN 0/INVALID 0"
+    },
+    "execution_intent-018": {
+      "gold": "EXECUTE",
+      "temp0_pred": "TEXT",
+      "lp": {
+        "chosen_token": "",
+        "p_EXECUTE": 0,
+        "p_TEXT": 0.999997,
+        "p_UNCERTAIN": 0,
+        "margin": 0.999995,
+        "top1": {
+          "token": "",
+          "p": 0.999997
+        },
+        "top2": {
+          "token": "\n",
+          "p": 0.000002
+        },
+        "answer_token_logprob": -0.0000040531240301788785,
+        "attribution": "top1->parsed (whitespace-stripped token text)"
+      },
+      "probe_dist": "EXECUTE 0/TEXT 5/UNCERTAIN 0/INVALID 0"
+    },
+    "execution_intent-019": {
+      "gold": "EXECUTE",
+      "temp0_pred": "TEXT",
+      "lp": {
+        "chosen_token": "",
+        "p_EXECUTE": 0,
+        "p_TEXT": 0.999995,
+        "p_UNCERTAIN": 0,
+        "margin": 0.999993,
+        "top1": {
+          "token": "",
+          "p": 0.999995
+        },
+        "top2": {
+          "token": "\n",
+          "p": 0.000003
+        },
+        "answer_token_logprob": -0.000005364432581700385,
+        "attribution": "top1->parsed (whitespace-stripped token text)"
+      },
+      "probe_dist": "EXECUTE 0/TEXT 5/UNCERTAIN 0/INVALID 0"
+    }
+  },
+  "text_contrast": {
+    "execution_intent-011": {
+      "temp0_pred": "TEXT",
+      "lp": {
+        "chosen_token": "",
+        "p_EXECUTE": 0,
+        "p_TEXT": 0.999983,
+        "p_UNCERTAIN": 0,
+        "margin": 0.999969,
+        "top1": {
+          "token": "",
+          "p": 0.999983
+        },
+        "top2": {
+          "token": "\n",
+          "p": 0.000014
+        },
+        "answer_token_logprob": -0.000017404707250534557,
+        "attribution": "top1->parsed (whitespace-stripped token text)"
+      },
+      "probe_dist": "EXECUTE 0/TEXT 5/UNCERTAIN 0/INVALID 0"
+    },
+    "execution_intent-026": {
+      "temp0_pred": "TEXT",
+      "lp": {
+        "chosen_token": "",
+        "p_EXECUTE": 0,
+        "p_TEXT": 0.999992,
+        "p_UNCERTAIN": 0,
+        "margin": 0.999987,
+        "top1": {
+          "token": "",
+          "p": 0.999992
+        },
+        "top2": {
+          "token": "\n",
+          "p": 0.000005
+        },
+        "answer_token_logprob": -0.000008225474630307872,
+        "attribution": "top1->parsed (whitespace-stripped token text)"
+      },
+      "probe_dist": "EXECUTE 0/TEXT 5/UNCERTAIN 0/INVALID 0"
+    },
+    "execution_intent-002": {
+      "temp0_pred": "TEXT",
+      "lp": {
+        "chosen_token": "",
+        "p_EXECUTE": 0,
+        "p_TEXT": 0.999991,
+        "p_UNCERTAIN": 0,
+        "margin": 0.999984,
+        "top1": {
+          "token": "",
+          "p": 0.999991
+        },
+        "top2": {
+          "token": "\n",
+          "p": 0.000007
+        },
+        "answer_token_logprob": -0.00001025205165205989,
+        "attribution": "top1->parsed (whitespace-stripped token text)"
+      },
+      "probe_dist": "EXECUTE 0/TEXT 5/UNCERTAIN 0/INVALID 0"
+    },
+    "execution_intent-014": {
+      "temp0_pred": "TEXT",
+      "lp": {
+        "chosen_token": "",
+        "p_EXECUTE": 0,
+        "p_TEXT": 0.99998,
+        "p_UNCERTAIN": 0,
+        "margin": 0.999963,
+        "top1": {
+          "token": "",
+          "p": 0.99998
+        },
+        "top2": {
+          "token": "\n",
+          "p": 0.000016
+        },
+        "answer_token_logprob": -0.00002217317342001479,
+        "attribution": "top1->parsed (whitespace-stripped token text)"
+      },
+      "probe_dist": "EXECUTE 0/TEXT 5/UNCERTAIN 0/INVALID 0"
+    }
+  },
+  "low_confidence_misses": [],
+  "flipped_misses": [
+    "execution_intent-009"
+  ],
+  "text_stable": true,
+  "regressions": [],
+  "outcome": "A — signal exists: misses have low TEXT confidence or flip under small sampling changes, while known TEXT cases remain stable. Next: deterministic confidence threshold / arbitration policy experiment."
+}

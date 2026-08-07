@@ -40,6 +40,10 @@ if (!["c0", "c1", "c2"].includes(CONDITION)) {
 }
 const TAG = arg("--tag", "");                     // output tag, e.g. --tag bonsai -> results/calibration-bonsai.json
 const MERGE_5E = process.argv.includes("--merge-5e");
+const LOGPROBS = process.argv.includes("--logprobs"); // capture answer-token top-K distribution
+const TEMP = Number(arg("--temp", "0"));
+const CASES_ARG = arg("--cases", "");                 // csv of case ids; default = all dev
+const MERGE_6F = process.argv.includes("--merge-6f");
 
 // ---- contamination guards --------------------------------------------------
 for (const a of process.argv.slice(2)) {
@@ -63,11 +67,18 @@ for (const p of selectedPrompts) {
 }
 const prompts = selectedPrompts
   .map((name) => ({ name, text: readFileSync(resolve(HERE, "prompts", `${name}.txt`), "utf-8").trim() }));
-const dev = JSON.parse(readFileSync(resolve(HERE, "dev.json"), "utf-8"));
-if (dev.length !== 28) {
-  console.error(`run-calibration: dev.json has ${dev.length} cases, expected 28. Refusing to run.`);
+const devAll = JSON.parse(readFileSync(resolve(HERE, "dev.json"), "utf-8"));
+if (devAll.length !== 28) {
+  console.error(`run-calibration: dev.json has ${devAll.length} cases, expected 28. Refusing to run.`);
   process.exit(1);
 }
+const dev = CASES_ARG
+  ? CASES_ARG.split(",").map((s) => s.trim()).filter(Boolean).map((id) => {
+      const c = devAll.find((x) => x.id === id);
+      if (!c) { console.error(`run-calibration: unknown case "${id}"`); process.exit(1); }
+      return c;
+    })
+  : devAll;
 
 // ---- input framing per condition (Directive 004, verbatim) -----------------
 function buildUser(c) {
@@ -229,6 +240,105 @@ Bonsai clears: **${clears ? "YES" : "NO"}**
   process.exit(0);
 }
 
+// ---- 6F confidence/probe report (NO inference) -----------------------------
+if (MERGE_6F) {
+  const load6 = (f) => JSON.parse(readFileSync(resolve(HERE, "results", f), "utf8"));
+  const lp = load6("calibration-bonsai-lp.json").results["p4-minimal"];
+  const probeMisses = load6("calibration-probe-misses.json").results["p4-minimal"];
+  const probeText = load6("calibration-probe-text.json").results["p4-minimal"];
+  const MISSES = ["execution_intent-009", "execution_intent-010", "execution_intent-018", "execution_intent-019"];
+  const repsOf = (obs, id) => obs.filter((o) => o.id === id).map((o) => o.parsed ?? "INVALID");
+  const lpOf = (id) => lp.observations.find((o) => o.id === id)?.lp ?? null;
+  const temp0Pred = (id) => repsOf(lp.observations, id)[0];
+  const probeDist = (obs, id) => {
+    const rs = repsOf(obs, id);
+    const cnt = (t) => rs.filter((x) => x === t).length;
+    return `EXECUTE ${cnt("EXECUTE")}/TEXT ${cnt("TEXT")}/UNCERTAIN ${cnt("UNCERTAIN")}/INVALID ${cnt("INVALID")}`;
+  };
+  // TEXT-contrast cases = those actually run in probe-text (recorded there)
+  const textIds = [...new Set(probeText.observations.map((o) => o.id))];
+  // regressions: any gold-TEXT -> EXECUTE anywhere in the probe runs
+  const regressions = [
+    ...probeText.observations.filter((o) => o.gold === "TEXT" && o.parsed === "EXECUTE").map((o) => o.id),
+    ...probeMisses.observations.filter((o) => o.gold === "TEXT" && o.parsed === "EXECUTE").map((o) => o.id),
+  ];
+  const uniqueReg = [...new Set(regressions)].sort();
+  const lowConf = MISSES.filter((id) => {
+    const l = lpOf(id);
+    return l && (l.p_TEXT < 0.95 || l.margin < 0.5);
+  });
+  const flipped = MISSES.filter((id) => {
+    const d = probeDist(probeMisses.observations, id);
+    return !d.includes("TEXT 5"); // majority (5/5) is not TEXT
+  });
+  const textStable = textIds.every((id) => {
+    const d = probeDist(probeText.observations, id);
+    return d.includes("TEXT 5") || d.includes("TEXT 4");
+  });
+  const outcome = uniqueReg.length
+    ? "C — TEXT->EXECUTE regression appeared under the probe. Stop. Do NOT tune thresholds; the safety boundary is too fragile."
+    : (flipped.length || lowConf.length)
+      ? "A — signal exists: misses have low TEXT confidence or flip under small sampling changes, while known TEXT cases remain stable. Next: deterministic confidence threshold / arbitration policy experiment."
+      : "B — Bonsai is consistently conservative: misses are high-confidence TEXT and sampling does not move them. Contract is under-specified; next: minimal prompt change focused ONLY on positive EXECUTE evidence.";
+  const pad6 = (s, n) => String(s).padEnd(n);
+  const missRows = MISSES.map((id) => {
+    const l = lpOf(id);
+    return `| ${pad6(id, 22)} | EXECUTE | ${pad6(temp0Pred(id), 9)} | ${l ? l.p_TEXT : "n/a"} | ${l ? l.margin : "n/a"} | ${probeDist(probeMisses.observations, id)} |`;
+  }).join("\n");
+  const textRows = textIds.map((id) => {
+    const l = lpOf(id);
+    return `| ${pad6(id, 22)} | TEXT | ${pad6(temp0Pred(id), 9)} | ${l ? l.p_TEXT : "n/a"} | ${l ? l.margin : "n/a"} | ${probeDist(probeText.observations, id)} |`;
+  }).join("\n");
+  const md = `# Step 6F Conservative-Threshold Probe — Bonsai 27B 1-bit, frozen C0/P4
+
+- probabilities: **available** (llama.cpp logprobs, top-8) — captured in calibration-bonsai-lp.json (84 obs, same frozen config)
+- probe: temp 0.2, seed 42, 5 reps — misses (4 cases) in calibration-probe-misses.json; known-TEXT contrast in calibration-probe-text.json
+
+## Four Bonsai misses
+
+| case | gold | temp0 pred | P(TEXT) | margin | temp0.2 distribution (5 reps) |
+|---|---|---|---|---|---|
+${missRows}
+
+## Known-TEXT contrast (probe, temp 0.2, 5 reps)
+
+| case | gold | temp0 pred | P(TEXT) | margin | temp0.2 distribution (5 reps) |
+|---|---|---|---|---|---|
+${textRows}
+
+## Signals
+
+- low TEXT confidence (< 0.95) on misses: ${lowConf.length ? lowConf.join(", ") : "none"}
+- misses flipping away from TEXT at temp 0.2 (majority): ${flipped.length ? flipped.join(", ") : "none"}
+- known-TEXT cases stable at temp 0.2 (TEXT majority): **${textStable ? "YES" : "NO"}**
+- any TEXT->EXECUTE regression: ${uniqueReg.length ? uniqueReg.join(", ") : "none"}
+
+## Decision gate (frozen)
+
+**${outcome}**
+`;
+  writeFileSync(resolve(HERE, "results", "probe-6f.md"), md);
+  writeFileSync(resolve(HERE, "results", "probe-6f.json"), JSON.stringify({
+    probabilities_available: true,
+    four_misses: Object.fromEntries(MISSES.map((id) => [id, { gold: "EXECUTE", temp0_pred: temp0Pred(id), lp: lpOf(id), probe_dist: probeDist(probeMisses.observations, id) }])),
+    text_contrast: Object.fromEntries(textIds.map((id) => [id, { temp0_pred: temp0Pred(id), lp: lpOf(id), probe_dist: probeDist(probeText.observations, id) }])),
+    low_confidence_misses: lowConf,
+    flipped_misses: flipped,
+    text_stable: textStable,
+    regressions: uniqueReg,
+    outcome,
+  }, null, 2) + "\n");
+  console.log(`\n=== 6F PROBE REPORT ===`);
+  for (const id of MISSES) {
+    const l = lpOf(id);
+    console.log(`${pad6(id, 22)} temp0=${temp0Pred(id)} P(TEXT)=${l ? l.p_TEXT : "n/a"} margin=${l ? l.margin : "n/a"} probe=[${probeDist(probeMisses.observations, id)}]`);
+  }
+  console.log(`low-conf misses: ${lowConf.length ? lowConf.join(", ") : "none"} | flipped: ${flipped.length ? flipped.join(", ") : "none"} | TEXT regressions: ${uniqueReg.length ? uniqueReg.join(", ") : "none"} | TEXT stable: ${textStable}`);
+  console.log(`outcome: ${outcome}`);
+  console.log(`report: results/probe-6f.md (+ .json)`);
+  process.exit(0);
+}
+
 const parseAnswer = (raw) => {
   const s = (raw ?? "").trim().toUpperCase();
   if (VOCAB.includes(s)) return s;
@@ -243,10 +353,11 @@ async function callOnce(promptText, userText, attempt = 0) {
       { role: "system", content: promptText },
       { role: "user", content: userText },
     ],
-    temperature: 0,
+    temperature: TEMP,
     seed: SEED,
     max_tokens: MAX_TOKENS,
   };
+  if (LOGPROBS) { body.logprobs = true; body.top_logprobs = 8; }
   try {
     const resp = await fetch(ENDPOINT, {
       method: "POST",
@@ -265,10 +376,42 @@ async function callOnce(promptText, userText, attempt = 0) {
     const msg = j.choices?.[0]?.message ?? {};
     const content = msg.content ?? "";
     const reasoning = msg.reasoning_content ?? "";
+    // ---- token-probability capture (Directive 006) --------------------------
+    let lp = null;
+    const lpRaw = j.choices?.[0]?.logprobs?.content ?? null;
+    if (LOGPROBS && lpRaw && lpRaw.length) {
+      const last = lpRaw[lpRaw.length - 1];
+      const probs = (last.top_logprobs ?? []).map((t) => ({ token: t.token, logprob: t.logprob, p: Math.exp(t.logprob) }));
+      const Z = probs.reduce((a, t) => a + t.p, 0) || 1;
+      const norm = probs.map((t) => ({ ...t, p: t.p / Z })).sort((a, b) => b.p - a.p);
+      const parsed = parseAnswer(content);
+      const top1 = norm[0] ?? { p: 0 };
+      const top2 = norm[1] ?? { p: 0 };
+      const probOf = (tok) => {
+        const m = norm.find((t) => t.token.trim().toUpperCase() === tok);
+        if (m) return +m.p.toFixed(6);
+        // llama.cpp renders the answer token with stripped whitespace ("" for
+        // " TEXT"); if the parsed answer is a contract token and the top-1
+        // token carries near-all the mass, attribute top1 to it.
+        if (tok === parsed && top1.p >= 0.5) return +top1.p.toFixed(6);
+        return 0; // not in top-K
+      };
+      lp = {
+        chosen_token: last.token,
+        p_EXECUTE: probOf("EXECUTE"),
+        p_TEXT: probOf("TEXT"),
+        p_UNCERTAIN: probOf("UNCERTAIN"),
+        margin: +(top1.p - top2.p).toFixed(6),
+        top1: { token: top1.token, p: +top1.p.toFixed(6) },
+        top2: { token: top2.token, p: +top2.p.toFixed(6) },
+        answer_token_logprob: answerTok ? answerTok.logprob : null,
+      };
+    }
     return {
       content,
       reasoning_chars: reasoning.length,
       parsed: parseAnswer(content),
+      lp,
       ms: Date.now() - t0,
     };
   } catch (err) {
