@@ -42,6 +42,10 @@ scripts/da-app/pkg/
 scripts/da-app/sentinel-agent.zip
 scripts/harness/out/
 
+# session exports + stray local artifacts (conversation content — keep local)
+omp-session-*.html
+runtime-test-output.txt
+
 # command-code agent local state + unattended-run artifacts
 .commandcode/
 .autonomous/
