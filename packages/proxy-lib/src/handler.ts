@@ -1,11 +1,7 @@
-import { createHash } from "node:crypto";
 import {
-  ModelSession,
-  type ModelSessionOptions,
   createLogger,
   trunc,
   getToneForModel,
-  parseToolCalls,
   getMessageContent,
   getMessageImages,
   noteRequestOutcome,
@@ -19,12 +15,13 @@ import { RequestScheduler, SchedulerBusyError, type ScheduleOptions, type Schedu
 import { SessionStateStore } from "./session-store.js";
 import { SessionPool, type ConversationState, type ConversationPruneSelector, type RemoteConversationPruner, type SessionPoolOptions } from "./session-pool.js";
 import { contextCompiler, LOCAL_TOOL_REMINDER } from "./context-compiler.js";
-import { buildUsage, type UsageInput } from "./usage-builder.js";
-import { jsonResponse, sseResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse } from "./response-helpers.js";
+import { buildUsage } from "./usage-builder.js";
+import { jsonResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse } from "./response-helpers.js";
 import { localMetaResponse, renderLocalCompletion } from "./local-response-helpers.js";
-import { outputFinishReason, OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
+import { OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
 import { renderImagesMarkdown } from "./image-renderer.js";
 import { produceToolPath } from "./tool-path.js";
+import { renderResponse, type Produced } from "./response-renderer.js";
 import type { z } from "zod/v4";
 
 const log = createLogger("handler");
@@ -288,13 +285,6 @@ export async function handleChatCompletion(
   // Produce the final turn result as DATA (not a Response), so the same logic
   // renders as either JSON (non-stream) or an early-flushed SSE stream (stream).
   // For streaming we return the SSE stream FIRST and run produce() INSIDE it, so the
-  // client gets HTTP 200 + a role chunk + heartbeats immediately instead of waiting
-  // out the whole (up to ~160s) M365 turn and risking a read-timeout.
-  type Produced =
-    | { kind: "error"; resp: Response }
-    | { kind: "text"; text: string }
-    | { kind: "tools"; toolCalls: ReturnType<typeof parseToolCalls>["toolCalls"] };
-
   // `onDelta` streams text to the client live (non-tool path only — see produce's
   // caller). Tool mode ignores it: the raw text is parsed for tool-call fences and
   // can't be shown verbatim, so it stays fully buffered.
@@ -336,88 +326,17 @@ export async function handleChatCompletion(
     tone: tone,
   });
 
-  if (!body.stream) {
-    const p = await produce();
-    if (p.kind === "error") return p.resp;
-    if (p.kind === "tools") {
-      return jsonResponse(200, {
-        id: completionId, object: "chat.completion", created, model,
-        choices: [{ index: 0, message: { role: "assistant", content: null, tool_calls: p.toolCalls }, finish_reason: "tool_calls" }],
-        usage: usage(),
-      });
-    }
-    return jsonResponse(200, {
-      id: completionId, object: "chat.completion", created, model,
-      choices: [{ index: 0, message: { role: "assistant", content: p.text }, finish_reason: outputFinishReason(p.text) }],
-      usage: usage(),
-    });
-  }
-
-  // Streaming: send HTTP 200 + a role chunk + keepalive comments from t=0, then run
-  // produce() INSIDE the stream so the client never waits out the whole M365 turn
-  // (up to ~160s) before the first byte — avoids client read-timeouts.
-  //
-  // On the non-tool path we forward each text delta AS IT ARRIVES (`liveDelta`), so
-  // `stream:true` is genuinely incremental. Tool mode still buffers: the raw text is
-  // parsed for tool-call fences and can't be shown verbatim, so its tool_calls (or a
-  // prose fallback) are emitted once at the end.
-  return sseResponse(new ReadableStream({
-    async start(controller) {
-      const enc = new TextEncoder();
-      const send = (obj: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
-      const base = { id: completionId, object: "chat.completion.chunk", created, model };
-      send({ ...base, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
-      const hb = setInterval(() => { try { controller.enqueue(enc.encode(": keepalive\n\n")); } catch {} }, 15000);
-
-      // Live token passthrough (non-tool only). Track exactly what we've sent so the
-      // final render emits only the not-yet-streamed remainder. session.ts guarantees
-      // every forwarded delta extends the answer, so `sent` is always a prefix of the
-      // final text — the remainder is a clean tail, never a duplicate.
-      let sent = "";
-      const liveDelta = hasTools ? undefined : (delta: string) => {
-        if (!delta) return;
-        sent += delta;
-        try { send({ ...base, choices: [{ index: 0, delta: { content: delta }, finish_reason: null }] }); } catch {}
-      };
-
-      let p: Produced;
-      try { p = await produce(liveDelta); }
-      catch (err: any) { p = { kind: "error", resp: jsonResponse(502, { error: { message: err?.message ?? "stream error", type: "upstream_error" } }) }; }
-      clearInterval(hb);
-      try {
-        if (p.kind === "error") {
-          let message = "upstream error";
-          try { message = (JSON.parse(await p.resp.text())?.error?.message) || message; } catch {}
-          // HTTP 200 is already committed, so surface the failure as an in-stream error chunk.
-          send({ ...base, error: { message, type: "upstream_error" } });
-        } else if (p.kind === "tools") {
-          p.toolCalls.forEach((tc, i) =>
-            send({ ...base, choices: [{ index: 0, delta: { tool_calls: [{ index: i, id: tc.id, type: "function", function: { name: tc.function.name, arguments: tc.function.arguments } }] }, finish_reason: null }] }));
-          send({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], ...(includeUsage ? { usage: usage() } : {}) });
-        } else {
-          // Emit only what wasn't already streamed live: the whole text if nothing was
-          // (tool-mode prose fallback, or a fully-buffered turn), or just the tail when
-          // live deltas already covered a prefix. If `sent` somehow isn't a prefix of
-          // the final text (a divergent snapshot upstream chose not to stream), fall
-          // back to sending nothing more rather than duplicating already-sent bytes.
-          const remainder = p.text.startsWith(sent) ? p.text.slice(sent.length) : "";
-          if (!p.text.startsWith(sent)) log.info(`Streamed prefix diverged from final text (sent ${sent.length}, final ${p.text.length} chars) — not re-sending to avoid duplication`);
-          if (remainder) send({ ...base, choices: [{ index: 0, delta: { content: remainder }, finish_reason: null }] });
-          send({ ...base, choices: [{ index: 0, delta: {}, finish_reason: outputFinishReason(p.text) }], ...(includeUsage ? { usage: usage() } : {}) });
-        }
-      } catch {
-        // client likely disconnected mid-emit — nothing more to do
-      } finally {
-        try { controller.enqueue(enc.encode("data: [DONE]\n\n")); controller.close(); } catch {}
-      }
-    },
-  }));
+  return renderResponse({
+    stream: !!body.stream,
+    produce,
+    hasTools: !!hasTools,
+    usage,
+    includeUsage,
+    completionId,
+    created,
+    model,
+  });
   } finally {
     release();
   }
 }
-
-
-
-// (streaming is emitted inline by the early-flushed SSE renderer in
-// handleChatCompletion; the old streamText/streamToolCalls helpers were removed.)
