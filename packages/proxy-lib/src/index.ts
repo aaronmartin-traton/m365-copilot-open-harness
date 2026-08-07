@@ -15,10 +15,11 @@ import {
 export {
   SessionPool,
   handleChatCompletion,
+  type ConversationState,
   type ConversationPruneSelector,
   type RemoteConversationPruner,
   type SessionPoolOptions,
-} from "./handler.js";
+} from "./session-pool.js";
 export { ChatCompletionRequest, ChatMessage, ToolCall, ToolDefinition } from "./schemas.js";
 export { ResponsesRequest, handleResponse } from "./responses.js";
 export { RequestScheduler, SchedulerBusyError, type SchedulerStats } from "./scheduler.js";
