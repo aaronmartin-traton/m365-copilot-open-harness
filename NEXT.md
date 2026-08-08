@@ -53,14 +53,23 @@ unresolved by design). No held-out inference has been authorized.
 
 ## Next actions (need a decision — user or architect)
 
-1. **Production integration of the 8H verifier** — separately approved
-   (per 10A decision rule). Plan exists (`integration-plan-10a.md`);
-   implementation is a real production change (proxy wiring, caching,
-   single-flight, timeout, observability) and MUST be scoped as its own
-   reviewed step. Latency engineering vs non-LLM verifier is the open
-   alternative.
-2. **Held-out evaluation** — remains unauthorized. Only after the
-   architecture/verifier question settles.
+The queued work now lives as tickets in `.scratch/` (see
+`docs/agents/issue-tracker.md` for the format). The `execution-intent-verifier`
+feature tracks the 8H production path:
+
+- `.scratch/execution-intent-verifier/issues/01-live-validation.md` —
+  **live validation on the local machine** (real M365, EXECUTE flows, cache hits,
+  no throttle interaction).
+- `.scratch/execution-intent-verifier/issues/02-default-on.md` —
+  flip the gate default ON (blocked by 01 + separate approval).
+- `.scratch/execution-intent-verifier/issues/03-held-out-eval.md` —
+  held-out evaluation, remains unauthorized (blocked by 02).
+- `.scratch/execution-intent-verifier/issues/04-latency-engineering.md` —
+  the latency direction (caching, pipelining, faster verifier).
+
+Live probe backlog: `.scratch/m365-live-probes/` and capability probes:
+`.scratch/capability-expansion/` (all need a rested M365 on the local machine).
+
 3. **Architect channel**: ChatGPT architect hit rate limits and was parked;
    Command Code (herdr pane `w12:pE`, gpt-5.6-luna, session
    0c9d16a0-8cf4-4162-8784-3d54a5563e78) served as architect for the 5E–10A

@@ -31,6 +31,16 @@ promote it out of the notebook into the right reference doc so it isn't lost:
   what backfires) → [`docs/prompt-engineering.md`](docs/prompt-engineering.md).
 Leave a one-line pointer + evidence reference behind in the notebook.
 
+**Domain vocabulary:** [`CONTEXT.md`](CONTEXT.md) defines the terms this repo
+uses (`thread`, `tone`, `Disengaged`, `verifier`, `EXECUTE`, …) and the
+decisions that are locked. Use its vocabulary in tickets, hypotheses, and
+docs — don't drift to synonyms.
+
+**Queued work lives in tickets, not prose:** `.scratch/<feature>/issues/`
+holds the issue tracker (one file per ticket, `Status:`/`Blocked by:` lines).
+Start new work by claiming the earliest unblocked ticket — see
+`docs/agents/issue-tracker.md` for the format and wayfinding rules.
+
 ## Operating principles (read first)
 
 Hard-won defaults for working on this proxy. Internalize these before touching anything.
