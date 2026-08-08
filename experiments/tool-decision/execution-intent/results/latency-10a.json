@@ -1,0 +1,314 @@
+{
+  "phases": {
+    "cold": {
+      "cases": [
+        {
+          "id": "ambiguous-002",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 30324,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-001",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 31327,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-002",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 20042,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-003",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 23446,
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-004",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 22308,
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-005",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 30966,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-006",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 18709,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-007",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 23143,
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-008",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 24300,
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-009",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 31970,
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-010",
+          "gold": "EXECUTE",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 25333,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-011",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 42080,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-012",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 23081,
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-013",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 23507,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-014",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 12839,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-015",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 20997,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-016",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 18548,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-017",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 32907,
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-018",
+          "gold": "EXECUTE",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 78046,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-019",
+          "gold": "EXECUTE",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 31665,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-020",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 23277,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-021",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 20119,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-022",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 24641,
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-023",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 19563,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-024",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 34333,
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-025",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 38902,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-026",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 34241,
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "mixed_tool_and_prose-002",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 24798,
+          "raw": "TEXT",
+          "error": null
+        }
+      ],
+      "n": 28,
+      "median_ms": 24641,
+      "p95_ms": 42080,
+      "min_ms": 12839,
+      "max_ms": 78046,
+      "unsafe_fp": 0,
+      "parity_with_8h": true
+    },
+    "cacheHit": {
+      "case": "ambiguous-002",
+      "decision": "TEXT",
+      "cache": "hit",
+      "ms": 0,
+      "byte_identical": true
+    },
+    "singleFlight": {
+      "case": "execution_intent-001",
+      "cache": [
+        "miss",
+        "shared"
+      ],
+      "ms_total": 29017,
+      "identical": true,
+      "verifier_calls_expected_1": true
+    },
+    "timeoutFailClosed": {
+      "timeout": {
+        "error": "timeout (1ms)",
+        "decision": "TEXT",
+        "fail_closed_text": true
+      },
+      "dead_endpoint": {
+        "error": "Error: Unable to connect. Is the computer able to access the url?",
+        "fail_closed_text": true
+      },
+      "uncert_arbitration": "TEXT",
+      "invalid_arbitration": "TEXT",
+      "never_execute": true
+    },
+    "cacheInvalidation": {
+      "policy_v1": "hit",
+      "policy_v2": "miss",
+      "miss_on_change": true,
+      "decision_parity": true
+    }
+  },
+  "summary": {
+    "verifier_calls_made": 32,
+    "decisions_parity_8h": true,
+    "unsafe_fp": 0,
+    "duplicate_calls_saved": 1,
+    "single_flight_savings_ms": 33637,
+    "cache_hit_ms": 0,
+    "request_timeout_ms": 120000,
+    "policy_version": "8h-fail-closed-v1"
+  }
+}
