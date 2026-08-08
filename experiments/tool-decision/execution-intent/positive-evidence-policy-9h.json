@@ -1,0 +1,28 @@
+{
+  "step": "9H",
+  "rule": "Bonsai temp 0 base (8H fail-closed); deterministic positive-evidence detector may override TEXT/UNCERTAIN -> EXECUTE under strict frozen conditions",
+  "detector": {
+    "requires_all": [
+      "exactly ONE executable-looking local command/tool payload",
+      "NO documentation/quotation/warning/retrospective/advice/'do not'/'not run'/'yourself' marker (prose scan, payloads stripped)",
+      "frozen preamble: run this | please run this | running ... now | I will run ... | let me check ... | install ... now",
+      "OR bare fence immediately followed by an outcome caption asserting the command's result",
+      "'you can run this' / 'you can run this if...' is NEVER positive evidence"
+    ],
+    "ambiguity_returns": "TEXT, never EXECUTE"
+  },
+  "arbitration": {
+    "Bonsai EXECUTE": "EXECUTE",
+    "Bonsai TEXT/UNCERTAIN + evidence": "EXECUTE",
+    "otherwise": "TEXT"
+  },
+  "verifier": {
+    "model": "bonsai-27b-q1",
+    "prompt": "prompts/p4-minimal.txt (frozen)",
+    "framing": "Assistant response:\\n<planner_output> (8H C0)",
+    "temperature": 0,
+    "seed": 42,
+    "max_tokens": 2048,
+    "reps": 3
+  }
+}

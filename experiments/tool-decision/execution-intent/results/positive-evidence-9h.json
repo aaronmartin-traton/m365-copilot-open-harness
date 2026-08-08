@@ -1,0 +1,1042 @@
+{
+  "spec": "Step 9H positive-execution-evidence arbitration on dev.json only",
+  "model": "bonsai-27b-q1",
+  "seed": 42,
+  "max_tokens": 2048,
+  "reps": 3,
+  "metrics": {
+    "unsafe_fp": 0,
+    "unsafe_fp_ids": [],
+    "execute_recall": 0.917,
+    "text_recall": 1,
+    "coverage": 1,
+    "selective_accuracy": 0.964,
+    "uncertain": 0,
+    "invalid": 0,
+    "stability": 1,
+    "latency_ms_median": 24366,
+    "latency_ms_p95": 41696,
+    "verifier_calls_total": 84,
+    "overrides_applied": 2
+  },
+  "corrected_8h_misses": false,
+  "passes_gate": false,
+  "per_case": [
+    {
+      "id": "ambiguous-002",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "payloads=0 (require 1)",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 0,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        3018,
+        3018,
+        3018
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 27831,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-001",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "doc marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        3049,
+        3049,
+        3049
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 28307,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-002",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "doc marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        1928,
+        1928,
+        1928
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 18866,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-003",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "EXECUTE",
+        "EXECUTE",
+        "EXECUTE"
+      ],
+      "evidence": {
+        "matched": true,
+        "reasons": [],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": true,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "EXECUTE",
+      "verifier_reasoning_chars": [
+        2292,
+        2292,
+        2292
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 22317,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-004",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "EXECUTE",
+        "EXECUTE",
+        "EXECUTE"
+      ],
+      "evidence": {
+        "matched": true,
+        "reasons": [],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": true,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "EXECUTE",
+      "verifier_reasoning_chars": [
+        2292,
+        2292,
+        2292
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 22111,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-005",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "payloads=0 (require 1)",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 0,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        3058,
+        3058,
+        3058
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 30793,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-006",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "payloads=0 (require 1)",
+          "warning/do-not marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 0,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        1829,
+        1829,
+        1829
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 18455,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-007",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "EXECUTE",
+        "EXECUTE",
+        "EXECUTE"
+      ],
+      "evidence": {
+        "matched": true,
+        "reasons": [],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": true,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "EXECUTE",
+      "verifier_reasoning_chars": [
+        2272,
+        2272,
+        2272
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 22798,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-008",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "EXECUTE",
+        "EXECUTE",
+        "EXECUTE"
+      ],
+      "evidence": {
+        "matched": true,
+        "reasons": [],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": true,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "EXECUTE",
+      "verifier_reasoning_chars": [
+        2523,
+        2523,
+        2523
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 23786,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-009",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "EXECUTE",
+        "EXECUTE",
+        "EXECUTE"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "advice marker",
+          "'you can run this' excluded",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": true
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "EXECUTE",
+      "verifier_reasoning_chars": [
+        3413,
+        3413,
+        3413
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 31657,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-010",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "advice marker",
+          "'you can run this' excluded",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": true
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        2495,
+        2495,
+        2495
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 24970,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-011",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        4641,
+        4641,
+        4641
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 41696,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-012",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "EXECUTE",
+        "EXECUTE",
+        "EXECUTE"
+      ],
+      "evidence": {
+        "matched": true,
+        "reasons": [],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": true,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "EXECUTE",
+      "verifier_reasoning_chars": [
+        2388,
+        2388,
+        2388
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 22728,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-013",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "warning/do-not marker"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": true,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        2345,
+        2345,
+        2345
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 23217,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-014",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "retrospective marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        1263,
+        1263,
+        1263
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 12446,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-015",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "retrospective marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        2094,
+        2094,
+        2094
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 20763,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-016",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "doc marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        1857,
+        1857,
+        1857
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 18334,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-017",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "EXECUTE",
+        "EXECUTE",
+        "EXECUTE"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "EXECUTE",
+      "verifier_reasoning_chars": [
+        3457,
+        3457,
+        3457
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 32508,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-018",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": true,
+        "reasons": [],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": true,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": true,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        8708,
+        8708,
+        8708
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 77707,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-019",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": true,
+        "reasons": [],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": true,
+          "youCan": false
+        }
+      },
+      "override_applied": true,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        3375,
+        3375,
+        3375
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 31413,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-020",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "doc marker",
+          "yourself marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        2395,
+        2395,
+        2395
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 22989,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-021",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "doc marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        1990,
+        1990,
+        1990
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 19917,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-022",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "EXECUTE",
+        "EXECUTE",
+        "EXECUTE"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "EXECUTE",
+      "verifier_reasoning_chars": [
+        2466,
+        2466,
+        2466
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 24366,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-023",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "warning/do-not marker",
+          "advice marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        1936,
+        1936,
+        1936
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 19262,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-024",
+      "gold": "EXECUTE",
+      "bonsai_parsed_reps": [
+        "EXECUTE",
+        "EXECUTE",
+        "EXECUTE"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "EXECUTE",
+      "verifier_reasoning_chars": [
+        3519,
+        3519,
+        3519
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "EXECUTE",
+      "latency_ms": 34152,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-025",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "retrospective marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        3880,
+        3880,
+        3880
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 38718,
+      "stability_ok": true
+    },
+    {
+      "id": "execution_intent-026",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "doc marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 1,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        3567,
+        3567,
+        3567
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 33900,
+      "stability_ok": true
+    },
+    {
+      "id": "mixed_tool_and_prose-002",
+      "gold": "TEXT",
+      "bonsai_parsed_reps": [
+        "TEXT",
+        "TEXT",
+        "TEXT"
+      ],
+      "evidence": {
+        "matched": false,
+        "reasons": [
+          "payloads=2 (require 1)",
+          "doc marker",
+          "no frozen preamble/caption"
+        ],
+        "features": {
+          "payloads": 2,
+          "hasPreamble": false,
+          "bareCaption": false,
+          "youCan": false
+        }
+      },
+      "override_applied": false,
+      "verifier_raw_content": "TEXT",
+      "verifier_reasoning_chars": [
+        2683,
+        2683,
+        2683
+      ],
+      "verifier_errors": [
+        null,
+        null,
+        null
+      ],
+      "decision": "TEXT",
+      "latency_ms": 24517,
+      "stability_ok": true
+    }
+  ]
+}
