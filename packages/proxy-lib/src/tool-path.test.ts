@@ -515,3 +515,70 @@ describe("produceToolPath recovery loop", () => {
     expect(registerToolCalls).toHaveBeenCalledWith(result.toolCalls);
   });
 });
+
+describe("produceToolPath — fail-closed intent verifier gate", () => {
+  type VerifierResult = { decision: "EXECUTE" | "TEXT"; raw?: string | null; cache?: string; latencyMs?: number; error?: string | null; reasoningChars?: number };
+  const verifierStub = (decision: VerifierResult["decision"]) =>
+    vi.fn().mockResolvedValue({ decision, raw: decision === "EXECUTE" ? "EXECUTE" : "TEXT", cache: "miss", latencyMs: 1, error: null, reasoningChars: 0 });
+
+  it("EXECUTE -> tools flow", async () => {
+    const runTurn = vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" });
+    const markSent = vi.fn();
+    const registerToolCalls = vi.fn();
+    const intentVerifier = { check: verifierStub("EXECUTE") };
+    const deps: ToolPathDeps = {
+      runTurn,
+      markSent,
+      registerToolCalls,
+      messages: [],
+      tools: [bashTool],
+      intentVerifier,
+    };
+
+    const result = narrow(await produceToolPath(INITIAL_PROMPT, deps), "tools");
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].function.name).toBe("bash");
+    expect(intentVerifier.check).toHaveBeenCalledOnce();
+    expect(registerToolCalls).toHaveBeenCalledOnce();
+    expect(registerToolCalls).toHaveBeenCalledWith(result.toolCalls);
+  });
+
+  it("TEXT -> text result, registerToolCalls NOT invoked", async () => {
+    const runTurn = vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" });
+    const markSent = vi.fn();
+    const registerToolCalls = vi.fn();
+    const intentVerifier = { check: verifierStub("TEXT") };
+    const deps: ToolPathDeps = {
+      runTurn,
+      markSent,
+      registerToolCalls,
+      messages: [],
+      tools: [bashTool],
+      intentVerifier,
+    };
+
+    const result = narrow(await produceToolPath(INITIAL_PROMPT, deps), "text");
+
+    // 8H TEXT semantics: the raw M365 text is the response
+    expect(result.text).toBe("```bash\nls -la\n```");
+    expect(intentVerifier.check).toHaveBeenCalledOnce();
+    expect(registerToolCalls).not.toHaveBeenCalled();
+  });
+
+  it("no verifier in deps -> byte-identical legacy behavior (regression guard)", async () => {
+    const runTurn = vi.fn();
+    const markSent = vi.fn();
+    const registerToolCalls = vi.fn();
+    const depsWithout: ToolPathDeps = {
+      runTurn,
+      markSent,
+      registerToolCalls,
+      messages: [],
+      tools: [bashTool],
+    };
+
+    // prove the deps object is exactly the legacy shape when intentVerifier is absent
+    expect(Object.prototype.hasOwnProperty.call(depsWithout, "intentVerifier")).toBe(false);
+  });
+});

@@ -21,6 +21,7 @@ import { localMetaResponse, renderLocalCompletion } from "./local-response-helpe
 import { OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
 import { renderImagesMarkdown } from "./image-renderer.js";
 import { produceToolPath } from "./tool-path.js";
+import { getIntentVerifier } from "./intent-verifier.js";
 import { renderResponse, type Produced } from "./response-renderer.js";
 import type { z } from "zod/v4";
 
@@ -303,6 +304,7 @@ export async function handleChatCompletion(
       registerToolCalls: (calls) => pool.registerToolCalls(conv, calls),
       messages: body.messages,
       tools: body.tools,
+      intentVerifier: getIntentVerifier() ?? undefined,
     });
   } else {
     // No tools — stream deltas live (onDelta) while buffering for the retry logic.

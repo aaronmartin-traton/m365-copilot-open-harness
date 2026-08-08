@@ -32,6 +32,11 @@ unresolved by design). No held-out inference has been authorized.
 - **The remaining architectural constraint is latency, not safety.** The
   verifier is too slow for an unqualified request-path gate without caching,
   pipelining, bounded concurrency, or a faster verifier approach.
+- **10A verifier is now IMPLEMENTED (opt-in).** `packages/proxy-lib/src/
+  intent-verifier.ts` gates tool execution on the local verifier's EXECUTE when
+  `M365_INTENT_VERIFIER=1` (or an endpoint override is set); default OFF keeps
+  existing behavior byte-identical. Next step per 10A: separately approve
+  flipping default-on after live validation, or pick a latency fix.
 
 ## Where the loop stands
 

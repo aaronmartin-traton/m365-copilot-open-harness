@@ -1,7 +1,9 @@
 # Integration Plan — 10A: fail-closed intent verifier production boundary
 
-Status: DRAFT for separate approval (Step 10A decision rule). No production code
-is changed by this document or its sibling experiment.
+Status: IMPLEMENTED (2026-08-08, commit `9e71c7b`). The fail-closed intent
+verifier gate is live but opt-in: `M365_INTENT_VERIFIER=1` (or an endpoint
+override) activates it; default OFF keeps existing deployments byte-identical.
+See `packages/proxy-lib/src/intent-verifier.ts`.
 
 ## Production boundary
 

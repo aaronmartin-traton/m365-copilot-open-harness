@@ -26,6 +26,7 @@ import {
   HALLUCINATION_FORCE_PROMPT,
   REMOTE_ARTIFACT_FORCE_PROMPT,
 } from "./force-prompts.js";
+import type { IntentVerifier } from "./intent-verifier.js";
 
 const log = createLogger("tool-path");
 
@@ -47,6 +48,13 @@ export interface ToolPathDeps {
   registerToolCalls: (calls: Array<{ id: string }>) => void;
   messages: Message[];
   tools?: ToolDef[];
+  /**
+   * Fall-closed intent verifier (8H). When present, the final tools return is
+   * gated on the verifier's EXECUTE; any non-EXECUTE (TEXT/UNCERTAIN/invalid/
+   * error/timeout) returns the raw text instead of executing. Absent => the
+   * historical unverified behavior, byte-for-byte.
+   */
+  intentVerifier?: IntentVerifier;
 }
 
 export type ToolPathResult =
@@ -186,6 +194,19 @@ export async function produceToolPath(
   }
 
   if (parsed.hasToolCalls && parsed.toolCalls.length > 0) {
+    // Fail-closed intent verifier (8H): the parse's tool-shaped result is NOT
+    // executed directly. It is passed to the verifier and execution proceeds
+    // only on verifier EXECUTE. Any other outcome -> raw text (matches 8H TEXT
+    // semantics: the raw M365 text is the response).
+    if (deps.intentVerifier) {
+      const v = await deps.intentVerifier.check(fullText, tools);
+      log.info(`Intent verifier: decision=${v.decision} cache=${v.cache} latencyMs=${v.latencyMs} error=${v.error ?? "null"}`);
+      if (v.decision !== "EXECUTE") {
+        log.info(`Intent verifier denied execution (${v.decision}), returning raw text instead of ${parsed.toolCalls.length} tool call(s)`);
+        return { kind: "text", text: fullText };
+      }
+      log.info(`Intent verifier authorized execution of ${parsed.toolCalls.length} tool call(s)`);
+    }
     registerToolCalls(parsed.toolCalls);
     return { kind: "tools", toolCalls: parsed.toolCalls };
   }

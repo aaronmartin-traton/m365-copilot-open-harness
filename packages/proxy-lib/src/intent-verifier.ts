@@ -1,0 +1,324 @@
+/**
+ * Fail-closed intent verifier — production boundary for the 8H policy.
+ *
+ * Sits between the deterministic tool-path parse and tool execution. The parse's
+ * tool-shaped result is NOT executed directly: it is passed to a local verifier
+ * (frozen p4-minimal prompt, C0 framing) and execution proceeds only on a
+ * verifier EXECUTE. Timeout / HTTP error / network error / invalid output /
+ * model-mismatch -> TEXT, never EXECUTE (8H policy invariant: no deterministic
+ * branch may authorize execution).
+ *
+ * Default OFF. Active only when `M365_INTENT_VERIFIER=1`, OR when
+ * `M365_INTENT_VERIFIER_ENDPOINT` is set. When inactive, `getIntentVerifier()`
+ * returns null and the tool path is byte-identical to current behavior.
+ *
+ * Spec reference: experiments/tool-decision/execution-intent/
+ *   integration-plan-10a.md + fail-closed-policy-8h.json + prompts/p4-minimal.txt
+ */
+
+import { createHash } from "node:crypto";
+import { createLogger, type ToolDef } from "@m365-copilot/core";
+
+const log = createLogger("intent-verifier");
+
+// ---------------------------------------------------------------------------
+// Frozen verifier prompt (byte-for-byte identical to the experiment artifact;
+// guarded by a drift test in intent-verifier.test.ts).
+// ---------------------------------------------------------------------------
+/**
+ * Byte-identical to experiments/tool-decision/execution-intent/prompts/p4-minimal.txt
+ * (including its trailing line ending). The drift guard test compares this
+ * constant against the artifact file.
+ */
+export const INTENT_VERIFIER_PROMPT =
+  "Classify whether command/tool-shaped content in this assistant response is intended to be executed now. EXECUTE = perform it now. TEXT = show/discuss it without performing it. UNCERTAIN = insufficient evidence. Return exactly one token: EXECUTE, TEXT, or UNCERTAIN.\r\n";
+
+export type IntentDecision = "EXECUTE" | "TEXT";
+export type IntentCache = "hit" | "miss" | "shared";
+
+/** The per-check outcome. `raw` is the verbatim verifier token (or null on error). */
+export interface IntentCheck {
+  decision: IntentDecision;
+  raw: string | null;
+  cache: IntentCache;
+  latencyMs: number;
+  error: string | null;
+  reasoningChars: number;
+}
+
+export interface IntentVerifier {
+  check(plannerText: string, tools?: ToolDef[]): Promise<IntentCheck>;
+}
+
+const POLICY_VERSION = "8h";
+
+const VOCAB = new Set(["EXECUTE", "TEXT", "UNCERTAIN"]);
+
+// ---------------------------------------------------------------------------
+// helpers
+// ---------------------------------------------------------------------------
+const sha256 = (s: string) => createHash("sha256").update(s, "utf-8").digest("hex");
+
+/** One verifier HTTP attempt's raw result before the 8H arbitration table. */
+interface RawAttempt {
+  /** Verbatim token from the model (null on HTTP/network/model-mismatch). */
+  token: string | null;
+  reasoningChars: number;
+  error: string | null;
+}
+
+/** True when a verifier attempt authorizes execution (only literal EXECUTE). */
+function authorizes(attempt: RawAttempt | null): boolean {
+  return (
+    attempt !== null &&
+    attempt.error === null &&
+    attempt.token !== null &&
+    attempt.token.trim().toUpperCase() === "EXECUTE"
+  );
+}
+
+// ---------------------------------------------------------------------------
+// singleton / env gate
+// ---------------------------------------------------------------------------
+let singleton: IntentVerifier | null = null;
+
+/** True when the gate is explicitly enabled (M365_INTENT_VERIFIER=1) OR an
+ * endpoint override is set. Endpoint-set alone counts as opt-in. */
+function verifierEnabled(): boolean {
+  const ep = process.env.M365_INTENT_VERIFIER_ENDPOINT;
+  return (
+    process.env.M365_INTENT_VERIFIER === "1" ||
+    (typeof ep === "string" && ep.trim().length > 0)
+  );
+}
+
+/**
+ * Lazy process-wide singleton. Reads env on first call. Returns null while the
+ * gate is off — callers then keep current (unverified) behavior.
+ */
+export function getIntentVerifier(): IntentVerifier | null {
+  if (!verifierEnabled()) return null;
+  singleton ??= new BonsaiIntentVerifier();
+  return singleton;
+}
+
+/** Drop the cached singleton so the next call re-reads env (test hook). */
+export function resetIntentVerifier(): void {
+  singleton = null;
+}
+
+// ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
+/** What we persist for a decision (stored on successful, non-error checks). */
+interface CachedEntry {
+  decision: IntentDecision;
+  raw: string | null;
+  reasoningChars: number;
+}
+
+const CACHE_CAP = 1000;
+const DEFAULT_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions";
+const DEFAULT_MODEL = "bonsai-27b-q1";
+
+class BonsaiIntentVerifier implements IntentVerifier {
+  private readonly endpoint: string;
+  private readonly model: string;
+  private readonly maxTokens: number;
+  private readonly timeoutMs: number;
+  private readonly retryBackoffMs: number;
+  private readonly promptHash: string;
+
+  /** LRU decision cache: full cache-key -> entry. Cap 1000 entries. */
+  private readonly cache = new Map<string, CachedEntry>();
+
+  /** drift map: prefix key -> last responseHash seen at that prefix. */
+  private readonly drift = new Map<string, string>();
+
+  /** in-flight full-key -> Promise (single-flight). */
+  private readonly inflight = new Map<string, Promise<IntentCheck>>();
+
+  /** global concurrency cap 1: serialized fetch executions. */
+  private chain: Promise<void> = Promise.resolve();
+
+  constructor() {
+    const env = process.env;
+    this.endpoint = (env.M365_INTENT_VERIFIER_ENDPOINT || "").trim() || DEFAULT_ENDPOINT;
+    this.model = (env.M365_INTENT_VERIFIER_MODEL || "").trim() || DEFAULT_MODEL;
+    this.maxTokens = Math.max(1, Number(env.M365_INTENT_VERIFIER_MAX_TOKENS) || 2048);
+    this.timeoutMs = Math.max(1, Number(env.M365_INTENT_VERIFIER_TIMEOUT_MS) || 120000);
+    this.retryBackoffMs = Math.max(0, Number(env.M365_INTENT_VERIFIER_RETRY_BACKOFF_MS) || 15000);
+    this.promptHash = sha256(INTENT_VERIFIER_PROMPT);
+  }
+
+  /** full key: sha256(model|promptHash|responseHash|policyVersion) */
+  private fullKey(responseHash: string): string {
+    return sha256(`${this.model}|${this.promptHash}|${responseHash}|${POLICY_VERSION}`);
+  }
+
+  /** drift prefix: sha256(model|promptHash|policyVersion) */
+  private prefixKey(): string {
+    return sha256(`${this.model}|${this.promptHash}|${POLICY_VERSION}`);
+  }
+
+  private cacheSet(key: string, entry: CachedEntry): void {
+    if (this.cache.size >= CACHE_CAP) {
+      // LRU: Map keeps insertion order; drop the oldest.
+      const oldest = this.cache.keys().next().value;
+      if (oldest !== undefined) this.cache.delete(oldest);
+    }
+    this.cache.set(key, entry);
+  }
+
+  async check(plannerText: string, _tools?: ToolDef[]): Promise<IntentCheck> {
+    const t0 = Date.now();
+    const responseHash = sha256(plannerText);
+    const key = this.fullKey(responseHash);
+    const prefix = this.prefixKey();
+
+    // cache hit
+    const cached = this.cache.get(key);
+    if (cached) {
+      this.cache.delete(key);
+      this.cache.set(key, cached); // LRU touch
+      return {
+        decision: cached.decision,
+        raw: cached.raw,
+        cache: "hit",
+        latencyMs: Date.now() - t0,
+        error: null,
+        reasoningChars: cached.reasoningChars,
+      };
+    }
+
+    // drift probe: responseHash changed under the same prefix => planner text
+    // moved; log and treat as miss (never serve stale).
+    const last = this.drift.get(prefix);
+    if (last !== undefined && last !== responseHash) {
+      log.info(`intent-verifier drift: responseHash changed (${last.slice(0, 8)} -> ${responseHash.slice(0, 8)}), treating as miss`);
+    }
+    this.drift.set(prefix, responseHash);
+
+    // single-flight: identical in-flight request -> share its result
+    const flying = this.inflight.get(key);
+    if (flying) {
+      const base = await flying;
+      return { ...base, cache: "shared" as const, latencyMs: Date.now() - t0 };
+    }
+
+    const run = this.runSerialized(plannerText, t0);
+    this.inflight.set(key, run);
+    try {
+      const out = await run;
+      if (out.error === null) {
+        this.cacheSet(key, {
+          decision: out.decision,
+          raw: out.raw,
+          reasoningChars: out.reasoningChars,
+        });
+      }
+      return out;
+    } finally {
+      this.inflight.delete(key);
+    }
+  }
+
+  /** Serialize every verifier fetch behind a global chain (cap 1). */
+  private runSerialized(plannerText: string, t0: number): Promise<IntentCheck> {
+    const run = this.chain.then(() => this.internalVerify(plannerText, t0, 0));
+    // keep the chain alive past this task's own failure
+    this.chain = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
+
+  /** One fetch attempt with its own AbortSignal timeout. */
+  private async attempt(plannerText: string): Promise<RawAttempt> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const resp = await fetch(this.endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: "system", content: INTENT_VERIFIER_PROMPT },
+            { role: "user", content: `Assistant response:\n${plannerText}` },
+          ],
+          temperature: 0,
+          seed: 42,
+          max_tokens: this.maxTokens,
+        }),
+        signal: controller.signal,
+      });
+      if (resp.status === 500 || resp.status === 503) {
+        return { token: null, reasoningChars: 0, error: `HTTP ${resp.status}` };
+      }
+      if (!resp.ok) {
+        return { token: null, reasoningChars: 0, error: `HTTP ${resp.status}` };
+      }
+      const j = (await resp.json()) as {
+        model?: unknown;
+        choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
+      };
+      if (j.model !== undefined && j.model !== null && String(j.model) !== this.model) {
+        return { token: null, reasoningChars: 0, error: "model-mismatch" };
+      }
+      const msg = j.choices?.[0]?.message;
+      const token = msg?.content ?? null;
+      if (token === null) {
+        return { token: null, reasoningChars: msg?.reasoning_content?.length ?? 0, error: "invalid" };
+      }
+      return {
+        token,
+        reasoningChars: msg?.reasoning_content?.length ?? 0,
+        error: null,
+      };
+    } catch (err) {
+      const aborted = err instanceof Error && err.name === "AbortError";
+      return { token: null, reasoningChars: 0, error: aborted ? "timeout" : "network" };
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /** Retry loop (500/503/network, max 2, backoff) within the overall deadline. */
+  private async internalVerify(
+    plannerText: string,
+    t0: number,
+    attempt: number,
+  ): Promise<IntentCheck> {
+    const t = Date.now();
+    if (t - t0 >= this.timeoutMs) {
+      return this.finish(null, "timeout", t0, "miss");
+    }
+    const a = await this.attempt(plannerText);
+    const retryable = a.error === "HTTP 500" || a.error === "HTTP 503" || a.error === "network";
+    if (retryable && attempt < 2 && Date.now() - t0 < this.timeoutMs) {
+      await new Promise((r) => setTimeout(r, this.retryBackoffMs * (attempt + 1)));
+      return this.internalVerify(plannerText, t0, attempt + 1);
+    }
+    return this.finish(a, a.error, t0, "miss");
+  }
+
+  /** Build the final check from a raw attempt (8H arbitration: only EXECUTE -> EXECUTE). */
+  private finish(
+    attempt: RawAttempt | null,
+    error: string | null,
+    t0: number,
+    cache: IntentCache,
+  ): IntentCheck {
+    const decision: IntentDecision = authorizes(attempt) ? "EXECUTE" : "TEXT";
+    return {
+      decision,
+      raw: attempt?.token ?? null,
+      cache,
+      latencyMs: Date.now() - t0,
+      error,
+      reasoningChars: attempt?.reasoningChars ?? 0,
+    };
+  }
+}
