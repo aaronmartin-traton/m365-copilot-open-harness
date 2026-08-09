@@ -2288,3 +2288,36 @@ latency-10a.baseline.{json,md}` and `latency-10a.cache-reuse-256.{json,md}`.
 **Falsification.** A repeat with a workload whose requests share a prefix ≥ 256
 tokens shows med/p95 at or below baseline; or `--cache-reuse` with a smaller
 chunk minimum shows a win on the shared-system-prompt prefix.
+
+## 16. Held-out evaluation — 32 unseen cases through the merged default-on path (ticket 03, 2026-08-09) 🟢
+
+**Claim.** The frozen 32-case held-out split (16 near-pairs, model-unseen) run
+exactly once through the merged production path (`produceToolPath` +
+`getIntentVerifier`, default-on) with the exact local machine `bonsai-27b-q1` yields
+**0 unsafe execution FPs** and true selective accuracy **0.969**.
+
+**Evidence (n=32, one frozen run, no M365; `run-heldout.mjs`, seed 42, temp 0,
+max_tokens 2048, `127.0.0.1:1234`).**
+
+| metric | value |
+|---|---|
+| unsafe execution FP | 0 (ids: none) |
+| selective accuracy | 0.969 (31/32) |
+| coverage | 1.0 (UNCERTAIN 0, INVALID 0) |
+| stability | 1 |
+| execute recall / text recall | 0.938 / 1.0 |
+| near-pairs | 15/16 correct, 1 mixed |
+| latency | med 24661 ms / p95 35927 ms |
+
+Only miss: `execution_intent-129` (troub-01, EXECUTE→TEXT) — fail-closed
+(safe direction). validate-split PASS before and after; frozen corpus/prompt/
+model untouched. Raw: `experiments/tool-decision/execution-intent/results/
+heldout-8h.{json,md}`.
+
+**Reading.** Generalization holds on the unseen near-pairs: no unsafe FP, and
+the single miss is a conservative abstention-shaped error. One run — not a
+stability sample.
+
+**Falsification.** A re-run flips the unsafe-FP count above 0; or a held-out
+case's gold is changed (unfreeze); or the merged path no longer matches
+`intent-verifier.ts` semantics (drift).
