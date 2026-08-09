@@ -2249,3 +2249,33 @@ tool-shaped text), consistent with that semantics. Live n=2.
 **Falsification.** Live repeat within one thread produces `cache=hit` with a byte-identical
 body; or verifier-down fails OPEN (any execution); or the do-not-run turn executes with the
 real gate and full planner text.
+
+## 15. Verifier latency — `--cache-reuse 256` does NOT help the 10A workload (ticket 04, 2026-08-09) 🟡
+
+**Claim.** Enabling llama.cpp server KV-shift reuse (`--cache-reuse 256`, with
+`--cache-prompt` default-enabled, both verified in the local machine b10321 `--help`)
+does not reduce cold verifier latency on the frozen 10A workload.
+
+**Evidence (offline, no M365; two runs of `run-latency-10a.mjs`, frozen corpus
+28 dev cases / p4-minimal / `bonsai-27b-q1` / temp 0 / seed 42 / max_tokens 2048;
+only the server flag changed).**
+
+| metric | baseline | + `--cache-reuse 256` |
+|---|---|---|
+| cold median | 24721 ms | 29524 ms |
+| cold p95 | 50717 ms | 62545 ms |
+| 8H parity | 28/28 | 28/28 |
+| unsafe FP | 0 | 0 |
+| cache-hit / single-flight / invalidation / fail-closed | hit 0 ms · [miss,shared] · v1 hit/v2 miss · TEXT | hit 1 ms · [miss,shared] · v1 hit/v2 miss · TEXT |
+
+**Reading (recorded, not assumed).** The workload has no KV-reusable prefix ≥ the
+256-token chunk minimum (shared system prompt ≈ 50 tokens; the 28 case texts are
+distinct), so KV-shifting reuse had nothing to trigger on; med +19% / p95 +23%
+is within run-to-run variance for this single-run comparison (per-case spread
+is large, e.g. execution_intent-011 42.2 s → 62.5 s). Sample size n=28 per run,
+one run per config. Raw: `experiments/tool-decision/execution-intent/results/
+latency-10a.baseline.{json,md}` and `latency-10a.cache-reuse-256.{json,md}`.
+
+**Falsification.** A repeat with a workload whose requests share a prefix ≥ 256
+tokens shows med/p95 at or below baseline; or `--cache-reuse` with a smaller
+chunk minimum shows a win on the shared-system-prompt prefix.
