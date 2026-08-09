@@ -2,6 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+
+/** Capture logger.info calls so the F1 observability record is assertable. */
+const infoCalls: string[] = [];
+const loggerMock = vi.hoisted(() => ({
+  createLogger: (component: string) => ({
+    info: (...args: unknown[]) => {
+      infoCalls.push(`[${component}] ${args.map((a) => String(a)).join(" ")}`);
+    },
+    error: () => {},
+    debug: () => {},
+  }),
+}));
+vi.mock("@m365-copilot/core", () => loggerMock);
+
 import {
   getIntentVerifier,
   resetIntentVerifier,
@@ -259,5 +273,28 @@ describe("intent-verifier — concurrency & prompt guard", () => {
   it("embedded prompt is byte-identical to the frozen artifact", () => {
     const onDisk = readFileSync(PROMPT_FILE, "utf-8");
     expect(INTENT_VERIFIER_PROMPT).toBe(onDisk);
+  });
+
+  it("emits the full observability record on every check (decision H)", async () => {
+    infoCalls.length = 0;
+    stubFetch(() => tokenResponse("EXECUTE", "thinking-here"));
+    const r = await getIntentVerifier()!.check("observability please");
+    expect(r.decision).toBe("EXECUTE");
+    const record = infoCalls.find((l) => l.includes("policyVersion=8h"));
+    expect(record).toBeDefined();
+    for (const field of [
+      "model=",
+      "policyVersion=8h",
+      "promptHash=",
+      "responseHash=",
+      "cache=",
+      "decision=EXECUTE",
+      "latencyMs=",
+      "error=null",
+      "reasoningChars=",
+      "ts=",
+    ]) {
+      expect(record).toContain(field);
+    }
   });
 });

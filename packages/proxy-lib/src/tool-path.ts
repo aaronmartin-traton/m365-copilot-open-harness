@@ -199,8 +199,8 @@ export async function produceToolPath(
     // only on verifier EXECUTE. Any other outcome -> raw text (matches 8H TEXT
     // semantics: the raw M365 text is the response).
     if (deps.intentVerifier) {
-      const v = await deps.intentVerifier.check(fullText, tools);
-      log.info(`Intent verifier: decision=${v.decision} cache=${v.cache} latencyMs=${v.latencyMs} error=${v.error ?? "null"}`);
+      const v = await deps.intentVerifier.check(fullText);
+      log.info(`Intent verifier: decision=${v.decision}`);
       if (v.decision !== "EXECUTE") {
         log.info(`Intent verifier denied execution (${v.decision}), returning raw text instead of ${parsed.toolCalls.length} tool call(s)`);
         return { kind: "text", text: fullText };

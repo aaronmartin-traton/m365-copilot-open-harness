@@ -17,7 +17,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { createLogger, type ToolDef } from "@m365-copilot/core";
+import { createLogger } from "@m365-copilot/core";
 
 const log = createLogger("intent-verifier");
 
@@ -36,18 +36,29 @@ export const INTENT_VERIFIER_PROMPT =
 export type IntentDecision = "EXECUTE" | "TEXT";
 export type IntentCache = "hit" | "miss" | "shared";
 
+/**
+ * Closed set of verifier error conditions. The retry decision switches on
+ * this structurally instead of comparing raw strings.
+ */
+export type VerifierError =
+  | "timeout"
+  | "network"
+  | "model-mismatch"
+  | "invalid"
+  | `HTTP ${number}`;
+
 /** The per-check outcome. `raw` is the verbatim verifier token (or null on error). */
 export interface IntentCheck {
   decision: IntentDecision;
   raw: string | null;
   cache: IntentCache;
   latencyMs: number;
-  error: string | null;
+  error: VerifierError | null;
   reasoningChars: number;
 }
 
 export interface IntentVerifier {
-  check(plannerText: string, tools?: ToolDef[]): Promise<IntentCheck>;
+  check(plannerText: string): Promise<IntentCheck>;
 }
 
 const POLICY_VERSION = "8h";
@@ -64,8 +75,11 @@ interface RawAttempt {
   /** Verbatim token from the model (null on HTTP/network/model-mismatch). */
   token: string | null;
   reasoningChars: number;
-  error: string | null;
+  error: VerifierError | null;
 }
+
+/** Retryable error classes (structural switch on the closed union). */
+const RETRYABLE_ERRORS = new Set<VerifierError>(["HTTP 500", "HTTP 503", "network"]);
 
 /** True when a verifier attempt authorizes execution (only literal EXECUTE). */
 function authorizes(attempt: RawAttempt | null): boolean {
@@ -170,7 +184,21 @@ class BonsaiIntentVerifier implements IntentVerifier {
     this.cache.set(key, entry);
   }
 
-  async check(plannerText: string, _tools?: ToolDef[]): Promise<IntentCheck> {
+  /** Full observability record per check (decision-H binding: model identity,
+   * hashes, cache, decision, latency, error, reasoning chars). Emitted inside
+   * check() where all the fields live. */
+  private record(check: IntentCheck, responseHash: string): IntentCheck {
+    log.info(
+      `intent-verifier: model=${this.model} policyVersion=${POLICY_VERSION} ` +
+        `promptHash=${this.promptHash} responseHash=${responseHash} ` +
+        `cache=${check.cache} decision=${check.decision} latencyMs=${check.latencyMs} ` +
+        `error=${check.error ?? "null"} reasoningChars=${check.reasoningChars} ` +
+        `ts=${new Date().toISOString()}`,
+    );
+    return check;
+  }
+
+  async check(plannerText: string): Promise<IntentCheck> {
     const t0 = Date.now();
     const responseHash = sha256(plannerText);
     const key = this.fullKey(responseHash);
@@ -181,14 +209,17 @@ class BonsaiIntentVerifier implements IntentVerifier {
     if (cached) {
       this.cache.delete(key);
       this.cache.set(key, cached); // LRU touch
-      return {
-        decision: cached.decision,
-        raw: cached.raw,
-        cache: "hit",
-        latencyMs: Date.now() - t0,
-        error: null,
-        reasoningChars: cached.reasoningChars,
-      };
+      return this.record(
+        {
+          decision: cached.decision,
+          raw: cached.raw,
+          cache: "hit",
+          latencyMs: Date.now() - t0,
+          error: null,
+          reasoningChars: cached.reasoningChars,
+        },
+        responseHash,
+      );
     }
 
     // drift probe: responseHash changed under the same prefix => planner text
@@ -203,7 +234,10 @@ class BonsaiIntentVerifier implements IntentVerifier {
     const flying = this.inflight.get(key);
     if (flying) {
       const base = await flying;
-      return { ...base, cache: "shared" as const, latencyMs: Date.now() - t0 };
+      return this.record(
+        { ...base, cache: "shared" as const, latencyMs: Date.now() - t0 },
+        responseHash,
+      );
     }
 
     const run = this.runSerialized(plannerText, t0);
@@ -217,7 +251,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
           reasoningChars: out.reasoningChars,
         });
       }
-      return out;
+      return this.record(out, responseHash);
     } finally {
       this.inflight.delete(key);
     }
@@ -296,7 +330,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
       return this.finish(null, "timeout", t0, "miss");
     }
     const a = await this.attempt(plannerText);
-    const retryable = a.error === "HTTP 500" || a.error === "HTTP 503" || a.error === "network";
+    const retryable = a.error !== null && RETRYABLE_ERRORS.has(a.error);
     if (retryable && attempt < 2 && Date.now() - t0 < this.timeoutMs) {
       await new Promise((r) => setTimeout(r, this.retryBackoffMs * (attempt + 1)));
       return this.internalVerify(plannerText, t0, attempt + 1);
@@ -307,7 +341,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
   /** Build the final check from a raw attempt (8H arbitration: only EXECUTE -> EXECUTE). */
   private finish(
     attempt: RawAttempt | null,
-    error: string | null,
+    error: VerifierError | null,
     t0: number,
     cache: IntentCache,
   ): IntentCheck {
