@@ -2226,6 +2226,15 @@ mechanism is separately evidenced offline (10A) but was **not reproduced live**.
   distinct planner texts → `cache=miss` (recorded). Mechanism evidenced offline only
   (10A phase B: dev-corpus exact repeat → hit, 0 ms, byte-identical). Live byte-identical
   repeats are stochastic (M365 nondeterminism), not engineered.
+- **Persistent-proxy live validation (2026-08-09, n=2 turns, one conversation):**
+  with ONE persistent proxy (gate on) and the verbatim-same minimal tool-shaped
+  request sent twice, turn 1 → `cache=miss decision=EXECUTE latencyMs=32551`
+  (responseHash `8add771a…`), tool call executed; turn 2 → M365 answered raw
+  text from thread context (no tool shape) → gate never re-queried →
+  `cache=hit` still **not observed live**. Confirms the live half of the cache
+  criterion is M365-shaped, not verifier-shaped: M365 did not re-emit a
+  tool-shaped planner text on an exact repeat (one thread, 2 turns, DEA 1.06e-7,
+  no Disengaged/throttle).
 - **Identifiers:** promptHash `04d91374…`; responseHashes `d26a1bbd…` (fail-closed),
   `98f93d05…` (recovery); conversation `live-validation-r2-2026-08-09-0740`.
 
