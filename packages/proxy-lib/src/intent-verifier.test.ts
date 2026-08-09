@@ -83,8 +83,8 @@ describe("intent verifier — env gate", () => {
     vi.unstubAllGlobals();
   });
 
-  it("returns null when the gate is off", () => {
-    expect(getIntentVerifier()).toBeNull();
+  it("is enabled by default (no env)", () => {
+    expect(getIntentVerifier()).not.toBeNull();
   });
 
   it("activates on M365_INTENT_VERIFIER=1", () => {
@@ -95,6 +95,13 @@ describe("intent verifier — env gate", () => {
   it("activates when an endpoint override is set", () => {
     process.env.M365_INTENT_VERIFIER_ENDPOINT = "http://verifier.test/v1/chat/completions";
     expect(getIntentVerifier()).not.toBeNull();
+  });
+
+  it("M365_INTENT_VERIFIER=0 opts out, winning over endpoint and model overrides", () => {
+    process.env.M365_INTENT_VERIFIER = "0";
+    process.env.M365_INTENT_VERIFIER_ENDPOINT = "http://verifier.test/v1/chat/completions";
+    process.env.M365_INTENT_VERIFIER_MODEL = "bonsai-27b-q1";
+    expect(getIntentVerifier()).toBeNull();
   });
 });
 

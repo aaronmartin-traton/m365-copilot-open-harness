@@ -8,8 +8,8 @@
  * model-mismatch -> TEXT, never EXECUTE (8H policy invariant: no deterministic
  * branch may authorize execution).
  *
- * Default OFF. Active only when `M365_INTENT_VERIFIER=1`, OR when
- * `M365_INTENT_VERIFIER_ENDPOINT` is set. When inactive, `getIntentVerifier()`
+ * Default ON. Disabled only by the explicit opt-out `M365_INTENT_VERIFIER=0`
+ * (wins over every endpoint/model override). When inactive, `getIntentVerifier()`
  * returns null and the tool path is byte-identical to current behavior.
  *
  * Spec reference: experiments/tool-decision/execution-intent/
@@ -96,14 +96,12 @@ function authorizes(attempt: RawAttempt | null): boolean {
 // ---------------------------------------------------------------------------
 let singleton: IntentVerifier | null = null;
 
-/** True when the gate is explicitly enabled (M365_INTENT_VERIFIER=1) OR an
- * endpoint override is set. Endpoint-set alone counts as opt-in. */
+/** True when the verifier is active. Default ON; disabled only by the
+ * explicit opt-out `M365_INTENT_VERIFIER=0`, which wins over every
+ * endpoint/model override. `M365_INTENT_VERIFIER=1` and endpoint-set alone
+ * (no explicit 0) remain valid explicit activations. */
 function verifierEnabled(): boolean {
-  const ep = process.env.M365_INTENT_VERIFIER_ENDPOINT;
-  return (
-    process.env.M365_INTENT_VERIFIER === "1" ||
-    (typeof ep === "string" && ep.trim().length > 0)
-  );
+  return process.env.M365_INTENT_VERIFIER !== "0";
 }
 
 /**

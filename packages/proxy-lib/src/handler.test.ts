@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
+// Legacy tool-path tests run WITHOUT the intent verifier: opt out explicitly
+// (default is now ON). The verifier's own contract is covered in
+// intent-verifier.test.ts.
+process.env.M365_INTENT_VERIFIER = "0";
+
 const scripted = {
   text: "answer",
   throttle: { current: 1, max: 600 } as { current: number; max: number } | null,

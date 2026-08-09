@@ -1,7 +1,7 @@
 # ADR-0002 — Execution-Intent Verifier (fail-closed)
 
 **Date:** 2026-08-08
-**Status:** Accepted (implemented, opt-in)
+**Status:** Accepted (implemented, default-on)
 
 ## Decision
 
@@ -10,11 +10,10 @@ verifier. Only a literal verifier `EXECUTE` verdict authorizes executing a
 tool call; every other outcome — `TEXT`, `UNCERTAIN`, invalid answer, model
 mismatch, timeout, or error — resolves to returning the model's raw text.
 
-The verifier is **off by default**. Activation requires
-`M365_INTENT_VERIFIER=1` (or an explicit endpoint override), so existing
-deployments stay byte-identical. Flipping the default to on is a separate,
-reviewed step after live validation
-([ticket 01-02](../../.scratch/execution-intent-verifier/issues/01-live-validation.md)).
+The verifier is **on by default**. The explicit opt-out
+`M365_INTENT_VERIFIER=0` disables it and wins over every endpoint/model
+override; `M365_INTENT_VERIFIER=1` or an endpoint override remain explicit
+activations (ticket 02).
 
 ## Why fail-closed
 
@@ -47,6 +46,7 @@ byte-identical to `prompts/p4-minimal.txt`.
 
 1. Live validation on the local machine (real M365 threads, cache hit/miss, no
    throttle interaction) — [verifier/01](../../.scratch/execution-intent-verifier/issues/01-live-validation.md).
-2. Default-on flip after live validation — separate approval.
+2. ~~Default-on flip after live validation~~ — **done** (ticket 02:
+   default-on with `M365_INTENT_VERIFIER=0` opt-out).
 3. Latency engineering (caching, pipelining, a faster verifier) — the
    remaining architectural constraint is latency, not safety.
