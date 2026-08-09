@@ -143,6 +143,23 @@ feature tracks the 8H production path:
 Live probe backlog: `.scratch/m365-live-probes/` and capability probes:
 `.scratch/capability-expansion/` (all need a rested M365 on the local machine).
 
+**2026-08-09 research landed** — local models on 8 GB Blackwell:
+`docs/research/2026-08-09-local-models-8gb-blackwell.md` (STE, adversarially
+reviewed: `docs/research/notes/judge-review.md`; six lane notes under
+`docs/research/notes/`). Architecture verdict: keep; local models fit only at
+the verifier endpoint and a degraded-mode fallback route. New queues (all
+zero-M365 unless noted):
+
+- `.scratch/verifier-latency-bakeoff/` — 4 tickets (logprob-scorer probe →
+  template-kwargs contract → dev screen + freeze → single held-out gate).
+  Supersedes the latency angle of `execution-intent-verifier/04` with
+  candidates that ticket never covered (direct-answer models, thinking-off).
+- `.scratch/fallback-lane-telemetry/` — 1 ticket, passive throttle telemetry
+  (zero extra M365 traffic); decision gate for the fallback-lane option.
+- `.scratch/m365-live-probes/issues/09-custom-instructions-probe.md` —
+  ready-for-human; STANDBY until the user's local machine reconnect + multi-omp
+  session is up, then needs explicit execution authorization.
+
 3. **Architect channel**: ChatGPT architect hit rate limits and was parked;
    Command Code (herdr pane `w12:pE`, gpt-5.6-luna, session
    0c9d16a0-8cf4-4162-8784-3d54a5563e78) served as architect for the 5E–10A

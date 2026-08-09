@@ -2321,3 +2321,42 @@ stability sample.
 **Falsification.** A re-run flips the unsafe-FP count above 0; or a held-out
 case's gold is changed (unfreeze); or the merged path no longer matches
 `intent-verifier.ts` semantics (drift).
+
+## 17. Research graduation — local models on 8 GB Blackwell (2026-08-09) 🟡
+
+**Findings.** Six-lane research against primary sources, consolidated and
+adversarially reviewed (judge verdict NEEDS-REVISION, all findings applied).
+Core conclusions:
+
+1. **The fenced/shell-routing lever is independently corroborated.** BFCL
+   format study: small models swing 50–81.5 accuracy points across tool-call
+   formats; natural-language formats beat strict JSON by +18.4 pp
+   (arXiv 2510.14453). JSON-fails / fenced-works is a general small-model
+   property, not an M365 quirk. Any local fallback lane must reuse the fenced
+   contract.
+2. **Verifier latency (24.7 s median) is a model-architecture mismatch** —
+   27B reasoning model on a single-token job. Direct-answer candidates
+   estimate ~0.3–1.6 s (ESTIMATE; the prefill/decode split is unmeasured
+   until bake-off ticket 01). Cheapest test first: logprob scorer on the
+   existing endpoint (`top_logprobs:8` already available).
+3. **Custom Instructions is a real, probe-ready lever on this endpoint.**
+   Part of Copilot Memory (Exchange mailbox, server-side retrieval by oid);
+   two independent wire captures show `add_custom_instructions` on agent-less
+   turns; kuchris reference proxy sends it every turn; this proxy sends none.
+   Plumbing exists (`M365_EXTRA_OPTIONSSETS`).
+4. **8 GB fit:** hybrid-KV architectures are the 2026 meta (Qwen3.5-9B Q4 =
+   best measured all-rounder); Qwen3-Coder-30B-A3B expert-offload ~32 t/s;
+   dense layer-offload dead (4–11 t/s); stay on GGUF Q4–Q6 (NVFP4 llama.cpp
+   support contradicted between lanes — unresolved).
+
+**Evidence.** `docs/research/2026-08-09-local-models-8gb-blackwell.md` +
+notes `lane-a`..`lane-f` + `judge-review.md`. Queued work:
+`.scratch/verifier-latency-bakeoff/` (4 tickets), `.scratch/
+fallback-lane-telemetry/` (1 ticket), `.scratch/m365-live-probes/issues/
+09-custom-instructions-probe.md`.
+
+**Falsification.** The verifier conclusions die if the bake-off frozen
+candidate fails the held-out gate (unsafe FP > 0 or selAcc < 0.95). The
+custom-instructions conclusion dies if replicated flag-on/flag-off pairs show
+no effect. The fallback-lane option dies if passive telemetry shows throttle
+lulls are rare/short.
