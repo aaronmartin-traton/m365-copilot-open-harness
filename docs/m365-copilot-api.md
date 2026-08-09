@@ -396,12 +396,19 @@ When M365 dislikes a prompt — **looks like a jailbreak / prompt injection**, o
 M365 Copilot has **no native `tool_calls`**. We emulate it:
 
 1. Inject tool definitions into the prompt as compact text.
-2. Instruct the model to emit a JSON object `{"tool":"name","arguments":{…}}` (a fenced ```` ```json ```` block is fine — `parseToolCalls()` strips the fence).
+2. Instruct the model to emit a **fenced Markdown block** whose info-string is the tool
+   name (scalar args as `key: value` header lines, one free-form arg as the fence body, an
+   `old`/`new` pair as an aider-style `SEARCH/REPLACE` diff). The old JSON format
+   `{"tool":"name","arguments":{…}}` was **removed** — it scored 0/5 on real agentic
+   tasks (see [`tool-calling.md`](tool-calling.md)).
 3. Parse that back into OpenAI `tool_calls`. A synthetic `reply` tool lets the model return plain text in the same channel.
 
-**The catch:** with prompt-injection alone, M365 **ignores the instructions and answers in prose, or hallucinates tool *results*.** The thing that actually makes it comply is a **server-side system prompt**, delivered via a **Copilot Studio agent**.
+**The catch:** with prompt-injection alone, M365 **ignores the instructions and answers in prose, or hallucinates tool *results*.** The thing that actually makes it comply is a **server-side system prompt**, delivered via a **Copilot Studio agent**. The load-bearing lever on top of the agent is **shell-routing**: the model won't "act as an agent" but will reflexively write a ```` ```bash ```` block, which the proxy routes to the harness's shell tool (hypotheses §9 F12).
 
-> Empirically, the JSON *format* (bare vs ```` ```json ```` vs ```` ```tool_call ````) barely matters — all ~3/3 compliant **with the agent on**. The agent is the lever, not the syntax.
+> Superseded: the old JSON variants (bare vs ```` ```json ```` vs ```` ```tool_call ````) were
+> all ~3/3 compliant **with the agent on** — the agent, not the syntax, was the lever. That
+> finding is moot now: the JSON format itself was removed (0/5 on real agentic tasks), so
+> fenced-only + shell-routing is the one path.
 
 ### Model behaviour under tool calling (measurement traps)
 Two behaviours of the chat-tuned model distort any naïve "is it tool-calling yet?" read:

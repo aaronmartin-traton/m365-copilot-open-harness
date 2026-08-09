@@ -14,7 +14,7 @@ The verifier is **off by default**. Activation requires
 `M365_INTENT_VERIFIER=1` (or an explicit endpoint override), so existing
 deployments stay byte-identical. Flipping the default to on is a separate,
 reviewed step after live validation
-([ticket 01-02](.scratch/execution-intent-verifier/issues/01-live-validation.md)).
+([ticket 01-02](../../.scratch/execution-intent-verifier/issues/01-live-validation.md)).
 
 ## Why fail-closed
 
@@ -46,7 +46,7 @@ byte-identical to `prompts/p4-minimal.txt`.
 ## Open alternatives
 
 1. Live validation on the local machine (real M365 threads, cache hit/miss, no
-   throttle interaction) — [verifier/01](./../execution-intent-verifier/issues/01-live-validation.md).
+   throttle interaction) — [verifier/01](../../.scratch/execution-intent-verifier/issues/01-live-validation.md).
 2. Default-on flip after live validation — separate approval.
 3. Latency engineering (caching, pipelining, a faster verifier) — the
    remaining architectural constraint is latency, not safety.

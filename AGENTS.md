@@ -154,8 +154,10 @@ bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
   missing or expired, run `bun packages/proxy/bin/m365-login.mjs` interactively and
   complete Microsoft's password/MFA flow in the browser.
 - **Mind the quota**: ~600 messages **per conversation**, plus account-level throttling.
-  Don't burn it on loops. A "rate limited / empty response" is often actually a
-  `Disengaged` refusal (see the API doc), not throttling.
+  Don't burn it on loops. An empty response is **not** automatically a `Disengaged`
+  refusal — inspect the frame: `messageType:"Disengaged"` is the content filter, while an
+  empty reply with **no** `Disengaged` frame (`ReferencesListComplete`) is thread-rate
+  throttle (F13; see the API doc).
 
 ## Gotchas to know before you "fix" something
 
@@ -187,9 +189,11 @@ bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
   counter resets each thread. A bench that opens one fresh conversation per task burns the
   thread budget fast; a real pi session (one long thread, many messages) is fine. When
   everything starts empty-503-ing, it's thread-throttle, **not** the Disengaged content
-  filter (check: no `messageType:"Disengaged"` → it's throttle). **A fresh login (move
-  `msal-cache.json` aside, restart → new tokens) clears it.** Space experiment runs; don't
-  loop new conversations.
+  filter (check: no `messageType:"Disengaged"` → it's throttle). **A fresh login does NOT
+  clear it** — throttle is `oid`-keyed, so a new token lands in the same identity-level
+  bucket (API doc §2/§7, hypotheses §11 H-R1); the "recovery" F13 saw was the idle time
+  the login+restart forced. The proxy paces turns via degradation backoff (`M365_NO_BACKOFF`
+  to disable) instead of auto-reauth. Space experiment runs; don't loop new conversations.
 - The `nativeclient` OAuth redirect bounces to `/common/wrongplace`; the auth code is
   scraped from the navigation request, not a settled URL.
 

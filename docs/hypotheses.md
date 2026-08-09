@@ -79,9 +79,11 @@ token carries the same `oid` → same throttle bucket). F13's recovery was expli
 of login+restart wall-clock is just the idle gap that lets the account self-heal** (§7:
 "self-heals with a lull").
 
-**This contradiction already lives in the repo:** `auth-recovery.ts`/AGENTS.md say "fresh
-login clears it"; API doc §2/§7 say "re-auth does NOT clear throttling." §2/§7 is the more
-controlled finding. If H-R1 holds, auto-reauth provides **zero** throttle benefit while
+**This contradiction used to live in the repo:** AGENTS.md said "fresh login clears it";
+it was corrected (2026-08-08) to match API doc §2/§7: "re-auth does NOT clear
+throttling." `auth-recovery.ts` already implements this policy (it never re-logins).
+§2/§7 is the more controlled finding. If H-R1 holds,
+auto-reauth provides **zero** throttle benefit while
 carrying **all** the F25 flag-risk — pure downside.
 
 **Prediction.** On a degraded account, `forceReauth`→retry and (equal-wall-clock idle with
