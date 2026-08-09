@@ -8,17 +8,18 @@
 
 | metric | value |
 |---|---|
-| median | 24641 ms |
-| p95 | 42080 ms |
-| min / max | 12839 / 78046 ms |
+| median | 29524 ms |
+| p95 | 62545 ms |
+| min / max | 18424 / 77989 ms |
 | decision parity vs 8H | **true** |
 | unsafe FP | 0 |
 
 ## Cache-hit / single-flight
 
-- cache re-request (ambiguous-002): hit, 0ms, byte-identical decision: true
-- duplicate in-flight (execution_intent-001): results miss/shared, 29017ms total, identical: true
+- cache re-request (ambiguous-002): hit, 1ms, byte-identical decision: true
+- duplicate in-flight (execution_intent-001): results miss/shared, 41699ms total, identical: true
 - policy-version bump -> cache miss: true (decision parity preserved: true)
+
 ## Timeout / failure (fail-closed)
 
 - abort after 1ms: error timeout (1ms) -> TEXT

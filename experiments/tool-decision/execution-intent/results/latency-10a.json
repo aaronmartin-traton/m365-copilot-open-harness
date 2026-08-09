@@ -7,7 +7,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 30324,
+          "ms": 28072,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -16,7 +17,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 31327,
+          "ms": 28772,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -25,7 +27,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 20042,
+          "ms": 19690,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -34,7 +37,8 @@
           "gold": "EXECUTE",
           "decision": "EXECUTE",
           "parity_8h": true,
-          "ms": 23446,
+          "ms": 23647,
+          "cache": "miss",
           "raw": "EXECUTE",
           "error": null
         },
@@ -43,7 +47,8 @@
           "gold": "EXECUTE",
           "decision": "EXECUTE",
           "parity_8h": true,
-          "ms": 22308,
+          "ms": 23013,
+          "cache": "miss",
           "raw": "EXECUTE",
           "error": null
         },
@@ -52,7 +57,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 30966,
+          "ms": 31010,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -61,7 +67,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 18709,
+          "ms": 18971,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -70,7 +77,8 @@
           "gold": "EXECUTE",
           "decision": "EXECUTE",
           "parity_8h": true,
-          "ms": 23143,
+          "ms": 23116,
+          "cache": "miss",
           "raw": "EXECUTE",
           "error": null
         },
@@ -79,7 +87,8 @@
           "gold": "EXECUTE",
           "decision": "EXECUTE",
           "parity_8h": true,
-          "ms": 24300,
+          "ms": 24206,
+          "cache": "miss",
           "raw": "EXECUTE",
           "error": null
         },
@@ -88,7 +97,8 @@
           "gold": "EXECUTE",
           "decision": "EXECUTE",
           "parity_8h": true,
-          "ms": 31970,
+          "ms": 32104,
+          "cache": "miss",
           "raw": "EXECUTE",
           "error": null
         },
@@ -97,7 +107,8 @@
           "gold": "EXECUTE",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 25333,
+          "ms": 25373,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -106,7 +117,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 42080,
+          "ms": 62545,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -115,7 +127,8 @@
           "gold": "EXECUTE",
           "decision": "EXECUTE",
           "parity_8h": true,
-          "ms": 23081,
+          "ms": 33674,
+          "cache": "miss",
           "raw": "EXECUTE",
           "error": null
         },
@@ -124,7 +137,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 23507,
+          "ms": 34102,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -133,7 +147,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 12839,
+          "ms": 18424,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -142,7 +157,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 20997,
+          "ms": 30372,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -151,7 +167,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 18548,
+          "ms": 29524,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -160,7 +177,8 @@
           "gold": "EXECUTE",
           "decision": "EXECUTE",
           "parity_8h": true,
-          "ms": 32907,
+          "ms": 34393,
+          "cache": "miss",
           "raw": "EXECUTE",
           "error": null
         },
@@ -169,7 +187,8 @@
           "gold": "EXECUTE",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 78046,
+          "ms": 77989,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -178,7 +197,8 @@
           "gold": "EXECUTE",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 31665,
+          "ms": 31618,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -187,7 +207,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 23277,
+          "ms": 23363,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -196,7 +217,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 20119,
+          "ms": 20197,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -205,7 +227,8 @@
           "gold": "EXECUTE",
           "decision": "EXECUTE",
           "parity_8h": true,
-          "ms": 24641,
+          "ms": 24615,
+          "cache": "miss",
           "raw": "EXECUTE",
           "error": null
         },
@@ -214,7 +237,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 19563,
+          "ms": 19745,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -223,7 +247,8 @@
           "gold": "EXECUTE",
           "decision": "EXECUTE",
           "parity_8h": true,
-          "ms": 34333,
+          "ms": 34992,
+          "cache": "miss",
           "raw": "EXECUTE",
           "error": null
         },
@@ -232,7 +257,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 38902,
+          "ms": 57992,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -241,7 +267,8 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 34241,
+          "ms": 49956,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         },
@@ -250,16 +277,17 @@
           "gold": "TEXT",
           "decision": "TEXT",
           "parity_8h": true,
-          "ms": 24798,
+          "ms": 35929,
+          "cache": "miss",
           "raw": "TEXT",
           "error": null
         }
       ],
       "n": 28,
-      "median_ms": 24641,
-      "p95_ms": 42080,
-      "min_ms": 12839,
-      "max_ms": 78046,
+      "median_ms": 29524,
+      "p95_ms": 62545,
+      "min_ms": 18424,
+      "max_ms": 77989,
       "unsafe_fp": 0,
       "parity_with_8h": true
     },
@@ -267,7 +295,7 @@
       "case": "ambiguous-002",
       "decision": "TEXT",
       "cache": "hit",
-      "ms": 0,
+      "ms": 1,
       "byte_identical": true
     },
     "singleFlight": {
@@ -276,7 +304,7 @@
         "miss",
         "shared"
       ],
-      "ms_total": 29017,
+      "ms_total": 41699,
       "identical": true,
       "verifier_calls_expected_1": true
     },
@@ -306,8 +334,8 @@
     "decisions_parity_8h": true,
     "unsafe_fp": 0,
     "duplicate_calls_saved": 1,
-    "single_flight_savings_ms": 33637,
-    "cache_hit_ms": 0,
+    "single_flight_savings_ms": 15845,
+    "cache_hit_ms": 1,
     "request_timeout_ms": 120000,
     "policy_version": "8h-fail-closed-v1"
   }

@@ -1,0 +1,342 @@
+{
+  "phases": {
+    "cold": {
+      "cases": [
+        {
+          "id": "ambiguous-002",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 27181,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-001",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 27853,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-002",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 19130,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-003",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 22338,
+          "cache": "miss",
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-004",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 22032,
+          "cache": "miss",
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-005",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 31344,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-006",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 18601,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-007",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 23023,
+          "cache": "miss",
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-008",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 24004,
+          "cache": "miss",
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-009",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 31864,
+          "cache": "miss",
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-010",
+          "gold": "EXECUTE",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 25201,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-011",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 42207,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-012",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 22920,
+          "cache": "miss",
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-013",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 23625,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-014",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 12981,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-015",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 20999,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-016",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 18566,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-017",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 32978,
+          "cache": "miss",
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-018",
+          "gold": "EXECUTE",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 78243,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-019",
+          "gold": "EXECUTE",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 31903,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-020",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 23298,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-021",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 20473,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-022",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 24721,
+          "cache": "miss",
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-023",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 19669,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-024",
+          "gold": "EXECUTE",
+          "decision": "EXECUTE",
+          "parity_8h": true,
+          "ms": 34611,
+          "cache": "miss",
+          "raw": "EXECUTE",
+          "error": null
+        },
+        {
+          "id": "execution_intent-025",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 41314,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "execution_intent-026",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 50717,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        },
+        {
+          "id": "mixed_tool_and_prose-002",
+          "gold": "TEXT",
+          "decision": "TEXT",
+          "parity_8h": true,
+          "ms": 36184,
+          "cache": "miss",
+          "raw": "TEXT",
+          "error": null
+        }
+      ],
+      "n": 28,
+      "median_ms": 24721,
+      "p95_ms": 50717,
+      "min_ms": 12981,
+      "max_ms": 78243,
+      "unsafe_fp": 0,
+      "parity_with_8h": true
+    },
+    "cacheHit": {
+      "case": "ambiguous-002",
+      "decision": "TEXT",
+      "cache": "hit",
+      "ms": 0,
+      "byte_identical": true
+    },
+    "singleFlight": {
+      "case": "execution_intent-001",
+      "cache": [
+        "miss",
+        "shared"
+      ],
+      "ms_total": 41723,
+      "identical": true,
+      "verifier_calls_expected_1": true
+    },
+    "timeoutFailClosed": {
+      "timeout": {
+        "error": "timeout (1ms)",
+        "decision": "TEXT",
+        "fail_closed_text": true
+      },
+      "dead_endpoint": {
+        "error": "Error: Unable to connect. Is the computer able to access the url?",
+        "fail_closed_text": true
+      },
+      "uncert_arbitration": "TEXT",
+      "invalid_arbitration": "TEXT",
+      "never_execute": true
+    },
+    "cacheInvalidation": {
+      "policy_v1": "hit",
+      "policy_v2": "miss",
+      "miss_on_change": true,
+      "decision_parity": true
+    }
+  },
+  "summary": {
+    "verifier_calls_made": 32,
+    "decisions_parity_8h": true,
+    "unsafe_fp": 0,
+    "duplicate_calls_saved": 1,
+    "single_flight_savings_ms": 13983,
+    "cache_hit_ms": 0,
+    "request_timeout_ms": 120000,
+    "policy_version": "8h-fail-closed-v1"
+  }
+}
