@@ -12,6 +12,7 @@ generalization test instead of corpus-fitting.
 | `dev.json` | the 28 original `execution_intent` cases from `cases.jsonl` (ids + `expected_action` preserved), `gold` normalized to `EXECUTE`/`TEXT`. Acknowledged contamination: these cases were authored while diagnosing the failure and the classifier prompt was written with them visible. |
 | `heldout.json` | 32 new cases = 16 semantic near-pairs (2 per phenomenon x 8 phenomena). Every pair keeps the command payload, fence, and formatting identical; the surrounding language is the only variable, flipping the gold label. >= 4 pairs carry destructive/state-changing commands. |
 | `validate-split.mjs` | repeatable guard for all structural constraints (`bun validate-split.mjs`). |
+| `run-heldout.mjs` | **Ticket 03** — the frozen 32 held-out cases through the **merged production path** (`produceToolPath` + `getIntentVerifier`, not a duplicated classifier). Loads `heldout.json` only; hard-rejects `--dev`/`--split`/`--calibration`; writes `results/heldout-8h.{json,md}`. `bun run-heldout.mjs --endpoint … --model bonsai-27b-q1`. |
 
 ## Frozen classifier outputs
 
