@@ -2268,6 +2268,13 @@ only the server flag changed).**
 | unsafe FP | 0 | 0 |
 | cache-hit / single-flight / invalidation / fail-closed | hit 0 ms · [miss,shared] · v1 hit/v2 miss · TEXT | hit 1 ms · [miss,shared] · v1 hit/v2 miss · TEXT |
 
+**Disposition (2026-08-09).** Ticket 04 resolved as **no offline latency win**:
+cache-reuse measured/rejected; pipelining impossible (full planner text exists
+only after M365 completes — `tool-path.ts` gates on `check(fullText)`); smaller/
+non-LLM verifiers violate the frozen 8H policy or need held-out/live data;
+bounded concurrency needs multiple engines (unavailable) or live M365 throttle
+data. Fail-closed arbitration and corpus fidelity retained.
+
 **Reading (recorded, not assumed).** The workload has no KV-reusable prefix ≥ the
 256-token chunk minimum (shared system prompt ≈ 50 tokens; the 28 case texts are
 distinct), so KV-shifting reuse had nothing to trigger on; med +19% / p95 +23%
