@@ -10,8 +10,35 @@ fail-closed design** (verifier-authority: only Bonsai may authorize EXECUTE).
 The 9H positive-evidence override was rejected (leaves `execution_intent-010`
 unresolved by design).
 
-**2026-08-08 updates (PC `main` in sync with `lan/main`; GitHub
-`origin` untouched — local machine-evidence work pushes only to `lan/main`):**
+**2026-08-09 updates (PC `main` in sync with `lan/main`; GitHub `origin`
+untouched):**
+
+- **Held-out evaluation completed and integrated** (ticket 03): merged
+  production arbitration, n=32, 0 unsafe FP, selAcc 0.969, exeRec 0.938,
+  txtRec 1.0, cov/stbl 1.0, med 24.7 s / p95 35.9 s. Evidence + results
+  (`results/heldout-8h.{json,md}`) merged at `lan/main` `1a5175e`. Tickets
+  01–04 of `execution-intent-verifier` all resolved; queue complete.
+- **User directives (loop paused)**: M365 reauth available (keep request
+  volume low); prune M365 conversations created by this autonomous run
+  (evidence first; pre-existing untouched); OneDrive/grounding work
+  (H8.11/H8.12) deferred until proxy proven; two read-only turns AUTHORIZED
+  (usage-endpoint-hunt v2, admin-portal dig — zero chat threads).
+- **Laptop implementer channel CHANGED**: herdr pane `w8:p4` no longer hosts
+  the omp agent — its stale TUI was killed (PID 1152) during LiteLLM
+  recovery and relaunch attempts failed on mangled pane input. The local machine
+  implementer session file
+  (`~/.omp/agent/sessions/--K--Projects-m365-copilot-proxy--/2026-08-09T05-43-25-942Z_*.jsonl`)
+  is intact and resumable. A fresh empty pane `w8:p5` was split for a
+  relaunch; its spawned omp exited and the pane is a clean shell. Restore
+  the implementer via `herdr agent start <name> --kind omp --pane w8:p5`
+  after re-selecting the model (localmodel lane now = PC free-pool
+  `127.0.0.1:8788`, key env `FREE_POOL_API_KEY`; fresh omp processes only —
+  stale processes fail `No API key found`).
+- **Prune + read-only runs NOT yet executed** (local machine implementer was down):
+  the authorized conversation prune, usage-endpoint-hunt v2, and admin-portal
+  dig remain pending — see `.autonomous/DEFERRED.md` for the exact plans and
+  `.autonomous/PROGRESS.md` / `REPORT.md` for the audit trail (all three
+  gitignored by design).
 
 - **Verifier default-on shipped**: `verifierEnabled()` = enabled
   unless `M365_INTENT_VERIFIER=0`; explicit `=0` wins over all overrides.
@@ -52,6 +79,8 @@ unresolved by design).
 cwd `/path/to/m365-copilot-proxy`, HEAD = PC `main`); prompt via
 `herdr agent prompt w8:p4` (returns `agent_prompt_stalled` on idle panes —
 delivery still succeeds; poll with `herdr agent read w8:p4`).
+**2026-08-09: STALE — pane w8:p4 is now a bare shell; see the channel
+CHANGED note above for the resumable session file and relaunch recipe.**
 
 ## Findings to preserve
 
