@@ -135,12 +135,38 @@ const CACHE_CAP = 1000;
 const DEFAULT_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions";
 const DEFAULT_MODEL = "bonsai-27b-q1";
 
+/**
+ * Parse the optional `M365_INTENT_VERIFIER_TEMPLATE_KWARGS` env var (a JSON
+ * object forwarded as `chat_template_kwargs`). Unset/empty -> undefined (no
+ * kwargs, request unchanged). Invalid JSON throws at construction — a loud
+ * config error, never silently ignored and never fail-closed-as-UNCERTAIN.
+ */
+function parseTemplateKwargs(raw: string | undefined): Record<string, unknown> | undefined {
+  const value = raw?.trim();
+  if (!value) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error(
+      `intent-verifier: M365_INTENT_VERIFIER_TEMPLATE_KWARGS is not valid JSON: ${value}`,
+    );
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error(
+      `intent-verifier: M365_INTENT_VERIFIER_TEMPLATE_KWARGS must be a JSON object, got: ${value}`,
+    );
+  }
+  return parsed as Record<string, unknown>;
+}
+
 class BonsaiIntentVerifier implements IntentVerifier {
   private readonly endpoint: string;
   private readonly model: string;
   private readonly maxTokens: number;
   private readonly timeoutMs: number;
   private readonly retryBackoffMs: number;
+  private readonly templateKwargs: Record<string, unknown> | undefined;
   private readonly promptHash: string;
 
   /** LRU decision cache: full cache-key -> entry. Cap 1000 entries. */
@@ -162,6 +188,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
     this.maxTokens = Math.max(1, Number(env.M365_INTENT_VERIFIER_MAX_TOKENS) || 2048);
     this.timeoutMs = Math.max(1, Number(env.M365_INTENT_VERIFIER_TIMEOUT_MS) || 120000);
     this.retryBackoffMs = Math.max(0, Number(env.M365_INTENT_VERIFIER_RETRY_BACKOFF_MS) || 15000);
+    this.templateKwargs = parseTemplateKwargs(env.M365_INTENT_VERIFIER_TEMPLATE_KWARGS);
     this.promptHash = sha256(INTENT_VERIFIER_PROMPT);
   }
 
@@ -285,6 +312,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
           temperature: 0,
           seed: 42,
           max_tokens: this.maxTokens,
+          ...(this.templateKwargs ? { chat_template_kwargs: this.templateKwargs } : {}),
         }),
         signal: controller.signal,
       });

@@ -4,6 +4,7 @@ import {
   getDegradationBackoffState,
   getAgentAvailability,
   isDegradationBackoff,
+  getThrottleEventCounts,
 } from "@m365-copilot/core";
 import { handleChatCompletion } from "./handler.js";
 import { SessionPool } from "./session-pool.js";
@@ -79,6 +80,7 @@ export function buildHealthPayload(pool?: SessionPool, reaper?: { lastRunAt: num
       until: backoff.backoffUntil,
       level: backoff.level,
       recentEmptyConversations: new Set(backoff.empties.map((entry) => entry.conv)).size,
+      telemetry: getThrottleEventCounts(),
     },
     temporaryChat: process.env.M365_TEMPORARY_CHAT === "1",
     toolModel: process.env.M365_TOOL_MODEL?.trim() || null,

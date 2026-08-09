@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { createLogger } from "./log.js";
+import { emitThrottleEvent, hashConversationId } from "./throttle-telemetry.js";
 
 const log = createLogger("backoff");
 
@@ -162,23 +163,60 @@ function saveBackoffState(state: BackoffState): void {
   } catch {}
 }
 
+// Backoff window start/end timestamps for the telemetry `durationMs` on exit.
+// A controller may re-arm (escalate) while active; exit is when a window stops
+// being the active backoff state. We track the last opened window here so the
+// exit event can report how long it was in force.
+let backoffEnteredAt = 0;
+
 const defaultController = createBackoffController({
   windowMs: Number(process.env.M365_BACKOFF_WINDOW_MS ?? 120_000),
   threshold: Number(process.env.M365_BACKOFF_THRESHOLD ?? process.env.M365_REAUTH_EMPTY_THRESHOLD ?? 3),
   baseCooldownMs: Number(process.env.M365_BACKOFF_BASE_MS ?? 90_000),
   maxCooldownMs: Number(process.env.M365_BACKOFF_MAX_MS ?? 600_000),
   initialState: loadBackoffState(),
-  onStateChange: saveBackoffState,
-  onTrigger: ({ distinctConversations, cooldownMs, level }) =>
+  onStateChange: (state) => {
+    saveBackoffState(state);
+    // Telemetry: emit backoff-exit when a window that was active stops being
+    // the state (level dropped or the window elapsed). Passive — never affects
+    // the request path.
+    if (backoffEnteredAt > 0 && state.level === 0) {
+      emitThrottleEvent({
+        ts: new Date().toISOString(),
+        event: "backoff-exit",
+        durationMs: Date.now() - backoffEnteredAt,
+      });
+      backoffEnteredAt = 0;
+    }
+  },
+  onTrigger: ({ distinctConversations, cooldownMs, level }) => {
+    backoffEnteredAt = Date.now();
+    emitThrottleEvent({
+      ts: new Date().toISOString(),
+      event: "backoff-enter",
+      level,
+      backoffUntil: Date.now() + cooldownMs,
+    });
     log.info(
       `Degradation backoff (level ${level}): ${distinctConversations} empty responses across distinct ` +
       `conversations — pacing new turns for ~${Math.round(cooldownMs / 1000)}s to let the account self-heal ` +
       `(H-R1: a re-login would NOT clear this and would raise our detection profile). Disable with M365_NO_BACKOFF=1.`,
-    ),
+    );
+  },
 });
 
 /** Record a request outcome for the global degradation-backoff policy. No-op if disabled. */
 export function noteRequestOutcome(empty: boolean, conversationId: string): void {
+  // Passive telemetry at the empty-throttle detection site (no new request
+  // logic). Records even when the backoff policy is disabled (M365_NO_BACKOFF):
+  // the telemetry decision-gate wants lull frequency regardless of policy state.
+  if (empty) {
+    emitThrottleEvent({
+      ts: new Date().toISOString(),
+      event: "empty-throttle",
+      convIdHash: hashConversationId(conversationId || "anon"),
+    });
+  }
   if (disabled()) return;
   defaultController.note(empty, conversationId);
 }

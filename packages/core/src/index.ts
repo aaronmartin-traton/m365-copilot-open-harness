@@ -18,6 +18,14 @@ export {
   type BackoffState,
 } from "./auth-recovery.js";
 
+export {
+  emitThrottleEvent,
+  getThrottleEventCounts,
+  hashConversationId,
+  type ThrottleEvent,
+  type ThrottleEventType,
+} from "./throttle-telemetry.js";
+
 export { getOrCreateAgent, getAgentAvailability } from "./agent.js";
 
 export {

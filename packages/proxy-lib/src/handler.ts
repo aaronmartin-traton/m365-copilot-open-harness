@@ -8,6 +8,8 @@ import {
   awaitDegradationBackoff,
   getImageArtifactToken,
   fetchImageBytes,
+  emitThrottleEvent,
+  hashConversationId,
   type CapturedImage,
 } from "@m365-copilot/core";
 import { ChatCompletionRequest } from "./schemas.js";
@@ -207,6 +209,12 @@ export async function handleChatCompletion(
         // M365_NO_DISENGAGE_RETRY.
         if (hasTools && !disengageRetried && !process.env.M365_NO_DISENGAGE_RETRY) {
           disengageRetried = true;
+          emitThrottleEvent({
+            ts: new Date().toISOString(),
+            event: "disengaged",
+            framing: "softened",
+            retryOutcome: "softened-retry",
+          });
           session.newConversation();
           text = contextCompiler.compileFull({
             messages: body.messages,
@@ -220,6 +228,12 @@ export async function handleChatCompletion(
           continue;
         }
         log.info("Upstream Disengaged — failing fast (no retry) to preserve quota");
+        emitThrottleEvent({
+          ts: new Date().toISOString(),
+          event: "disengaged",
+          framing: disengageRetried ? "softened" : "default",
+          retryOutcome: "fail-fast",
+        });
         return {
           error: jsonResponse(502, {
             error: {
@@ -237,6 +251,13 @@ export async function handleChatCompletion(
       // quick retries instead.
       const t = copilotStream.throttle;
       if (t && t.current >= t.max) {
+        emitThrottleEvent({
+          ts: new Date().toISOString(),
+          event: "at-limit",
+          convIdHash: hashConversationId(convId),
+          current: t.current,
+          max: t.max,
+        });
         return { error: rateLimitResponse(t) };
       }
       if (attempt < MAX_RETRIES) {

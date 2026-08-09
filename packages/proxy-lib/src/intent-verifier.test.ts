@@ -51,6 +51,7 @@ function disableGate(): void {
   delete process.env.M365_INTENT_VERIFIER_TIMEOUT_MS;
   delete process.env.M365_INTENT_VERIFIER_MAX_TOKENS;
   delete process.env.M365_INTENT_VERIFIER_RETRY_BACKOFF_MS;
+  delete process.env.M365_INTENT_VERIFIER_TEMPLATE_KWARGS;
 }
 
 /** Stub the global fetch. `handler` returns a Response or throws. */
@@ -183,6 +184,60 @@ describe("intent-verifier — arbitration table (stub fetch)", () => {
     const r = await getIntentVerifier()!.check("identity");
     expect(r.decision).toBe("TEXT");
     expect(r.error).toBe("model-mismatch");
+  });
+});
+
+describe("intent-verifier — chat_template_kwargs forwarding", () => {
+  beforeEach(() => {
+    enableGate();
+    resetIntentVerifier();
+  });
+  afterEach(() => {
+    disableGate();
+    resetIntentVerifier();
+    vi.unstubAllGlobals();
+  });
+
+  /** Echo the requested body back so the forwarding is assertable. */
+  function bodyEchoResponse(): Response {
+    return new Response(
+      JSON.stringify({
+        model: process.env.M365_INTENT_VERIFIER_MODEL || "bonsai-27b-q1",
+        choices: [{ message: { content: "EXECUTE" } }],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  }
+
+  it("forwards chat_template_kwargs when the env var is set", async () => {
+    process.env.M365_INTENT_VERIFIER_TEMPLATE_KWARGS = '{"enable_thinking":false}';
+    let sent: unknown = null;
+    stubFetch(async (_url, init) => {
+      sent = JSON.parse(String(init.body));
+      return bodyEchoResponse();
+    });
+    await getIntentVerifier()!.check("kwargs please");
+    expect(sent).toMatchObject({ chat_template_kwargs: { enable_thinking: false } });
+  });
+
+  it("omits chat_template_kwargs when unset (request unchanged)", async () => {
+    let sent: unknown = null;
+    stubFetch(async (_url, init) => {
+      sent = JSON.parse(String(init.body));
+      return bodyEchoResponse();
+    });
+    await getIntentVerifier()!.check("no kwargs");
+    expect(sent).not.toHaveProperty("chat_template_kwargs");
+  });
+
+  it("throws at construction on invalid JSON, never silently ignored", () => {
+    process.env.M365_INTENT_VERIFIER_TEMPLATE_KWARGS = "not json {";
+    expect(() => getIntentVerifier()).toThrow(/not valid JSON/);
+  });
+
+  it("throws at construction when the value is not a JSON object", () => {
+    process.env.M365_INTENT_VERIFIER_TEMPLATE_KWARGS = "[1,2,3]";
+    expect(() => getIntentVerifier()).toThrow(/must be a JSON object/);
   });
 });
 
