@@ -1,6 +1,6 @@
 # NEXT.md — M365 Copilot Proxy
 
-> Snapshot as of 2026-08-07.
+> Snapshot as of 2026-08-08.
 
 ## Session handoff
 
@@ -8,7 +8,50 @@ The execution-intent experiment loop ran Steps 4A–10A to a clean stopping
 point (all pushed to `origin/main`). The approved safety policy is the **8H
 fail-closed design** (verifier-authority: only Bonsai may authorize EXECUTE).
 The 9H positive-evidence override was rejected (leaves `execution_intent-010`
-unresolved by design). No held-out inference has been authorized.
+unresolved by design).
+
+**2026-08-08 updates (PC `main` in sync with `lan/main`; GitHub
+`origin` untouched — local machine-evidence work pushes only to `lan/main`):**
+
+- **Verifier default-on shipped**: `verifierEnabled()` = enabled
+  unless `M365_INTENT_VERIFIER=0`; explicit `=0` wins over all overrides.
+  Ticket `execution-intent-verifier/02-default-on` resolved.
+- **Live validation resolved** (ticket 01, local machine commits): corrected cache
+  semantics — cache key `sha256(model|promptHash|responseHash|policyVersion)`,
+  byte-identical response text required, process-lifetime LRU (cap 1000);
+  recovery EXECUTE (`cmd /c echo …`) proven end-to-end.
+- **Held-out evaluator shipped**: 0 unsafe FP,
+  selAcc 0.969, exeRec 0.938, txtRec 1.0, cov 1.0, stbl 1.0, 15/16 pairs,
+  med 24.7s / p95 35.9s. Ticket 03 ready-for-agent.
+- **Latency dispositioned** (ticket 04): candidates 2/3/4 rejected offline
+  (input-timing impossible / frozen-policy / hardware+M365-gated); candidate 1
+  (KV-reuse) measured-and-rejected on local machine. Resolved: no offline latency win.
+- **EOL portability fixed**: `INTENT_VERIFIER_PROMPT` canonical
+  LF; drift test normalizes both sides; LF/CRLF regression test.
+- **8 ticket preflights delivered to local machine implementer (read-only), all
+  DEFERRED pending execution authorization** — see `Where the loop stands` +
+  `Preflight backlog` below. No M365/edit/fetch/push by locally architect.
+
+## Preflight backlog (2026-08-08, all local machine-validated, DEFERRED)
+
+| Ticket | Status | Key findings |
+|---|---|---|
+| `capability-expansion/01-code-interpreter` | approved-with-notes | H8.1 already shipped (agent-less `cwc_*` set); H8.2 delta = agent `gptCapabilities.codeInterpreter:true` + instructions-marker bump (name-hash gotcha) |
+| `capability-expansion/04-model-selection` | validated | H8.6 shipped; H8.7 rides per-request `clientOverrides.capabilities` (not createBot); H8.8 = `oneTurn` `extraAllowed` (zero delta) |
+| `capability-expansion/05-grounding-multimodal` | validated | 4 levers; H8.10 upload flow already built in `images.ts`; H8.11/H8.12 need a real tenant file |
+| `m365-live-probes/01-disengaged-calibration` | validated | DEA caveat: `dea_violation` flat ~1e-8, absent at threshold → rung-index threshold, not a dial |
+| `m365-live-probes/02-tool-compliance-repeat` | validated | core-direct = verifier-bypass (raw model compliance); needs order-rotation wrapper; repeat 2 (20 threads) fits |
+| `m365-live-probes/03-usage-endpoint-hunt-v2` | validated | v2 = v1 + browser headers + in-script redaction (v1 writes raw 800-char bodies); 0 M365 threads |
+| `m365-live-probes/04-inputmethod-experiment` | validated | needs `oneTurn` inputMethod/experienceType param delta; 3×2 core matrix, 12 threads |
+| `m365-live-probes/05-tone-comparison` | validated | harness hardcodes tone (`:151`) → needs `--model` argv; agent vs agent-less path split; DeepLeo confounder |
+| `m365-live-probes/06-transfer-token-probe` | validated | token constructible (`base64 FullConversation`); `oneTurn` closed → extraParams/extraMessageFields delta; token_sha256-only redaction |
+| `m365-live-probes/07-admin-portal-dig` | validated | admin access likely DENIED (token `roles: []`); `loadSecrets` TOTP path is dead (0 hits src+dist); persistent browser profile is the live auth |
+| `m365-live-probes/08-run-green-probes` | validated | 4-probe session ~13–14 threads; redaction needed in `token-candidates.json` + `raw-frames.ndjson` (not sent.json); tool-compliance deferred per ticket 02 |
+
+**Laptop-implementer channel**: herdr pane `w8:p4` (omp collab session,
+cwd `/path/to/m365-copilot-proxy`, HEAD = PC `main`); prompt via
+`herdr agent prompt w8:p4` (returns `agent_prompt_stalled` on idle panes —
+delivery still succeeds; poll with `herdr agent read w8:p4`).
 
 ## Findings to preserve
 
@@ -32,11 +75,9 @@ unresolved by design). No held-out inference has been authorized.
 - **The remaining architectural constraint is latency, not safety.** The
   verifier is too slow for an unqualified request-path gate without caching,
   pipelining, bounded concurrency, or a faster verifier approach.
-- **10A verifier is now IMPLEMENTED (opt-in).** `packages/proxy-lib/src/
-  intent-verifier.ts` gates tool execution on the local verifier's EXECUTE when
-  `M365_INTENT_VERIFIER=1` (or an endpoint override is set); default OFF keeps
-  existing behavior byte-identical. Next step per 10A: separately approve
-  flipping default-on after live validation, or pick a latency fix.
+- **10A verifier is now IMPLEMENTED and DEFAULT-ON.** `packages/proxy-lib/src/
+  intent-verifier.ts` gates tool execution on the local verifier's EXECUTE
+  unless `M365_INTENT_VERIFIER=0` (explicit opt-out wins over all overrides).
 
 ## Where the loop stands
 
@@ -58,14 +99,17 @@ The queued work now lives as tickets in `.scratch/` (see
 feature tracks the 8H production path:
 
 - `.scratch/execution-intent-verifier/issues/01-live-validation.md` —
-  **live validation on the local machine** (real M365, EXECUTE flows, cache hits,
-  no throttle interaction).
+  **RESOLVED** (2026-08-08, local machine evidence merged): corrected cache
+  semantics + recovery EXECUTE proven.
 - `.scratch/execution-intent-verifier/issues/02-default-on.md` —
-  flip the gate default ON (blocked by 01 + separate approval).
+  **RESOLVED**: default now ON (`verifierEnabled()` unless
+  `M365_INTENT_VERIFIER=0`).
 - `.scratch/execution-intent-verifier/issues/03-held-out-eval.md` —
-  held-out evaluation, remains unauthorized (blocked by 02).
+  **ready-for-agent**: evaluator + evidence merged (0 unsafe FP, selAcc
+  0.969); acceptance open for the hypotheses.md log line.
 - `.scratch/execution-intent-verifier/issues/04-latency-engineering.md` —
-  the latency direction (caching, pipelining, faster verifier).
+  **RESOLVED**: no offline latency win (candidates 2/3/4 dispositioned,
+  KV-reuse measured-and-rejected).
 
 Live probe backlog: `.scratch/m365-live-probes/` and capability probes:
 `.scratch/capability-expansion/` (all need a rested M365 on the local machine).
