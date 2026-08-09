@@ -2238,8 +2238,13 @@ mechanism is separately evidenced offline (10A) but was **not reproduced live**.
 - **Identifiers:** promptHash `04d91374…`; responseHashes `d26a1bbd…` (fail-closed),
   `98f93d05…` (recovery); conversation `live-validation-r2-2026-08-09-0740`.
 
-**Status.** Ticket 01 remains **ready-for-human (not resolved)**. n=1; the cache-mechanism
-gap needs no fresh M365 traffic (offline-provable).
+**Status.** Ticket 01 **resolved** (2026-08-09) under the corrected interpretation:
+the verifier cache is keyed by **byte-identical planner response text and
+verifier-process lifetime** — not repeated user requests or thread identity. The
+cache criterion is met by the deterministic 10A offline hit (0 ms, identical
+body); the persistent live two-turn run (one proxy, one conversation, same
+request twice) recorded `cache=miss`→EXECUTE then raw text (M365 re-emitted no
+tool-shaped text), consistent with that semantics. Live n=2.
 
 **Falsification.** Live repeat within one thread produces `cache=hit` with a byte-identical
 body; or verifier-down fails OPEN (any execution); or the do-not-run turn executes with the
