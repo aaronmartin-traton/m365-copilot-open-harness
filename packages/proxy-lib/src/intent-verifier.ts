@@ -22,16 +22,18 @@ import { createLogger } from "@m365-copilot/core";
 const log = createLogger("intent-verifier");
 
 // ---------------------------------------------------------------------------
-// Frozen verifier prompt (byte-for-byte identical to the experiment artifact;
+// Frozen verifier prompt (content-identical to the experiment artifact;
+// line endings normalized to LF so the identity guard is checkout-portable;
 // guarded by a drift test in intent-verifier.test.ts).
 // ---------------------------------------------------------------------------
 /**
- * Byte-identical to experiments/tool-decision/execution-intent/prompts/p4-minimal.txt
- * (including its trailing line ending). The drift guard test compares this
- * constant against the artifact file.
+ * Content-identical to experiments/tool-decision/execution-intent/prompts/p4-minimal.txt
+ * (logical text equal to the artifact; trailing newline canonicalized to LF —
+ * git may check the file out CRLF or LF depending on autocrlf). The drift guard
+ * test compares this constant against the artifact file, normalizing both sides.
  */
 export const INTENT_VERIFIER_PROMPT =
-  "Classify whether command/tool-shaped content in this assistant response is intended to be executed now. EXECUTE = perform it now. TEXT = show/discuss it without performing it. UNCERTAIN = insufficient evidence. Return exactly one token: EXECUTE, TEXT, or UNCERTAIN.\r\n";
+  "Classify whether command/tool-shaped content in this assistant response is intended to be executed now. EXECUTE = perform it now. TEXT = show/discuss it without performing it. UNCERTAIN = insufficient evidence. Return exactly one token: EXECUTE, TEXT, or UNCERTAIN.\n";
 
 export type IntentDecision = "EXECUTE" | "TEXT";
 export type IntentCache = "hit" | "miss" | "shared";

@@ -277,9 +277,26 @@ describe("intent-verifier — concurrency & prompt guard", () => {
     expect(maxActive).toBe(1);
   });
 
-  it("embedded prompt is byte-identical to the frozen artifact", () => {
+  it("embedded prompt is content-identical to the frozen artifact (EOL-portable)", () => {
     const onDisk = readFileSync(PROMPT_FILE, "utf-8");
-    expect(INTENT_VERIFIER_PROMPT).toBe(onDisk);
+    // Canonicalize CRLF -> LF on BOTH sides: git checks the artifact out CRLF
+    // when autocrlf=true (Windows) and LF otherwise. The prompt's trailing
+    // newline is semantically irrelevant, so identity must hold either way.
+    expect(INTENT_VERIFIER_PROMPT).toBe(onDisk.replace(/\r\n/g, "\n"));
+  });
+
+  it("frozen-prompt identity holds on both LF and CRLF checkouts (regression)", () => {
+    // Same logical text, exercised through each checkout's line-ending form:
+    // the artifact is LF in the repo blob; autocrlf=true renders it CRLF on
+    // disk. Both must canonicalize to the embedded constant. Derive both forms
+    // from the on-disk artifact so this also re-asserts content identity.
+    const onDisk = readFileSync(PROMPT_FILE, "utf-8");
+    const asLf = onDisk.replace(/\r\n/g, "\n");
+    const asCrlf = asLf.replace(/\n/g, "\r\n");
+    expect(INTENT_VERIFIER_PROMPT).toBe(asLf);
+    expect(INTENT_VERIFIER_PROMPT).toBe(asCrlf.replace(/\r\n/g, "\n"));
+    // Sanity: the two rendered forms differ only by line ending.
+    expect(asLf).not.toBe(asCrlf);
   });
 
   it("emits the full observability record on every check (decision H)", async () => {

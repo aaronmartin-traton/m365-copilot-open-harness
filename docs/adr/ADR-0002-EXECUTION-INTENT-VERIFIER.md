@@ -40,7 +40,9 @@ rejected — it deliberately leaves `execution_intent-010` unresolved.
 `packages/proxy-lib/src/intent-verifier.ts` (`getIntentVerifier()`),
 wired into the tool path after the one-call-per-turn gate, before
 `registerToolCalls`; non-EXECUTE → raw text. `INTENT_VERIFIER_PROMPT` is
-byte-identical to `prompts/p4-minimal.txt`.
+logically identical to `prompts/p4-minimal.txt` (trailing newline
+canonicalized to LF so the identity guard is portable across CRLF/LF
+checkouts; content preserved).
 
 ## Open alternatives
 
