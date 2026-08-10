@@ -39,6 +39,12 @@ holds the issue tracker (one file per ticket, `Status:`/`Blocked by:` lines).
 Start new work by claiming the earliest unblocked ticket. See
 `docs/agents/issue-tracker.md` for the format and wayfinding rules.
 
+**How this project operates across machines:** read
+[`docs/agents/session-workflow.md`](docs/agents/session-workflow.md) before
+starting a session. It covers locally ↔ local machine split, the LAN sync branch
+model, the pane/collab topology, the verification ladder, the M365 thread
+budget, the execution-safety stack, and the docs policy.
+
 ## Operating principles (read first)
 
 Hard-won defaults for working on this proxy.
