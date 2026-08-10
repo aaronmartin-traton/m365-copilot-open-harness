@@ -50,12 +50,17 @@ default; this path is explicitly opt-in.
   `omp-attestation-gate.ts`, `codex-hooks.json` (PreToolUse approve|block),
   `attestation-helper.mjs`.
 - **Implementation state**: tickets 01 (gate) and 02 (adapters) resolved,
-  unit-tested. **Uncommitted** — do not commit until the LAN branch review
-  (below) clears, then one local commit, then merge/push only after secret
-  scan + pre-push hook.
+  unit-tested. Committed on `main`
+  (`feat(proxy-lib): opt-in client-attested execution gate + harness adapters`)
+  and merged to the local machine.
+- **Documentation**: the full wire contract (payload, HMAC construction, state
+  machine, failure modes, worked example) is in `docs/m365-copilot-api.md` §11
+  *Client-attested execution (opt-in)*; adapter setup lives in
+  `client-adapters/README.md` (cross-referenced, not duplicated).
 - **Next**: manual end-to-end smoke test of the attestation loop (register →
-  AUTHORIZED → tool result accepted) through a real harness; document the
-  handshake in `docs/m365-copilot-api.md` or a new doc once verified.
+  AUTHORIZED → tool result accepted) through a real harness. Auth-blocked on
+  locally as of 2026-08-09 (no `msal-cache.json`) — live M365 steps need a
+  human interactive login first.
 
 ## Next slice
 

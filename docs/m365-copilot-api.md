@@ -485,7 +485,186 @@ Evidence (`scripts/dataverse-bot-probe.mjs`, with a `<org>.crm4.dynamics.com/.de
 
 ---
 
-## 11. Quirks cheat-sheet
+## 11. Client-attested execution (opt-in)
+
+An **opt-in control plane** where a trusted local harness (pi, Oh My Pi, or Codex) attests one exact `bash` command to the loopback proxy **before** executing it. On success the proxy skips the 8H intent verifier for that single call — the latency win — and instead records the attestation as proof-of-authorization for the tool result. Nothing here changes M365 protocol framing (§3–§6), tool parsing (§10), or the default behavior: **every request that does not opt in keeps the 8H verifier**, byte-for-byte.
+
+**Boundary.** The proxy emits tool calls; the harness executes them. The proxy cannot force the client to run a command and cannot observe a native approval prompt. The adapter hook is the execution boundary — it must apply its own policy/UI, ask the loopback proxy to consume a one-time authorization for the exact command, and execute only after `{"decision":"allow"}`. The proxy's half of the contract is **admission control on the tool-result request** (fail closed) plus a proof record; it cannot undo a client execution.
+
+**A model cannot opt in by writing a fence.** Only the client sends the request headers, and only the hook can complete the signed attestation.
+
+### Enablers (proxy process)
+
+| Env var | Value | Effect |
+|---|---|---|
+| `M365_CLIENT_ATTESTATION` | `1` | Enables the gate. Any other value ⇒ gate disabled. |
+| `M365_ATTESTATION_SECRET` | shared secret | Required with the above; missing/blank ⇒ gate disabled. |
+
+When the gate is disabled the endpoint 404s and every request runs the 8H path — **no permissive fallback**.
+
+A request selects the path only when **both** headers are present (in addition to the enablers), on **every** request of the conversation:
+
+- `X-M365-Execution-Gate: attestation-v1`
+- `X-M365-Attestation-Client: pi` \| `omp` \| `codex`
+
+Any missing or invalid condition ⇒ 8H path. Both routes (`/v1/chat/completions`, `/v1/responses`) forward these headers into the handler (Nitro routes and the embeddable `createApp()` alike); only the standalone Nitro service serves the control endpoint itself.
+
+### Candidate lifecycle
+
+After parsing and normalizing a `bash` call — one-call-per-turn and reply-stripping already applied — the proxy registers an in-memory candidate **only when exactly one tool call survives**:
+
+| Stage | Trigger | Notes |
+|---|---|---|
+| `PENDING` | `register()` at emission (`tool-path.ts`) | `tool_call_id` = the proxy-issued `call_…` id; `command_sha256` = SHA-256 of the **exact `function.arguments.command` string emitted to the client** (binds Windows shell wrapping + parser normalization, not the source fence); expires 60 s after creation. |
+| `AUTHORIZED` | `attest()` on `POST /v1/attestations` | Only a `PENDING`, unexpired candidate with matching client + command digest flips. **Consumes the approval**: a second attestation for the same id fails. |
+| `RESULT_ACCEPTED` | `acceptToolResult()` on the next tool-result request | The result request must carry the id, unexpired, same client. Then the M365 turn continues. |
+
+Facts that matter:
+
+- **TTL 60 s** from registration; the endpoint also requires `|now − ts·1000| ≤ 60 s`, and nonces are dropped 60 s after use.
+- **Nonces are single-use** within the active window; replay is denied.
+- **Capacity 1,000 candidates**, fixed. A full registry makes `register()` fail ⇒ the call falls back to the 8H verifier (fail closed; authorization records are never evicted — the code comment says to raise the cap only if a real session exhausts it).
+- **State is in memory.** Process restart, eviction, expiry, unknown id, or any mismatch ⇒ deny. There is **no id-less fallback**: the proxy never infers a candidate from a command hash or a tool result.
+- `register()` refuses non-`bash` tools, multi-call turns, and duplicate ids ⇒ those keep the 8H path.
+
+### Endpoint contract
+
+`POST /v1/attestations` — **loopback-only** (peer must be `127.*`, `::1`, or `::ffff:127.*`). A forwarded address is rejected with 404 before the body is read. Served by the standalone Nitro service (`packages/proxy/routes/v1/attestations.post.ts`); the embeddable `createApp()` forwards the request headers but does not mount this route.
+
+Payload (`Content-Type: application/json`):
+
+```json
+{
+  "client": "pi",
+  "tool": "bash",
+  "tool_call_id": "call_…",
+  "command_sha256": "lowercase SHA-256 hex",
+  "ts": 1786263011,
+  "nonce": "base64url-random"
+}
+```
+
+| Field | Rule |
+|---|---|
+| `client` | `pi` \| `omp` \| `codex` |
+| `tool` | exactly `"bash"` |
+| `tool_call_id` | proxy-issued id, ≥ 1 char |
+| `command_sha256` | `/^[0-9a-f]{64}$/` — lowercase SHA-256 hex |
+| `ts` | integer Unix **seconds**, within 60 s of the server clock |
+| `nonce` | `/^[A-Za-z0-9_-]{16,256}$/` — random per request |
+
+Signature header — lowercase hex HMAC-SHA256 over **six lines, no trailing newline**:
+
+```text
+X-M365-Attestation-Sig: HMAC-SHA256(secret, client + "\n" + tool + "\n" + tool_call_id + "\n" + command_sha256 + "\n" + ts + "\n" + nonce)
+```
+
+The server checks, in order: nonce unused in window ⇒ `|now − ts·1000| ≤ 60 s` ⇒ valid signature (constant-time compare) ⇒ candidate exists and is `PENDING`, unexpired, same client, same `command_sha256`. Responses:
+
+| Status | Body |
+|---|---|
+| `200` | `{"decision":"allow"}` |
+| `400` | `{"error":{"type":"invalid_request_error",…}}` (schema) |
+| `403` | `{"error":{"type":"attestation_denied",…}}` |
+| `404` | `{"error":{"type":"not_found",…}}` (non-loopback **or** gate disabled) |
+
+### Tool-result acceptance
+
+When the gate is enabled, every not-yet-sent `role:"tool"` message in the next request (chat wire) — or `function_call_output` translated to `role:"tool"` (Responses wire) — must pass `acceptToolResult(tool_call_id, attestationClient)`, **or the request is rejected before any M365 traffic**:
+
+```json
+409 {"error":{"message":"Tool result has no matching client attestation","type":"attestation_required"}}
+```
+
+Details:
+
+- The **same two headers must be on the tool-result request too** — without them `attestationClient` is `undefined` and the client mismatch denies the result.
+- An id with **no candidate** passes (the gate only governs ids it registered); an id that exists but is not `AUTHORIZED`, is expired, or has a different client denies.
+- `RESULT_ACCEPTED` closes the loop as a **proof record only** — it does not prove a human approved, and it does not undo an execution.
+
+### Wire compatibility
+
+- Chat Completions: the emitted `tool_calls[].id` is the candidate id.
+- Responses: the emitted `function_call.call_id` is the same candidate id; `fc_…` item ids are **not** authorization identifiers.
+
+### Worked example
+
+1. Register the emitted command:
+
+```bash
+SECRET="<shared secret>"
+TS=$(date +%s)
+NONCE="$(openssl rand -base64 24 | tr '+/' '-_' | tr -d '=')"
+CMD='echo hello'
+SHA=$(printf '%s' "$CMD" | sha256sum | cut -d' ' -f1)
+SIG=$(printf 'pi\nbash\n%s\n%s\n%s\n%s' "call_<emitted-id>" "$SHA" "$TS" "$NONCE" \
+  | openssl dgst -sha256 -hmac "$SECRET" -hex | sed 's/^.*= //')
+
+curl -sS -X POST http://127.0.0.1:<proxy-port>/v1/attestations \
+  -H "Content-Type: application/json" \
+  -H "X-M365-Attestation-Sig: $SIG" \
+  -d "{\"client\":\"pi\",\"tool\":\"bash\",\"tool_call_id\":\"call_<emitted-id>\",\"command_sha256\":\"$SHA\",\"ts\":$TS,\"nonce\":\"$NONCE\"}"
+# → {"decision":"allow"}
+```
+
+2. Send the tool result back with the selection headers:
+
+```bash
+curl -sS http://127.0.0.1:<proxy-port>/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "X-M365-Execution-Gate: attestation-v1" \
+  -H "X-M365-Attestation-Client: pi" \
+  -d '{
+    "model": "<model>",
+    "messages": [
+      {"role":"user","content":"run echo hello"},
+      {"role":"assistant","tool_calls":[{"id":"call_<emitted-id>","type":"function","function":{"name":"bash","arguments":"{\"command\":\"echo hello\"}"}}]},
+      {"role":"tool","tool_call_id":"call_<emitted-id>","content":"hello"}
+    ],
+    "tools": [{"type":"function","function":{"name":"bash","parameters":{"type":"object","properties":{"command":{"type":"string"}}}}}]
+  }'
+```
+
+A result with a valid `AUTHORIZED` candidate continues the turn; one without it returns the 409 above.
+
+### Failure modes
+
+| Condition | Result |
+|---|---|
+| Forwarded (non-loopback) peer | 404 |
+| Gate disabled (env/secret missing) | 404; 8H path |
+| Invalid body | 400 |
+| Missing/bad signature, wrong secret | 403 |
+| `ts` older than 60 s | 403 |
+| Nonce replay | 403 |
+| Unknown `tool_call_id` | 403 |
+| Candidate not `PENDING` (double attestation) | 403 |
+| Client mismatch / `command_sha256` mismatch | 403 |
+| Tool result without `AUTHORIZED` candidate | 409 `attestation_required` |
+| Registry full (1,000) | `register()` fails ⇒ 8H path |
+| Process restart | in-memory state gone ⇒ denials |
+
+### Interaction with the 8H verifier
+
+The 8H verifier stays the default for **every** request that does not opt in. The bypass fires only when all of these hold: gate enabled (env), both headers present with a valid client, and `register()` succeeded for exactly one `bash` call. Any other case — a non-`bash` tool, a multi-call turn, a full registry, a duplicate id — runs the 8H `EXECUTE` check exactly as before (fail closed on non-`EXECUTE`).
+
+### Security model
+
+The shared secret authenticates a configured adapter to the local proxy. It is **not** a sandbox against code the user already permits to run as the same OS user — the feature shifts permission from the probabilistic 8H classifier to a trusted local harness only when the user explicitly configures that harness. The adapter remains responsible for blocking tool execution when the endpoint denies.
+
+### Sources
+
+- `packages/proxy-lib/src/attestation.ts` — schema, gate, HMAC construction (source of truth for the wire contract)
+- `packages/proxy-lib/src/tool-path.ts` — candidate registration + 8H bypass
+- `packages/proxy-lib/src/handler.ts` — tool-result acceptance (409)
+- `packages/proxy/routes/v1/attestations.post.ts` — loopback endpoint
+- `packages/proxy/routes/v1/chat/completions.post.ts`, `responses.post.ts` — header plumbing
+- `client-adapters/README.md` — reference adapters (pi / Oh My Pi / Codex)
+- `.scratch/client-attested-execution/spec.md` — design spec
+
+---
+
+## 12. Quirks cheat-sheet
 
 | # | Gotcha | Where |
 |---|---|---|
@@ -516,7 +695,7 @@ Evidence (`scripts/dataverse-bot-probe.mjs`, with a `<org>.crm4.dynamics.com/.de
 
 ---
 
-## 12. Source map
+## 13. Source map
 
 | File | Responsibility |
 |---|---|

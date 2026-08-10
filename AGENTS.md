@@ -167,6 +167,21 @@ bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
   is **shell-routing**: M365's chat model won't act-as-agent but will write a ```` ```bash ````
   block, which the proxy routes to the harness's shell tool. That + the per-request shell
   framing (`formatFencedToolDefinitions`) is what produces real loops. See docs/hypotheses.md §9.
+- **Shell-routing needs a shell tool in the request's `tools` array.** The proxy's
+  `findShellTool` only routes a fenced ```` ```bash ```` block to a tool whose name matches
+  `bash`/`sh`/`shell`/`run`/etc. — a tools array with only `read_file` parses as
+  `hasToolCalls=false` and the fence is dropped (verified live 2026-08-09; `proxy-verify.mjs`
+  had exactly this bug and aborted every `--multiturn` run until its `TOOLS` gained a `bash`
+  entry). If a request emits a fence but no tool call appears, check the tools array first.
+- **Agent-less shell-routing works without PowerPlatform — on the magic tone only.**
+  `wantAgent=true` + agent unavailable (creation fails fast, cached via the `agent.ts` TTL
+  backoff) yields `enableCodeInterpreter=false` + `agentId=null`, which is the exact state
+  that enables hosted-shell interception (session.ts). The Claude tone has NO shell tool
+  (the model itself enumerates `search_web`/`web_fetch`/`python_execution`/`image_gen` only),
+  so Claude-tone shell-routing is structurally unavailable; hosted Python runs server-side
+  there regardless of the `cwc_code_interpreter*` optionsSets. Do NOT "fix" this by setting
+  `useAgent:false` — that flips `enableCodeInterpreter` back on and disables interception by
+  construction (hypotheses.md F23 corrigendum, 2026-08-09).
 - **Prompt *framing* can't flip the turn-1 reflex; format/routing can.** 8 per-request
   behavioral-prompt variants moved nothing (0 tool calls); heavy anti-advise framing in the
   agent *backfired*. Don't try to wordsmith the model into acting — route its natural ```` ```bash ````.
