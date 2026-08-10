@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
+import { isIP } from "node:net";
 import { readFile } from "node:fs/promises";
 
 const CLIENTS = new Set(["pi", "omp", "codex"]);
@@ -6,6 +7,26 @@ const TIMEOUT_MS = 5_000;
 
 function deny(reason) {
   return { allowed: false, reason };
+}
+
+/**
+ * The request-header proof that opts a chat request into the attestation gate:
+ * HMAC-SHA256(secret, "attestation-v1\n" + client), hex. Configure it as a
+ * static `X-M365-Attestation-Proof` header on the model provider alongside
+ * `X-M365-Execution-Gate: attestation-v1` and `X-M365-Attestation-Client`.
+ */
+export function attestationProofHeader(client, secret = process.env.M365_ATTESTATION_SECRET) {
+  if (!CLIENTS.has(client)) return deny("Unsupported attestation client");
+  if (typeof secret !== "string" || secret.trim().length === 0) return deny("Attestation secret is not configured");
+  return createHmac("sha256", secret.trim()).update(`attestation-v1\n${client}`, "utf8").digest("hex");
+}
+
+function isLoopbackHost(hostname) {
+  if (hostname === "localhost") return true;
+  const family = isIP(hostname);
+  if (family === 6) return hostname === "::1" || hostname.startsWith("::ffff:127.");
+  if (family === 4) return hostname.startsWith("127.");
+  return false;
 }
 
 /** Ask the local proxy to consume approval for one exact emitted command. */
@@ -22,9 +43,10 @@ export async function attestCommand({
   if (!CLIENTS.has(client)) return deny("Unsupported attestation client");
   if (typeof toolCallId !== "string" || toolCallId.length === 0) return deny("Missing tool-call id");
   if (typeof command !== "string") return deny("Missing bash command");
-  if (typeof proxyUrl !== "string" || typeof secret !== "string" || secret.length === 0) {
+  if (typeof proxyUrl !== "string" || typeof secret !== "string" || secret.trim().length === 0) {
     return deny("Attestation proxy URL or secret is not configured");
   }
+  secret = secret.trim();
 
   let endpoint;
   try {
@@ -32,8 +54,9 @@ export async function attestCommand({
   } catch {
     return deny("Attestation proxy URL is invalid");
   }
-  const loopback = endpoint.hostname === "localhost" || endpoint.hostname === "::1" || endpoint.hostname.startsWith("127.");
-  if (endpoint.protocol !== "http:" || !loopback) return deny("Attestation proxy must use loopback HTTP");
+  if (endpoint.protocol !== "http:" || !isLoopbackHost(endpoint.hostname)) {
+    return deny("Attestation proxy must use loopback HTTP");
+  }
 
   const ts = Math.floor(now() / 1_000);
   const payload = {
@@ -91,5 +114,20 @@ if (process.argv.includes("--codex")) {
     process.stdout.write(`${JSON.stringify(await runCodexHook(JSON.parse(input)))}\n`);
   } catch {
     process.stdout.write(`${JSON.stringify({ decision: "block", reason: "Invalid Codex hook input" })}\n`);
+  }
+}
+
+// Print the static X-M365-Attestation-Proof header value for a client, for
+// wiring into the harness provider config alongside the gate headers.
+// Usage: bun client-adapters/attestation-helper.mjs --proof pi
+if (process.argv.includes("--proof")) {
+  const idx = process.argv.indexOf("--proof");
+  const client = process.argv[idx + 1];
+  const proof = attestationProofHeader(client);
+  if (typeof proof === "string") {
+    process.stdout.write(`X-M365-Attestation-Proof: ${proof}\n`);
+  } else {
+    process.stdout.write(`${JSON.stringify(proof)}\n`);
+    process.exitCode = 1;
   }
 }

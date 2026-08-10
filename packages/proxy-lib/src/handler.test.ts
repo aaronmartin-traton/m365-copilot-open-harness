@@ -148,12 +148,13 @@ describe("handler deterministic boundaries", () => {
     };
     const initialMessages = [{ role: "user", content: "task" }];
     const pool = new SessionPool();
+    const proof = createHmac("sha256", "handler-attestation-secret").update("attestation-v1\npi", "utf8").digest("hex");
     try {
       scripted.text = "```bash\necho attested\n```";
       const first = await handleChatCompletion(
         body(initialMessages, { tools: [bashTool], conversation_id: "attestation-test" }),
         pool,
-        { executionGate: "attestation-v1", attestationClient: "pi" },
+        { executionGate: "attestation-v1", attestationClient: "pi", attestationProof: proof },
       );
       const firstJson = await first.json();
       const call = firstJson.choices[0].message.tool_calls[0];
@@ -184,6 +185,7 @@ describe("handler deterministic boundaries", () => {
       ], { tools: [bashTool], conversation_id: "attestation-test" }), pool, {
         executionGate: "attestation-v1",
         attestationClient: "pi",
+        attestationProof: proof,
       });
       expect(next.status).toBe(200);
     } finally {

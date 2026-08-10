@@ -34,5 +34,6 @@ export default defineEventHandler(async (event) => {
     sessionKey: getHeader(event, "x-m365-session-key") ?? undefined,
     executionGate: getHeader(event, "x-m365-execution-gate") ?? undefined,
     attestationClient: getHeader(event, "x-m365-attestation-client") ?? undefined,
+    attestationProof: getHeader(event, "x-m365-attestation-proof") ?? undefined,
   });
 });

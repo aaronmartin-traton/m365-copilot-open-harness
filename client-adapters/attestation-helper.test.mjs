@@ -1,6 +1,6 @@
 import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { attestCommand, runCodexHook } from "./attestation-helper.mjs";
+import { attestCommand, attestationProofHeader, runCodexHook } from "./attestation-helper.mjs";
 
 const SECRET = "adapter-test-secret";
 const NOW = 1_786_263_011_000;
@@ -86,5 +86,25 @@ describe("attestation helper", () => {
       fetchImpl: async () => { throw new Error("offline"); },
     })).toEqual({ allowed: false, reason: "Attestation proxy is unavailable" });
     expect(await runCodexHook(null)).toEqual({ decision: "block", reason: "Invalid Codex hook input" });
+  });
+
+  it("emits the proof header the proxy requires to honor the gate", () => {
+    const proof = attestationProofHeader("pi", SECRET);
+    expect(proof).toBe(createHmac("sha256", SECRET).update("attestation-v1\npi", "utf8").digest("hex"));
+    expect(attestationProofHeader("pi", "  ")).toMatchObject({ allowed: false });
+  });
+
+  it("rejects loopback lookalike hostnames (prefix spoofing)", async () => {
+    const fetchImpl = vi.fn();
+    const result = await attestCommand({
+      client: "pi",
+      toolCallId: "call_6",
+      command: "echo safe",
+      proxyUrl: "http://127.0.0.1.attacker.com:8787",
+      secret: SECRET,
+      fetchImpl,
+    });
+    expect(result.allowed).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

@@ -133,6 +133,12 @@ export class SessionPool {
     for (const call of calls) this.toolCallConversations.set(call.id, state.key);
   }
 
+  /** True iff this proxy emitted the tool-call id (any conversation, not pruned). */
+  knowsToolCallId(toolCallId: string): boolean {
+    const key = this.toolCallConversations.get(toolCallId);
+    return key !== undefined && this.conversations.has(key);
+  }
+
   bindResponseId(responseId: string, key: string): void {
     this.stateStore.bindResponseId(responseId, key);
   }

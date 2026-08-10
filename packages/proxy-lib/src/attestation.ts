@@ -30,6 +30,11 @@ interface Candidate {
 export interface AttestationGate {
   register(client: AttestationClient, call: ParsedToolCall): boolean;
   attest(request: AttestationRequest, signature: string | undefined): boolean;
+  /** True iff a candidate exists for the id (any state). */
+  hasCandidate(toolCallId: string): boolean;
+  /** Non-mutating: would acceptToolResult succeed for this id right now? */
+  authorized(toolCallId: string, client: AttestationClient | undefined): boolean;
+  /** Consume approval for a tool result; false when not AUTHORIZED/unknown. */
   acceptToolResult(toolCallId: string, client: AttestationClient | undefined): boolean;
 }
 
@@ -77,14 +82,23 @@ class InMemoryAttestationGate implements AttestationGate {
     }
   }
 
+  /** Drop expired and terminal candidates so a long-lived process stays under CAPACITY. */
+  private pruneCandidates(now: number): void {
+    if (this.candidates.size < CAPACITY) return;
+    for (const [id, candidate] of this.candidates) {
+      if (candidate.expiresAt <= now || candidate.state === "RESULT_ACCEPTED") {
+        this.candidates.delete(id);
+      }
+    }
+  }
+
   register(client: AttestationClient, call: ParsedToolCall): boolean {
     const command = commandFor(call);
     if (command === null) return false;
     const now = Date.now();
     this.pruneNonces(now);
+    this.pruneCandidates(now);
     if (this.candidates.size >= CAPACITY || this.candidates.has(call.id)) return false;
-    // ponytail: fixed 1,000-entry cap fails back to 8H; raise it only when a
-    // real session exhausts it rather than evicting an authorization record.
     this.candidates.set(call.id, {
       client,
       commandSha256: sha256(command),
@@ -97,8 +111,10 @@ class InMemoryAttestationGate implements AttestationGate {
   attest(request: AttestationRequest, signature: string | undefined): boolean {
     const now = Date.now();
     this.pruneNonces(now);
+    // Signature before nonce: never reveal whether a nonce was seen.
+    if (!validSignature(this.secret, request, signature)) return false;
     if (Math.abs(now - request.ts * 1_000) > TTL_MS) return false;
-    if (this.nonces.has(request.nonce) || !validSignature(this.secret, request, signature)) return false;
+    if (this.nonces.has(request.nonce)) return false;
     const candidate = this.candidates.get(request.tool_call_id);
     if (
       !candidate ||
@@ -112,9 +128,24 @@ class InMemoryAttestationGate implements AttestationGate {
     return true;
   }
 
-  acceptToolResult(toolCallId: string, client: AttestationClient | undefined): boolean {
+  hasCandidate(toolCallId: string): boolean {
+    return this.candidates.has(toolCallId);
+  }
+
+  authorized(toolCallId: string, client: AttestationClient | undefined): boolean {
     const candidate = this.candidates.get(toolCallId);
-    if (!candidate) return true;
+    if (!candidate) return false;
+    const now = Date.now();
+    return candidate.expiresAt > now && candidate.client === client && candidate.state === "AUTHORIZED";
+  }
+
+  acceptToolResult(toolCallId: string, client: AttestationClient | undefined): boolean {
+    // A tool result is accepted ONLY when a matching AUTHORIZED candidate
+    // exists. Unknown or never-emitted ids are denied (fail closed) — callers
+    // that went through the 8H verifier path never registered a candidate, so
+    // the handler must consult the pool's emitted-ids instead (see handler).
+    const candidate = this.candidates.get(toolCallId);
+    if (!candidate) return false;
     const now = Date.now();
     if (candidate.expiresAt <= now || candidate.client !== client || candidate.state !== "AUTHORIZED") return false;
     candidate.state = "RESULT_ACCEPTED";
@@ -162,12 +193,38 @@ export function handleAttestationRequest(
   return response(200, { decision: "allow" });
 }
 
+/**
+ * Resolve the attested-execution client from request headers. The gate is
+ * honored ONLY when the caller proves knowledge of the shared secret: the
+ * `X-M365-Attestation-Proof` header must be HMAC-SHA256(secret, gate + "\n" +
+ * client). Without proof, the headers are ignored and the request stays on the
+ * 8H verifier path — a bare header cannot strip the fail-closed gate.
+ */
 export function requestedAttestationClient(
   executionGate: string | undefined,
   client: string | undefined,
+  proof: string | undefined,
 ): AttestationClient | undefined {
   if (executionGate !== "attestation-v1") return undefined;
-  return (CLIENTS as readonly string[]).includes(client ?? "") ? client as AttestationClient : undefined;
+  if (!client || !(CLIENTS as readonly string[]).includes(client)) return undefined;
+  const secret = getAttestationSecret();
+  if (!secret || !proof) return undefined;
+  const expected = createHmac("sha256", secret).update(`attestation-v1\n${client}`, "utf8").digest();
+  const actual = Buffer.from(proof, "hex");
+  if (actual.length !== expected.length) return undefined;
+  try {
+    if (!timingSafeEqual(actual, expected)) return undefined;
+  } catch {
+    return undefined;
+  }
+  return client as AttestationClient;
+}
+
+/** The configured shared secret, or undefined when the gate is off. */
+function getAttestationSecret(): string | undefined {
+  return process.env.M365_CLIENT_ATTESTATION === "1"
+    ? process.env.M365_ATTESTATION_SECRET?.trim()
+    : undefined;
 }
 
 export function resetAttestationGate(): void {

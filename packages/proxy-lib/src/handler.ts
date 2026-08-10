@@ -48,6 +48,7 @@ export async function handleChatCompletion(
     managedKey?: string;
     executionGate?: string;
     attestationClient?: string;
+    attestationProof?: string;
   } = {},
 ): Promise<Response> {
   const localMeta = localMetaResponse(body);
@@ -64,19 +65,32 @@ export async function handleChatCompletion(
   const attestationClient = requestedAttestationClient(
     opts.executionGate,
     opts.attestationClient,
+    opts.attestationProof,
   );
   if (attestationGate) {
-    for (const message of body.messages.slice(conv.sentMessageCount)) {
-      if (
-        message.role === "tool" &&
-        !attestationGate.acceptToolResult(message.tool_call_id, attestationClient)
-      ) {
+    // Validate every tool result FIRST, before consuming any approval: a 409 on
+    // a later message must not burn candidates that earlier messages already
+    // accepted (retrying the same request would then 409 forever).
+    const toolMessages = body.messages.slice(conv.sentMessageCount)
+      .filter((message) => message.role === "tool");
+    for (const message of toolMessages) {
+      // Attestation-path results need an AUTHORIZED candidate; 8H-path results
+      // have no candidate but the pool emitted the id (registerToolCalls ran).
+      const attested = attestationGate.authorized(message.tool_call_id, attestationClient);
+      const poolEmitted = pool.knowsToolCallId(message.tool_call_id);
+      if (!attested && !poolEmitted) {
         return jsonResponse(409, {
           error: {
             message: "Tool result has no matching client attestation",
             type: "attestation_required",
           },
         });
+      }
+    }
+    // Second pass: consume approvals now that every message is valid.
+    for (const message of toolMessages) {
+      if (attestationGate.hasCandidate(message.tool_call_id)) {
+        attestationGate.acceptToolResult(message.tool_call_id, attestationClient);
       }
     }
   }

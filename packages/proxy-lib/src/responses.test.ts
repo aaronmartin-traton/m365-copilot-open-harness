@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { getAttestationGate, resetAttestationGate } from "./attestation.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -144,6 +145,7 @@ describe("Responses attestation wiring", () => {
     process.env.M365_ATTESTATION_SECRET = "responses-attestation-secret";
     resetAttestationGate();
     const pool = new SessionPool();
+    const proof = createHmac("sha256", "responses-attestation-secret").update("attestation-v1\ncodex", "utf8").digest("hex");
     try {
       scripted.text = "```bash\necho attested\n```";
       const response = await handleResponse(base("task", {
@@ -152,7 +154,7 @@ describe("Responses attestation wiring", () => {
           properties: { command: { type: "string" } },
           required: ["command"],
         } }],
-      }), pool, { executionGate: "attestation-v1", attestationClient: "codex" });
+      }), pool, { executionGate: "attestation-v1", attestationClient: "codex", attestationProof: proof });
       const body = await response.json() as { output: Array<{ type: string; call_id?: string }> };
       expect(body.output[0].type).toBe("function_call");
       expect(body.output[0].call_id).toMatch(/^call_/);

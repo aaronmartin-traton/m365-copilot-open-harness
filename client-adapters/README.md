@@ -30,7 +30,19 @@ The helper only posts to loopback HTTP. It adds `/v1/attestations` itself.
 These headers select the opt-in path. A request without both headers keeps the
 normal 8H verifier path. Send them on **every** request in the conversation.
 The tool-result request must carry them too. Without them the proxy rejects
-the result with 409 `attestation_required`.
+## 2. Add the provider headers
+
+Generate the proof header once per client — it proves the provider config holds
+the shared secret, and without it the proxy ignores the gate headers and stays
+on the 8H verifier path:
+
+```sh
+bun client-adapters/attestation-helper.mjs --proof pi     # → X-M365-Attestation-Proof: <hex>
+bun client-adapters/attestation-helper.mjs --proof omp
+bun client-adapters/attestation-helper.mjs --proof codex
+```
+
+Add the gate headers AND the proof header to the provider config:
 
 ### pi — `~/.pi/agent/models.json`
 
@@ -43,7 +55,8 @@ the result with 409 `attestation_required`.
       "apiKey": "dummy",
       "headers": {
         "X-M365-Execution-Gate": "attestation-v1",
-        "X-M365-Attestation-Client": "pi"
+        "X-M365-Attestation-Client": "pi",
+        "X-M365-Attestation-Proof": "<hex from --proof pi>"
       },
       "models": [{ "id": "<model-id>" }]
     }
@@ -65,6 +78,7 @@ providers:
     headers:
       X-M365-Execution-Gate: attestation-v1
       X-M365-Attestation-Client: omp
+      X-M365-Attestation-Proof: <hex from --proof omp>
     models:
       - id: <model-id>
 ```
@@ -79,7 +93,7 @@ model_provider = "m365"
 name = "M365 Copilot Proxy"
 base_url = "http://127.0.0.1:<port>/v1"
 wire_api = "responses"
-http_headers = { "X-M365-Execution-Gate" = "attestation-v1", "X-M365-Attestation-Client" = "codex" }
+http_headers = { "X-M365-Execution-Gate" = "attestation-v1", "X-M365-Attestation-Client" = "codex", "X-M365-Attestation-Proof" = "<hex from --proof codex>" }
 ```
 
 Put `model_providers` in the user config. Codex ignores it in a project

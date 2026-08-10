@@ -41,6 +41,10 @@ function signature(input: AttestationRequest): string {
   ].join("\n"), "utf8").digest("hex");
 }
 
+function proof(client = "pi", secret = SECRET): string {
+  return createHmac("sha256", secret).update(`attestation-v1\n${client}`, "utf8").digest("hex");
+}
+
 beforeEach(() => {
   process.env.M365_CLIENT_ATTESTATION = "1";
   process.env.M365_ATTESTATION_SECRET = SECRET;
@@ -54,10 +58,13 @@ afterEach(() => {
 });
 
 describe("client attestation gate", () => {
-  it("requires explicit config and a known client selection", () => {
-    expect(requestedAttestationClient("attestation-v1", "pi")).toBe("pi");
-    expect(requestedAttestationClient("attestation-v1", "unknown")).toBeUndefined();
-    expect(requestedAttestationClient("other", "pi")).toBeUndefined();
+  it("requires explicit config, a known client, and proof of the secret", () => {
+    expect(requestedAttestationClient("attestation-v1", "pi", proof())).toBe("pi");
+    expect(requestedAttestationClient("attestation-v1", "pi", undefined)).toBeUndefined();
+    expect(requestedAttestationClient("attestation-v1", "pi", proof("codex"))).toBeUndefined();
+    expect(requestedAttestationClient("attestation-v1", "pi", createHmac("sha256", "wrong").update("attestation-v1\npi", "utf8").digest("hex"))).toBeUndefined();
+    expect(requestedAttestationClient("attestation-v1", "unknown", proof())).toBeUndefined();
+    expect(requestedAttestationClient("other", "pi", proof())).toBeUndefined();
     delete process.env.M365_ATTESTATION_SECRET;
     resetAttestationGate();
     expect(getAttestationGate()).toBeNull();
@@ -99,6 +106,26 @@ describe("client attestation gate", () => {
       id: "call_4",
       function: { name: "read", arguments: "{}" },
     })).toBe(false);
+  });
+
+  it("denies a tool result for an id that was never registered", () => {
+    const gate = getAttestationGate()!;
+    expect(gate.acceptToolResult("fabricated-id", "pi")).toBe(false);
+    expect(gate.authorized("fabricated-id", "pi")).toBe(false);
+    expect(gate.hasCandidate("fabricated-id")).toBe(false);
+  });
+
+  it("prunes terminal candidates so the capacity cap does not wedge registration", () => {
+    const gate = getAttestationGate()!;
+    for (let i = 0; i < 1000; i++) {
+      expect(gate.register("pi", bashCall(`bulk_${i}`, "echo x"))).toBe(true);
+    }
+    expect(gate.register("pi", bashCall("bulk_1000", "echo x"))).toBe(false); // cap reached
+    // Consume + accept one candidate (terminal), then registration succeeds again.
+    const consumed = request("bulk_0", "echo x", "nonce-prune-capacity-01");
+    expect(handleAttestationRequest(consumed, signature(consumed), true).status).toBe(200);
+    expect(gate.acceptToolResult("bulk_0", "pi")).toBe(true);
+    expect(gate.register("pi", bashCall("bulk_1001", "echo x"))).toBe(true);
   });
 
   it("hides the control endpoint from non-loopback peers", () => {

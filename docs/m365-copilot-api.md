@@ -502,12 +502,22 @@ An **opt-in control plane** where a trusted local harness (pi, Oh My Pi, or Code
 
 When the gate is disabled the endpoint 404s and every request runs the 8H path — **no permissive fallback**.
 
-A request selects the path only when **both** headers are present (in addition to the enablers), on **every** request of the conversation:
+A request selects the path only when **all three** headers are present (in addition to the enablers), on **every** request of the conversation:
 
 - `X-M365-Execution-Gate: attestation-v1`
 - `X-M365-Attestation-Client: pi` \| `omp` \| `codex`
+- `X-M365-Attestation-Proof: HMAC-SHA256(secret, "attestation-v1\n" + client)` hex — proves the caller holds the shared secret. Generate it with `bun client-adapters/attestation-helper.mjs --proof <client>` and configure it as a static header next to the other two. Without a valid proof the gate headers are ignored and the request stays on the 8H verifier path: a bare header cannot strip the fail-closed gate.
 
 Any missing or invalid condition ⇒ 8H path. Both routes (`/v1/chat/completions`, `/v1/responses`) forward these headers into the handler (Nitro routes and the embeddable `createApp()` alike); only the standalone Nitro service serves the control endpoint itself.
+
+### Tool-result acceptance (fail closed)
+
+A `role:"tool"` message is accepted only when one of these holds:
+
+- An `AUTHORIZED` attestation candidate matches the `tool_call_id` (consumed once, then terminal); or
+- The proxy itself emitted the id through the 8H verifier path (`SessionPool` tracks emitted ids).
+
+An id that was never emitted — fabricated, guessed, or from another conversation — is **denied with 409** (`attestation_required`). Validation runs for **all** tool messages in the request before any approval is consumed, so a 409 on one message does not burn candidates from earlier messages.
 
 ### Candidate lifecycle
 
@@ -578,8 +588,8 @@ When the gate is enabled, every not-yet-sent `role:"tool"` message in the next r
 
 Details:
 
-- The **same two headers must be on the tool-result request too** — without them `attestationClient` is `undefined` and the client mismatch denies the result.
-- An id with **no candidate** passes (the gate only governs ids it registered); an id that exists but is not `AUTHORIZED`, is expired, or has a different client denies.
+- The **same three headers must be on the tool-result request too** — without them `attestationClient` is `undefined` and the client mismatch denies the result.
+- An id with **no candidate** is denied unless the pool emitted it via the 8H path; an id that exists but is not `AUTHORIZED`, is expired, or has a different client denies.
 - `RESULT_ACCEPTED` closes the loop as a **proof record only** — it does not prove a human approved, and it does not undo an execution.
 
 ### Wire compatibility
@@ -607,13 +617,14 @@ curl -sS -X POST http://127.0.0.1:<proxy-port>/v1/attestations \
 # → {"decision":"allow"}
 ```
 
-2. Send the tool result back with the selection headers:
+2. Send the tool result back with the selection headers (the proof header is generated once per client at setup: `bun client-adapters/attestation-helper.mjs --proof pi`):
 
 ```bash
 curl -sS http://127.0.0.1:<proxy-port>/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "X-M365-Execution-Gate: attestation-v1" \
   -H "X-M365-Attestation-Client: pi" \
+  -H "X-M365-Attestation-Proof: <hex from --proof pi>" \
   -d '{
     "model": "<model>",
     "messages": [
