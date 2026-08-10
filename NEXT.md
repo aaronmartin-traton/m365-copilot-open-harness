@@ -1,10 +1,17 @@
 # NEXT.md — M365 Copilot Proxy
-> Snapshot as of 2026-08-09.
+> Snapshot as of 2026-08-10.
+
+**Start a new session here:** read
+`docs/agents/working-methodology.md` (startup sequence + operating rules +
+current mission), then `docs/agents/session-workflow.md` (operating manual),
+then `CONTEXT.md` (vocabulary).
 
 **STE status:** All operational docs pass under pragmatic STE (2026-08-09).
 The scientific notebooks (`docs/hypotheses.md`, `docs/experiments.md`,
 `docs/overnight-log.md`) and the `.scratch/*` tickets and specs keep their
-evidence verbatim. They are out of scope for this pass.
+evidence verbatim. They are out of scope for this pass. The
+writing-for-agents levers apply to AGENTS.md (2026-08-10).
+`docs/agents/working-methodology.md` is locally implementer startup playbook.
 
 ## Current baseline
 

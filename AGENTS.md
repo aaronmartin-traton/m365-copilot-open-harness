@@ -40,10 +40,13 @@ Start new work by claiming the earliest unblocked ticket. See
 `docs/agents/issue-tracker.md` for the format and wayfinding rules.
 
 **How this project operates across machines:** read
+[`docs/agents/working-methodology.md`](docs/agents/working-methodology.md)
+first, then
 [`docs/agents/session-workflow.md`](docs/agents/session-workflow.md) before
-starting a session. It covers locally ↔ local machine split, the LAN sync branch
-model, the pane/collab topology, the verification ladder, the M365 thread
-budget, the execution-safety stack, and the docs policy.
+starting a session. The playbook covers the local role and startup
+sequence. The operating manual covers locally ↔ local machine split, the LAN sync
+branch model, the pane/collab topology, the verification ladder, the M365
+thread budget, the execution-safety stack, and the docs policy.
 
 ## Operating principles (read first)
 

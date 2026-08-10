@@ -171,6 +171,8 @@ hunt for it.
 
 ## 10. Current state pointers
 
+- Startup sequence + operating rules + current mission:
+  `docs/agents/working-methodology.md` (read it first).
 - Repo state: `git status -sb`, `git branch -vv`, `git worktree list` — never
   trust a snapshot for volatile Git facts.
 - Handoff doc: `NEXT.md` (baseline, attestation state, images route, next
