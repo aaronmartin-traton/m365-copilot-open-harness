@@ -1,14 +1,14 @@
 # CONTEXT.md
 
 Domain vocabulary for the `m365-copilot-proxy` repo. Skills and issue tickets
-name concepts with these terms — do not drift to synonyms.
+name concepts with these terms. Do not drift to synonyms.
 
 ## What this repo is
 
 An OpenAI-compatible **proxy** that wraps Microsoft 365 Copilot's undocumented
-SignalR/WebSocket API, so OpenAI-compatible coding agents (pi, Codex, standalone
+SignalR/WebSocket API. OpenAI-compatible coding agents (pi, Codex, standalone
 bench) can use M365 as a model backend. It is a reverse-engineering project
-against a live, undocumented, throttled API — not a normal SDK wrapper.
+against a live, undocumented, throttled API. It is not a normal SDK wrapper.
 
 ## Glossary
 
@@ -18,14 +18,14 @@ against a live, undocumented, throttled API — not a normal SDK wrapper.
 | **proxy** | This repo's OpenAI-compatible translation layer (`proxy-lib` + `proxy`). |
 | **thread** | One M365 conversation. Throttle tracks threads-started, not messages. |
 | **tone** | The model selector sent in the chat payload (`magic`, `*-quick`, reasoning tones). `magic` is default. |
-| **Disengaged** | M365's refusal signal (`messageType: "Disengaged"`). Driven by jailbreak *shape*, not size; often masquerades as throttle. Watch `usage.x_m365_dea_score`. |
+| **Disengaged** | M365's refusal signal (`messageType: "Disengaged"`). Driven by jailbreak *shape*, not size. Often masquerades as throttle. Watch `usage.x_m365_dea_score`. |
 | **fenced format** | Tool-call output as Markdown fences (```` ```bash ```` blocks). The only sanctioned tool format. |
 | **shell-routing** | The proxy routes fenced bash blocks to the harness's shell tool. The load-bearing lever that produces real agent loops. |
 | **fenced agent** | The Copilot Studio agent (`m365-tool-agent-<hash[:8]>`) that emits fenced tools. |
 | **verifier** | The execution-intent verifier (`Bonsai` on the local machine, or `qwen`-family fallback) that decides `EXECUTE` vs `TEXT` for a tool decision. |
 | **EXECUTE** | Verifier verdict: the tool call is authorized to run. |
 | **TEXT** | Verifier verdict: return the model's raw text instead of executing. |
-| **8H fail-closed** | The approved policy: only verifier `EXECUTE` authorizes tool execution; anything else (TEXT/UNCERTAIN/error/timeout) resolves to raw text. |
+| **8H fail-closed** | The approved policy: only verifier `EXECUTE` authorizes tool execution. Anything else (TEXT/UNCERTAIN/error/timeout) resolves to raw text. |
 | **optionsSets** | The server-side capability flags array in the chat payload. This repo historically sends `[]` — likely leaving capabilities off the table. |
 | **benchtop** | The quantitative benchmark (`scripts/bench/`): scores real agentic coding tasks in `--network none` sandboxes. |
 
@@ -38,7 +38,7 @@ against a live, undocumented, throttled API — not a normal SDK wrapper.
   `docs/adr/ADR-0002-EXECUTION-INTENT-VERIFIER.md` and
   `experiments/tool-decision/execution-intent/fail-closed-policy-8h.json`.
 - **JSON `{"tool":...}` tool format is dead.** Fenced + shell-routing is the
-  only tool format (scored 0/5; removed).
+  only tool format (scored 0/5, removed).
 
 ## Where things live
 

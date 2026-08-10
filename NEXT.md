@@ -1,17 +1,22 @@
 # NEXT.md — M365 Copilot Proxy
 > Snapshot as of 2026-08-09.
 
+**STE status:** All operational docs pass under pragmatic STE (2026-08-09).
+The scientific notebooks (`docs/hypotheses.md`, `docs/experiments.md`,
+`docs/overnight-log.md`) and the `.scratch/*` tickets and specs keep their
+evidence verbatim. They are out of scope for this pass.
+
 ## Current baseline
 
 - The **8H fail-closed verifier** remains the approved production baseline.
-  Only an `EXECUTE` verdict may authorize execution. The default is on unless
+  Only an `EXECUTE` verdict can authorize execution. The default is on unless
   `M365_INTENT_VERIFIER=0`.
 - Safety is proven on the frozen held-out corpus. Latency remains the
   architectural constraint.
-- **Client-attested execution** is the chosen low-latency direction: opt-in
-  (`M365_CLIENT_ATTESTATION=1` + request headers), never replaces the 8H
-  baseline. See `.scratch/client-attested-execution/spec.md` and tickets
-  `01-attestation-gate.md` / `02-reference-adapters.md`.
+- **Client-attested execution** is the chosen low-latency direction. It is
+  opt-in (`M365_CLIENT_ATTESTATION=1` + request headers). It never replaces
+  the 8H baseline. See `.scratch/client-attested-execution/spec.md` and
+  tickets `01-attestation-gate.md` / `02-reference-adapters.md`.
 - Use `git status -sb`, `git branch -vv`, and `git worktree list` for all
   current checkout, branch, and push state. Do not rely on this snapshot for
   volatile Git facts.
@@ -23,7 +28,7 @@
 - Ticket 02 added the `chat_template_kwargs` contract to the verifier request.
 - Ticket 03 screened direct-answer candidates on DEV only and closed
   **rejected**. Five candidates produced an unsafe false positive on
-  `ambiguous-002`; Ministral-3-3B avoided unsafe output but failed selective
+  `ambiguous-002`. Ministral-3-3B avoided unsafe output but failed selective
   accuracy. The existing Qwen3.5-4B evidence also fails accuracy.
 - No candidate was frozen. Ticket 04, the one-time held-out gate, is
   ineligible and MUST NOT run.
@@ -33,13 +38,13 @@
 
 ## Client-attested execution (opt-in, in progress)
 
-The chosen direction for the latency problem: instead of a slower local model
-making the same decision, the trusted local harness (pi / OMP / Codex) attests
-one exact command before the proxy may execute it. The 8H baseline stays the
-default; this path is explicitly opt-in.
+The chosen direction solves the latency problem. The trusted local harness
+(pi / OMP / Codex) attests one exact command before the proxy can execute it.
+This replaces a slower local model making the same decision. The 8H baseline
+stays the default. This path is explicitly opt-in.
 
 - **Gate**: `POST /v1/attestations` (loopback-only). Payload:
-  `{client, tool, tool_call_id, command_sha256, ts, nonce}`; signature header
+  `{client, tool, tool_call_id, command_sha256, ts, nonce}`. Signature header
   `X-M365-Attestation-Sig` = HMAC-SHA256 over the payload lines. Single use,
   60 s expiry, registry caps at 1000 entries.
 - **Enablers**: `M365_CLIENT_ATTESTATION=1` + shared `M365_ATTESTATION_SECRET`.
@@ -55,11 +60,11 @@ default; this path is explicitly opt-in.
   and merged to the local machine.
 - **Documentation**: the full wire contract (payload, HMAC construction, state
   machine, failure modes, worked example) is in `docs/m365-copilot-api.md` §11
-  *Client-attested execution (opt-in)*; adapter setup lives in
+  *Client-attested execution (opt-in)*. Adapter setup lives in
   `client-adapters/README.md` (cross-referenced, not duplicated).
 - **Next**: manual end-to-end smoke test of the attestation loop (register →
   AUTHORIZED → tool result accepted) through a real harness. Auth-blocked on
-  locally as of 2026-08-09 (no `msal-cache.json`) — live M365 steps need a
+  locally as of 2026-08-09 (no `msal-cache.json`). Live M365 steps need a
   human interactive login first.
 
 ## Next slice

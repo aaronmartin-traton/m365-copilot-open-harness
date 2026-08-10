@@ -3,13 +3,13 @@
 These adapters make the local harness the final authority for one exact `bash`
 command. The proxy does not run the command.
 
-The hook asks for approval, sends the command digest to the loopback proxy, and
-blocks when the proxy denies or cannot answer.
+The hook asks for approval. It sends the command digest to the loopback proxy.
+If the proxy denies or cannot answer, the hook blocks the command.
 
 ## 1. Configure the proxy
 
-Set the same secret in the proxy process and in the harness environment. Keep it
-out of prompts and tool arguments.
+Set the same secret in the proxy process and in the harness environment. Keep
+it out of prompts and tool arguments.
 
 ```text
 M365_CLIENT_ATTESTATION=1
@@ -28,9 +28,9 @@ The helper only posts to loopback HTTP. It adds `/v1/attestations` itself.
 ## 2. Add the provider headers
 
 These headers select the opt-in path. A request without both headers keeps the
-normal 8H verifier path. Send them on **every** request in the conversation —
-the tool-result request must carry them too, or the proxy rejects the result
-with 409 `attestation_required`.
+normal 8H verifier path. Send them on **every** request in the conversation.
+The tool-result request must carry them too. Without them the proxy rejects
+the result with 409 `attestation_required`.
 
 ### pi — `~/.pi/agent/models.json`
 
@@ -98,9 +98,9 @@ Keep each wrapper beside `attestation-helper.mjs` so its relative import works.
 pi and Oh My Pi show `ctx.ui.confirm` for every `bash` command. No UI means
 deny. Oh My Pi applies its DCG `bash.patterns` deny rules as an additional floor.
 
-Codex uses the `PreToolUse` hook for the id-bound request. Use a Codex permission
-mode that asks the user when you need a human approval. In a full-auto mode, the
-Codex policy can approve commands without a prompt.
+Codex uses the `PreToolUse` hook for the id-bound request. When you need a
+human approval, use a Codex permission mode that asks the user. In a full-auto
+mode, the Codex policy can approve commands without a prompt.
 
 ## Safety limits
 

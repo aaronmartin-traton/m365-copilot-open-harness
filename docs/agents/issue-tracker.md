@@ -27,8 +27,8 @@ the **local markdown** tracker (no external service).
 
 ## When a skill says "publish to the issue tracker"
 
-Create a new file under `.scratch/<feature-slug>/` (creating the directory if
-needed).
+Create a new file under `.scratch/<feature-slug>/`. Create the directory when
+it does not exist.
 
 ## When a skill says "fetch the relevant ticket"
 
