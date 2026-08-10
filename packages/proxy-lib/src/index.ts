@@ -24,6 +24,7 @@ export {
   type SessionPoolOptions,
 } from "./session-pool.js";
 export { ChatCompletionRequest, ChatMessage, ToolCall, ToolDefinition } from "./schemas.js";
+export { ImageGenerationRequest, handleImageGeneration, type ImageGenerationBody } from "./images-generation.js";
 export { ResponsesRequest, handleResponse } from "./responses.js";
 export { RequestScheduler, SchedulerBusyError, type SchedulerStats } from "./scheduler.js";
 export {

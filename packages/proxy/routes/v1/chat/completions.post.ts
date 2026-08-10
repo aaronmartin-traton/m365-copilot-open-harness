@@ -14,17 +14,17 @@ export default defineEventHandler(async (event) => {
 
   // Propagate client disconnects as an AbortSignal so a long M365 turn gets
   // cancelled (Stop frame) instead of running on after the caller gave up.
-  // Only abort on a *premature* close — guard with the response "finish" event
-  // so a normal keep-alive socket close after a completed response is ignored.
+  // Only ServerResponse 'close' fires on premature connection termination:
+  // IncomingMessage 'close' fires once the request body is fully read (Node
+  // >=16), i.e. inside readBody above — listening on it would abort
+  // immediately. Guard with "finish" so a normal close after a completed
+  // response is ignored.
   const ac = new AbortController();
-  const req = event.node?.req;
   const res = event.node?.res;
-  if (req && res) {
+  if (res) {
     let finished = false;
     res.once("finish", () => { finished = true; });
-    const maybeAbort = () => { if (!finished && !res.writableEnded) ac.abort(); };
-    req.once("close", maybeAbort);
-    res.once("close", maybeAbort);
+    res.once("close", () => { if (!finished && !res.writableEnded) ac.abort(); });
   }
 
   // handleChatCompletion returns a Web Response (JSON or an SSE ReadableStream
