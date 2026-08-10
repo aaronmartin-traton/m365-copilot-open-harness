@@ -46,18 +46,26 @@ stays the default. This path is explicitly opt-in.
 - **Gate**: `POST /v1/attestations` (loopback-only). Payload:
   `{client, tool, tool_call_id, command_sha256, ts, nonce}`. Signature header
   `X-M365-Attestation-Sig` = HMAC-SHA256 over the payload lines. Single use,
-  60 s expiry, registry caps at 1000 entries.
+  60 s expiry, registry caps at 1000 entries with rolling prune of
+  expired/terminal candidates.
 - **Enablers**: `M365_CLIENT_ATTESTATION=1` + shared `M365_ATTESTATION_SECRET`.
-  Request headers `X-M365-Execution-Gate: attestation-v1` and
-  `X-M365-Attestation-Client: pi|omp|codex`. Adapter helper additionally needs
+  Request headers `X-M365-Execution-Gate: attestation-v1`,
+  `X-M365-Attestation-Client: pi|omp|codex`, AND
+  `X-M365-Attestation-Proof: HMAC(secret, "attestation-v1\n"+client)` hex
+  (generate with `bun client-adapters/attestation-helper.mjs --proof <client>`).
+  Without proof the gate headers are ignored and the request stays on the 8H
+  path. Adapter helper additionally needs
   `M365_ATTESTATION_URL=http://127.0.0.1:<port>`.
 - **Adapters**: `client-adapters/` — `pi-attestation-gate.ts`,
   `omp-attestation-gate.ts`, `codex-hooks.json` (PreToolUse approve|block),
-  `attestation-helper.mjs`.
+  `attestation-helper.mjs` (+ `--proof` CLI).
 - **Implementation state**: tickets 01 (gate) and 02 (adapters) resolved,
-  unit-tested. Committed on `main`
-  (`feat(proxy-lib): opt-in client-attested execution gate + harness adapters`)
-  and merged to the local machine.
+  unit-tested. Committed on `main` and merged to the local machine. Adversarial
+  review 2026-08-09 found no blockers; fixed two SHOULD-FIXes:
+  proof-of-secret required to strip 8H (bare headers no longer opt in), and
+  tool results with never-emitted ids are denied 409 (fail closed; pool-emitted
+  8H ids still pass). Two-pass validation so a 409 does not burn earlier
+  candidates.
 - **Documentation**: the full wire contract (payload, HMAC construction, state
   machine, failure modes, worked example) is in `docs/m365-copilot-api.md` §11
   *Client-attested execution (opt-in)*. Adapter setup lives in
@@ -65,7 +73,25 @@ stays the default. This path is explicitly opt-in.
 - **Next**: manual end-to-end smoke test of the attestation loop (register →
   AUTHORIZED → tool result accepted) through a real harness. Auth-blocked on
   locally as of 2026-08-09 (no `msal-cache.json`). Live M365 steps need a
-  human interactive login first.
+  human interactive login first. The local machine live-smoke passed 2026-08-09
+  before the proof-header change — the proof header must be re-verified live
+  when the local machine is next available.
+
+## New surface — `/v1/images/generations` (2026-08-09)
+
+- OpenAI-compatible image generation backed by M365's GraphicArt path.
+  `handleImageGeneration` in proxy-lib + Nitro route.
+- Schema: prompt (trimmed, required), n (1–4, >4 rejected), size
+  (gpt-image-1 set incl `auto`), response_format url|b64_json.
+- Sized through the pool scheduler (`newConversation: true` per image) so
+  image requests cannot exhaust the M365 thread budget; 503+Retry-After when
+  saturated.
+- Error map: quota 429, capacity/content 400, no_image 400, abort 499,
+  missing url/base64 500, other 502.
+- Adversarial review findings fixed: dead client-abort wiring (ServerResponse
+  `close` only; same fix applied to the chat route), silent n-cap → schema
+  rejection, whitespace prompts trimmed.
+- Test count 287 passed / 3 skipped (was 254 at session start).
 
 ## Next slice
 
