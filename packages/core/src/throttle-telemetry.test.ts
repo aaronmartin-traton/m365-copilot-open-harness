@@ -113,9 +113,11 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
   }
 
   it("empty-throttle fires on noteRequestOutcome(true) even with backoff disabled", async () => {
+    process.env.M365_NO_BACKOFF = "1"; // the contract this test defends
     const { noteRequestOutcome, counts } = await fresh();
     noteRequestOutcome(true, "conv-1");
     expect(counts()["empty-throttle"]).toBe(1);
+    expect(counts()["backoff-enter"]).toBe(0); // backoff gate really skipped
     const line = JSON.parse(fileLines()[0]) as ThrottleEvent;
     expect(line.event).toBe("empty-throttle");
     expect(line.convIdHash).toBe(hashConversationId("conv-1"));
@@ -147,7 +149,29 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
       .map((l) => JSON.parse(l) as ThrottleEvent)
       .find((e) => e.event === "backoff-exit");
     expect(exit).toBeDefined();
+    // Back-to-back calls lift within the same millisecond window; the assertion
+    // that matters is the event fired exactly once with a sane (>= 0) duration.
     expect(exit!.durationMs).toBeGreaterThanOrEqual(0);
     expect(counts()["backoff-exit"]).toBe(1);
   });
+
+  it("backoff-exit fires when the window elapses without a clean response", async () => {
+    process.env.M365_BACKOFF_WINDOW_MS = "60000";
+    process.env.M365_BACKOFF_BASE_MS = "1500";
+    const { noteRequestOutcome, counts } = await fresh();
+    noteRequestOutcome(true, "conv-a");
+    noteRequestOutcome(true, "conv-b");
+    noteRequestOutcome(true, "conv-c"); // enter with 1.5s cooldown
+    expect(counts()["backoff-enter"]).toBe(1);
+    // Advance past backoffUntil (1.5s cooldown) and force a state change — the
+    // elapsed window must emit the exit without any clean response.
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    noteRequestOutcome(true, "conv-d");
+    const exit = fileLines()
+      .map((l) => JSON.parse(l) as ThrottleEvent)
+      .find((e) => e.event === "backoff-exit");
+    expect(exit).toBeDefined();
+    expect(exit!.durationMs).toBeLessThanOrEqual(2_000); // capped at window end
+    expect(counts()["backoff-exit"]).toBe(1);
+  }, 10_000);
 });

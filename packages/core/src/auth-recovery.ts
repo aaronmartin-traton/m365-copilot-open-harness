@@ -178,15 +178,27 @@ const defaultController = createBackoffController({
   onStateChange: (state) => {
     saveBackoffState(state);
     // Telemetry: emit backoff-exit when a window that was active stops being
-    // the state (level dropped or the window elapsed). Passive — never affects
-    // the request path.
-    if (backoffEnteredAt > 0 && state.level === 0) {
-      emitThrottleEvent({
-        ts: new Date().toISOString(),
-        event: "backoff-exit",
-        durationMs: Date.now() - backoffEnteredAt,
-      });
-      backoffEnteredAt = 0;
+    // the state (level dropped OR the window elapsed). The elapsed branch is
+    // the common "paced until self-healed" case — a clean response may never
+    // arrive, and without this the exit is never recorded.
+    if (backoffEnteredAt > 0) {
+      if (state.level === 0) {
+        emitThrottleEvent({
+          ts: new Date().toISOString(),
+          event: "backoff-exit",
+          // Cap the reported duration at the window end: time after expiry is
+          // idle, not paced, and would inflate the decision-gate dataset.
+          durationMs: Math.min(Date.now(), state.backoffUntil ?? Infinity) - backoffEnteredAt,
+        });
+        backoffEnteredAt = 0;
+      } else if (state.backoffUntil !== null && Date.now() >= state.backoffUntil) {
+        emitThrottleEvent({
+          ts: new Date().toISOString(),
+          event: "backoff-exit",
+          durationMs: state.backoffUntil - backoffEnteredAt,
+        });
+        backoffEnteredAt = 0;
+      }
     }
   },
   onTrigger: ({ distinctConversations, cooldownMs, level }) => {

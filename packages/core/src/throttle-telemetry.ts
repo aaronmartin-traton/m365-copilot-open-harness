@@ -64,14 +64,18 @@ const counts: Record<ThrottleEventType, number> = {
 
 /** Record one telemetry event. Passive + best-effort; never throws upstream. */
 export function emitThrottleEvent(ev: ThrottleEvent): void {
-  counts[ev.event] += 1;
-  if (process.env.M365_NO_TELEMETRY === "1") return;
-  const line = `${JSON.stringify(ev)}\n`;
+  if (process.env.M365_NO_TELEMETRY === "1") {
+    // Count events even when file writes are disabled (surfaced on /health).
+    counts[ev.event] += 1;
+    return;
+  }
   try {
+    counts[ev.event] += 1;
+    const line = `${JSON.stringify(ev)}\n`;
     const path = process.env.M365_THROTTLE_TELEMETRY_FILE?.trim() ||
       join(homedir(), ".config", "opencode-m365", "throttle-telemetry.ndjson");
     mkdirSync(join(path, ".."), { recursive: true });
-    appendFileSync(path, line);
+    appendFileSync(path, line, { mode: 0o600 });
   } catch (err) {
     log.error(`throttle-telemetry write failed: ${err instanceof Error ? err.message : String(err)}`);
   }

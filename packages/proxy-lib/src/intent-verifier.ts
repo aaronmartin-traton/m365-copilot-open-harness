@@ -167,6 +167,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
   private readonly timeoutMs: number;
   private readonly retryBackoffMs: number;
   private readonly templateKwargs: Record<string, unknown> | undefined;
+  private readonly kwargsHash: string;
   private readonly promptHash: string;
 
   /** LRU decision cache: full cache-key -> entry. Cap 1000 entries. */
@@ -189,17 +190,18 @@ class BonsaiIntentVerifier implements IntentVerifier {
     this.timeoutMs = Math.max(1, Number(env.M365_INTENT_VERIFIER_TIMEOUT_MS) || 120000);
     this.retryBackoffMs = Math.max(0, Number(env.M365_INTENT_VERIFIER_RETRY_BACKOFF_MS) || 15000);
     this.templateKwargs = parseTemplateKwargs(env.M365_INTENT_VERIFIER_TEMPLATE_KWARGS);
+    this.kwargsHash = sha256(JSON.stringify(this.templateKwargs ?? null));
     this.promptHash = sha256(INTENT_VERIFIER_PROMPT);
   }
 
-  /** full key: sha256(model|promptHash|responseHash|policyVersion) */
+  /** full key: sha256(model|promptHash|kwargsHash|responseHash|policyVersion) */
   private fullKey(responseHash: string): string {
-    return sha256(`${this.model}|${this.promptHash}|${responseHash}|${POLICY_VERSION}`);
+    return sha256(`${this.model}|${this.promptHash}|${this.kwargsHash}|${responseHash}|${POLICY_VERSION}`);
   }
 
-  /** drift prefix: sha256(model|promptHash|policyVersion) */
+  /** drift prefix: sha256(model|promptHash|kwargsHash|policyVersion) */
   private prefixKey(): string {
-    return sha256(`${this.model}|${this.promptHash}|${POLICY_VERSION}`);
+    return sha256(`${this.model}|${this.promptHash}|${this.kwargsHash}|${POLICY_VERSION}`);
   }
 
   private cacheSet(key: string, entry: CachedEntry): void {

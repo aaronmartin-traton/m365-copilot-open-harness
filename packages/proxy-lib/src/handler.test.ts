@@ -11,6 +11,7 @@ const scripted = {
   text: "answer",
   throttle: { current: 1, max: 600 } as { current: number; max: number } | null,
   fail: false,
+  messageType: null as string | null,
   prompts: [] as string[],
 };
 
@@ -32,7 +33,7 @@ vi.mock("@m365-copilot/core", async (importActual) => {
         hasContent: text.length > 0,
         throttle: scripted.throttle,
         contentOrigin: "GPT",
-        messageType: null,
+        messageType: scripted.messageType,
         messageId: "handler-message",
         scores: null,
         turnCount: ++this.turnCount,
@@ -78,11 +79,44 @@ describe("handler deterministic boundaries", () => {
   it("maps an at-limit empty response to rate_limit_error", async () => {
     scripted.text = "";
     scripted.throttle = { current: 600, max: 600 };
-    const response = await handleChatCompletion(body([{ role: "user", content: "task" }]), new SessionPool());
-    expect(response.status).toBe(429);
-    expect((await response.json()).error.type).toBe("rate_limit_error");
-    scripted.text = "answer";
-    scripted.throttle = { current: 1, max: 600 };
+    const core = await import("@m365-copilot/core");
+    const emitSpy = vi.spyOn(core, "emitThrottleEvent");
+    try {
+      const response = await handleChatCompletion(body([{ role: "user", content: "task" }]), new SessionPool());
+      expect(response.status).toBe(429);
+      expect((await response.json()).error.type).toBe("rate_limit_error");
+      const atLimit = emitSpy.mock.calls.find(([ev]) => ev.event === "at-limit")?.[0];
+      expect(atLimit).toMatchObject({ event: "at-limit", current: 600, max: 600 });
+      expect(atLimit?.convIdHash).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      emitSpy.mockRestore();
+      scripted.text = "answer";
+      scripted.throttle = { current: 1, max: 600 };
+    }
+  });
+
+  it("emits disengaged telemetry with framing and retry outcome", async () => {
+    scripted.text = "";
+    scripted.messageType = "Disengaged";
+    const core = await import("@m365-copilot/core");
+    const emitSpy = vi.spyOn(core, "emitThrottleEvent");
+    try {
+      const response = await handleChatCompletion(
+        body([{ role: "user", content: "task" }], { tools: [{ type: "function", function: { name: "bash", description: "Run a command", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } }] }),
+        new SessionPool(),
+      );
+      expect(response.status).toBe(502);
+      const events = emitSpy.mock.calls.map(([ev]) => ev);
+      const retry = events.find((ev) => ev.event === "disengaged" && ev.retryOutcome === "softened-retry");
+      expect(retry).toMatchObject({ event: "disengaged", framing: "softened" });
+      const failFast = events.find((ev) => ev.event === "disengaged" && ev.retryOutcome === "fail-fast");
+      expect(failFast).toMatchObject({ framing: "softened" });
+      expect(failFast?.convIdHash).toMatch(/^[0-9a-f]{64}$/);
+    } finally {
+      emitSpy.mockRestore();
+      scripted.messageType = null;
+      scripted.text = "answer";
+    }
   });
 
   it("maps upstream failures to 502", async () => {

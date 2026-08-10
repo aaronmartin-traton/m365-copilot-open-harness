@@ -255,6 +255,7 @@ export async function handleChatCompletion(
             event: "disengaged",
             framing: "softened",
             retryOutcome: "softened-retry",
+            convIdHash: hashConversationId(convId ?? "anon"),
           });
           session.newConversation();
           text = contextCompiler.compileFull({
@@ -274,6 +275,7 @@ export async function handleChatCompletion(
           event: "disengaged",
           framing: disengageRetried ? "softened" : "default",
           retryOutcome: "fail-fast",
+          convIdHash: hashConversationId(convId ?? "anon"),
         });
         return {
           error: jsonResponse(502, {
@@ -295,7 +297,7 @@ export async function handleChatCompletion(
         emitThrottleEvent({
           ts: new Date().toISOString(),
           event: "at-limit",
-          convIdHash: hashConversationId(convId),
+          convIdHash: hashConversationId(convId ?? "anon"),
           current: t.current,
           max: t.max,
         });
