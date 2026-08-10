@@ -1,4 +1,6 @@
 # Local models on an 8 GB Blackwell GPU — options for m365-copilot-proxy
+> Snapshot as of 2026-08-09.
+
 
 **Date:** 2026-08-09 · **Status:** revised after adversarial review · **Method:** 6 background research
 lanes against primary sources (files in `docs/research/notes/`) + full repo digest.

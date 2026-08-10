@@ -1,4 +1,6 @@
 # Adversarial review — DS V4 Flash judge (2026-08-09)
+> Snapshot as of 2026-08-09.
+
 
 **Judge:** `reviewer` agent on the deepseek/deepseek-v4-flash lane (kdash guard: ok).
 **Scope:** `docs/research/2026-08-09-local-models-8gb-blackwell.md` + the six lane

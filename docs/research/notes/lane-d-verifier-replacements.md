@@ -1,4 +1,6 @@
 # Lane D — Execution-intent verifier replacements (faster than Bonsai-27B-Q1)
+> Snapshot as of 2026-08-09.
+
 
 - **Research date:** 2026-08-09. All "current" claims are as of this date.
 - **Problem:** The 8H fail-closed gate currently runs Bonsai-27B-Q1 (PrismML, 1-bit Qwen3.6-27B derivative, 3.54 GB GGUF) under llama.cpp on the local machine RTX 5060 8 GB: **measured median 24.7 s / p95 35.9 s per verdict** (held-out run, n=32, ticket 03). Latency, not safety, is the stated remaining constraint (ADR-0002, NEXT.md). The frozen contract is temp 0, single-token EXECUTE/TEXT/UNCERTAIN, ≤8K context; fail-closed (only literal EXECUTE executes).

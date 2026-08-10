@@ -1,4 +1,6 @@
 # Lane B — Tool-use architectures: what makes open-weight local models good at agentic tool calling
+> Snapshot as of 2026-08-09.
+
 
 **Date of research:** 2026-08-09. **Scope:** evidence review for selecting open-weight models that can run multi-turn, function-calling agent loops on a small local GPU (8 GB class, e.g. RTX 5060). Companion lanes cover VRAM fit and Blackwell runtime support; this note focuses on architectures, training recipes, benchmarks, failure modes, and format sensitivity.
 

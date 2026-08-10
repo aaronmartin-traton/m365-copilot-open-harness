@@ -1,4 +1,6 @@
 # Lane A — Open-weight LLM fit on an 8 GB NVIDIA RTX 50-series GPU (Blackwell, sm_120)
+> Snapshot as of 2026-08-09.
+
 
 - **Research date:** 2026-08-09 (all "current" claims are as of this date; the local-model landscape moved fast in H1 2026)
 - **Target hardware:** GeForce RTX 50-series with 8 GB VRAM (e.g. RTX 5060 8 GB: 3,840 CUDA cores, 8 GB GDDR7, 128-bit, **448 GB/s** bandwidth, 145 W, compute capability **sm_120**, CUDA 12.8+ required) — specs: TechPowerUp <https://www.techpowerup.com/gpu-specs/geforce-rtx-5060.c4219>, NVIDIA launch guide <https://www.nvidia.com/en-sg/geforce/news/ultimate-guide-to-5060/>

@@ -1,4 +1,6 @@
 # Lane E — Local fallback lane fit (keeping the agent loop alive when M365 throttles or Disengages)
+> Snapshot as of 2026-08-09.
+
 
 - **Research date:** 2026-08-09 (all "current" claims as of this date)
 - **Question:** when M365 Copilot throttles (thread-rate degradation backoff) or Disengages, can the coding-agent loop keep running on a LOCAL model instead of idling — and what prior art, models, and operational shape fit this project?

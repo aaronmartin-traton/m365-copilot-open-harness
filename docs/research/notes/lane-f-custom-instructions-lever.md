@@ -1,4 +1,6 @@
 # Lane F — Custom Instructions as a persistent tool-format lever
+> Snapshot as of 2026-08-09.
+
 
 - **Research date:** 2026-08-09 (all "current" claims as of this date)
 - **Question:** can M365 Copilot's account-level **Custom instructions** feature act as a
