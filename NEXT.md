@@ -108,6 +108,30 @@ stays the default. This path is explicitly opt-in.
    standby-only. They need explicit user authorization. Keep all M365 work
    sequential and thread-conserving.
 
+## Laptop / pane recovery runbook (2026-08-09, collab relay outage)
+
+The pane agents lost their collab link when the relay host died. Their
+detached work (conversation pruner, `prune-results.json`) continued on the
+local machine. When the panes reconnect:
+
+1. Laptop (w8:p6): report pruner outcome — `prune-results.json` content,
+   remaining session-store entries, port 1234 free, no stray chromium.
+2. Laptop: `git fetch origin sync/attestation-2026-08-09 && git merge
+   --no-edit origin/sync/attestation-2026-08-09` — pulls 10 commits:
+   attestation gate + adapters, images route, proof-header security fix,
+   telemetry fixes, STE docs, cramt digest, NEXT.md. Preserve local machine-local
+   edits (hypotheses.md, logprob ticket, lightweight spec, local machine AGENTS.md).
+3. Laptop: re-verify attestation LIVE with the new proof header —
+   `X-M365-Attestation-Proof` is now REQUIRED to opt into the gate. Positive
+   (register → allow → result accepted) and negative (no proof → 8H stays on;
+   fabricated id → 409) paths. Budget: 12 threads/hr cap, ≥3 min spacing,
+   hard stop at first empty-503/at-limit.
+4. PC (w8:p1): nothing pending — all work committed and pushed to the sync
+   branch. STE pass done (cramt-derived docs excluded per user override).
+5. LAN the egress check still in force: do NOT push to `lan/main` or GitHub until
+   `review/local machine-preparation` + `review/lan-bakeoff-disposition` are reviewed,
+   then secret scan + pre-push hook.
+
 ## Standing verification and safety
 
 - Preserve the frozen prompt, corpus, gold labels, policy, and split
