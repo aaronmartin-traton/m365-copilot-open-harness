@@ -1,116 +1,155 @@
-# Working Methodology (PC Implementer)
+# Working Methodology
 
-How locally implementer works in this project. It is the startup playbook for
-a new session on the local machine. Read it with `docs/agents/session-workflow.md`, the
-two-machine operating manual. This doc covers the local role only.
+How this project starts and runs a session. Read this file first. It gives
+the startup sequence, the operating rules, and the current mission. The
+deeper operating manual is `docs/agents/session-workflow.md`.
 
-## 1. Role and boundaries
+## 1. Session startup sequence
 
-- You are locally implementer. The team has three parties: PC implementer,
-  local machine implementer, and coordinating architect.
-- You own implementation, unit tests, adversarial review, and docs on the
-  working repo.
-- The PC never runs local models. Live M365 work happens only on the local machine.
-- Your tickets are research and implementation only. They must not send M365
-  traffic.
+Do these steps in order. They take about 15 minutes.
 
-## 2. Session startup
+1. Read `NEXT.md`. It holds the current baseline, the next slice, and the
+   standing verification rules.
+2. Read this file (`docs/agents/working-methodology.md`).
+3. Read `docs/agents/session-workflow.md`. It is the operating manual.
+4. Read `CONTEXT.md`. It defines the domain vocabulary. Use its terms.
+   Do not drift to synonyms.
+5. Check the git state. Run `git status -sb`, `git branch -vv`, and
+   `git worktree list`. Never trust a doc snapshot for these facts.
+6. Check the collab panes. Run `herdr agent list`. The local machine implementer
+   is `w8:p6` (bottom-left). The PC implementer is `w8:p1`.
+7. Claim the earliest unblocked ticket in `.scratch/<feature>/issues/`.
+   Read `docs/agents/issue-tracker.md` for the ticket format.
 
-Do these steps in order at the start of a session.
+## 2. Operating principles
 
-1. Join the collab. The link lives in
-   `/path/to/the remote/shared/collab-link.txt`. Run
-   `omp join "<link>"`.
-2. Read `NEXT.md`. It is the handoff doc with baseline, attestation state,
-   next slice, and recovery runbook.
-3. Read `docs/agents/session-workflow.md`. It is the two-machine operating
-   manual.
-4. Read `AGENTS.md` and `CONTEXT.md`. Use the repo vocabulary.
-5. Check state with `git status -sb` and `git log --oneline -5`. Never trust
-   a snapshot for volatile Git facts.
-6. Claim the earliest unblocked ticket. Tickets live in
-   `.scratch/<feature>/issues/` as one file each. Read the `Status:` and
-   `Blocked by:` lines. Read the spec in `.scratch/<feature>/spec.md` first.
-7. Read the protocol doc before you touch protocol code. Read
-   `docs/prompt-engineering.md` before you tinker with framing.
-8. Announce the claim to the coordinator pane (`w8:p2`).
+These rules come from hard-won experience. Follow them.
 
-## 3. Hard constraints
+- **Run sequentially. One M365 thread at a time.** The rate limit tracks
+  conversations started, not messages (F13). Never fire concurrent
+  requests. Never loop fresh conversations back-to-back. Space runs out.
+- **Chase all hunches.** The moment you think "maybe X works like this",
+  stop and test it. Record what you learn in `docs/hypotheses.md`.
+- **Keep the end goal in view.** Every change must make a usable agent in
+  pi, Codex, or standalone. A finding that does not move that needle is a
+  footnote.
+- **Be scientific.** Turn every "I think X" into a falsifiable hypothesis.
+  Use the cheapest probe that settles it. Log sample size and evidence.
+- **n=1 is noise.** One SOLVED or Disengaged is a single sample on a
+  stochastic, throttle-confounded backend. Confirm winners with
+  `--repeat`. Control for order effects.
+- **Try N wildly different variants.** Never iterate on the first idea.
+  A/B them all in one sweep. Read the scorecard. Then go deep on the
+  winner.
 
-- Zero M365 traffic in every ticket. The verifier prompt and corpus are
-  frozen (ADR-0002).
-- Gate order: 0 unsafe false positives, then selective accuracy at least
-  0.95, then measured latency.
-- Reviews of `lan/main` are read-only. Do not merge, edit, test, or bench
-  local machine evidence.
-- Do not start ticket 03 or 04 without the architect's clearance.
-- Do not push to `lan/main` or GitHub until the the egress check reviews land.
-  GitHub pushes also need the secret scan.
-- Do not touch local machine handoff files or another participant's files.
-- Commit only your files. Verify the diff before you commit.
+## 3. The verifier bake-off (current mission)
 
-## 4. Ticket delivery standard
+This is the active work stream. The contract is frozen. Do not bend it.
 
-- Deliver evidence, not claims. Include exact commands, sample sizes, and
-  evidence pointers.
-- A findings report has four parts: paths and versions, port and hardware
-  evidence, exact resume commands with an identity guard, and human-needed
-  items.
-- n=1 is noise. Repeat winners with `--repeat`. Rotate strategy order
-  across runs.
-- Log every hypothesis in `docs/hypotheses.md` with a falsification
-  criterion. Promote conclusive findings to the protocol or
-  prompt-engineering doc.
-- State the check that proves done. Claim success only from a tool result.
+### Gate order
 
-## 5. Environment quirks
+1. Zero unsafe false positives.
+2. Selective accuracy at least 0.95.
+3. Then latency.
 
-- Use `bun x`, not `bunx`.
-- `rm -rf` is denied. Use `mv` to the egress check instead.
-- Git Bash has no process substitution.
-- Committed JSON files carry a UTF-8 BOM.
-- Git Bash `grep` and `sed` fail on `/c/`-style paths.
-- `HOME` is empty in Git Bash. Use `USERPROFILE=C:\Users\PC_HOST`.
-- Port 1234 is LM Studio on the local machine. It serves qwen3.5-4b and friends, not
-  the verifier. The verifier is llama-server with Bonsai-27B on the local machine.
-- The local machine connects into locally sshd. The link is
-  `<local machine-ip>:62386` to `<pc-ip>:22`.
-- The PC has no `msal-cache.json`. Live M365 verification is auth-blocked
-  here. A human interactive login is required first. Never attempt it
-  unattended.
-- `herdr agent prompt --wait` does not observe collab guests. Send the
-  prompt without `--wait`. Poll `herdr agent read <pane> --source recent`
-  for progress.
+### Screen rules
 
-## 6. Communication
+- Screen new candidates on the 28-case DEV corpus first.
+- Freeze exactly ONE candidate before the held-out gate.
+- Run the single 32-case held-out run once.
+- Never retry a rejected candidate on held-out.
+- Run `validate-split.mjs` before any new screen.
+- Identity-guard the echoed `model` field on every response.
+- Screen models one local server at a time.
+- Keep GGUF weights and local hash manifests out of Git.
 
-- Panes: `w8:p1` is locally implementer, `w8:p6` is the local machine guest,
-  `w8:p2` is the coordinator.
-- The collab relay runs on port 7466. When it dies, pane agents freeze in
-  `SYN_SENT`. Detached work on the local machine continues. Panes reconnect when
-  the relay returns.
-- Exchange artifacts through the LAN repo and sync branches. Do not paste
-  large blobs into chat.
-- Telemetry NDJSON lives outside the repo. Hash conversation ids with
-  sha256. Set `M365_NO_TELEMETRY=1` to disable.
+### Current state (2026-08-10)
 
-## 7. Docs conventions
+- Ticket 03 closed **rejected**. Five candidates produced an unsafe false
+  positive on `ambiguous-002`. Ministral-3-3B cleared safety but failed
+  accuracy (selAcc 0.607). No candidate was frozen.
+- Ticket 04 (held-out) is **ineligible** and must NOT run.
+- The **8H fail-closed** verifier remains the approved baseline.
+- Next slice: a genuinely different latency direction, retaining the
+  fail-closed contract and the DEV gate order.
+- M365 probes, including custom-instructions, are **standby-only**. They
+  need explicit user authorization. Keep all M365 work sequential and
+  thread-conserving.
 
-- STE applies to fork-authored operational docs. That includes
-  `docs/agents/*`.
-- The scientific notebooks and the cramt-derived docs stay verbatim. Do not
-  re-STE them.
-- Agent-facing docs follow the writing-for-agents levers: one leading word
-  per concept, one trigger per pointer branch, no duplication, checkable
-  completion criteria.
-- Research docs get a snapshot header with the date. Volatile Git facts
-  never go into committed prose.
+## 4. Machine roles and coordination
 
-## 8. Current mission
+| Machine | Role | Owns |
+|---|---|---|
+| **PC** | Implementation, tests, adversarial review, docs | Working repo, the remote remote, panes |
+| **Laptop** | The **only** live-M365 machine | MSAL auth cache, llama-server verifier, live probes |
 
-- The standing goal: a usable agent in pi, Codex, or standalone, driven by
-  this proxy, with a fail-closed execution gate.
-- The active direction is client-attested execution. It is opt-in. The 8H
-  baseline stays the default.
-- The current slice and its blockers live in `NEXT.md`. Read it for the
-  exact state.
+**Hard rules:**
+
+- The PC **never runs local models** (user rule 2026-08-10). All verifier
+  and local-model work happens on the local machine.
+- Live M365 verification happens **only** on the local machine.
+- The local machine verifier: llama-server (build b10321), Bonsai-27B-Q1_0 GGUF,
+  `--alias bonsai-27b-q1 --seed 42 -ngl 99 -c 8192`, port 1234.
+
+### Sync and review refs
+
+- Push work to a **sync feature branch** (`sync/<topic>-<date>`), never
+  `lan/main`, never GitHub directly.
+- `review/local machine-preparation` and `review/lan-bakeoff-disposition` isolate
+  the local machine's broader history pending review. Review them before any
+  merge or GitHub push.
+- GitHub pushes additionally need the secret scan and the pre-push hook.
+
+### Herdr quirks
+
+- `herdr agent prompt --wait` and `--until` **do not observe state changes
+  for collab guests**. They stall or time out even when the agent received
+  the prompt.
+- Send the prompt without `--wait`. Confirm delivery with
+  `herdr pane read <pane> --source recent-unwrapped --lines 30`.
+- `herdr pane wait-output` can match old scrollback. Verify with a fresh
+  pane read.
+
+## 5. Verification ladder — every change, in order
+
+1. `bun run build` (tsdown, all packages — tests import from `dist/`).
+2. `bun run test` (Vitest — **not** bare `bun test`).
+3. Package typecheck: `bun x tsc --noEmit -p packages/<pkg>/tsconfig.json`.
+   (handler.ts has 2 pre-existing errors — do not "fix" them casually.)
+4. `bun scripts/secret-scan.mjs --commits <range>` at both egress points
+   (commit and push). Output MUST read `secret-scan: clean`.
+5. Conventional Commits (`fix:`, `feat:`, `docs:`, `chore:`, `build:`).
+   No `Co-Authored-By` lines.
+6. Push only to the sync branch.
+
+**Project code rules**: ESM with `.js`-suffixed relative imports; Zod for
+boundary validation; `createLogger` not `console.log` in library code; no
+inline `as {…}` casts — use `instanceof` or schema parse; small focused
+files; no dead shims or aliases after a change.
+
+## 6. Docs and evidence policy
+
+- **Work lives in tickets, not prose.** `.scratch/<feature>/issues/` holds
+  one file per ticket with `Status:` and `Blocked by:` lines.
+- **Log every hypothesis** in `docs/hypotheses.md` with a falsification
+  criterion and a probe idea. Update it when the experiment lands.
+- **Promote conclusive findings.** Protocol behavior goes to
+  `docs/m365-copilot-api.md`. Prompting strategy goes to
+  `docs/prompt-engineering.md`. Leave a one-line pointer in the notebook.
+- **STE (ASD-STE100) applies** to AGENTS.md, NEXT.md, CONTEXT.md, and
+  `docs/agents/*`. Evidence verbatim (`docs/hypotheses.md`,
+  `docs/experiments.md`, `.scratch` tickets) is NOT STE'd.
+- **No derivable volatile facts in committed prose.** Never write commit
+  SHAs, branch tips, worktree paths, or push status into committed docs.
+  Git is the single source of truth for those.
+- **Wrap up every session**: append to the harvest run log, refresh
+  `NEXT.md`, and give a safe-to-clear verdict.
+
+## 7. Standby-only actions (require explicit authorization)
+
+| Action | Status |
+|---|---|
+| M365 live probes (incl. custom-instructions) | Standby — explicit authorization required |
+| Local model uninstall / deletion | Standby — needs an explicit user-approved deletion list |
+| Merge LAN history into PC main | Blocked — review refs not yet reviewed |
+| GitHub push | Blocked — LAN the egress check + secret scan + pre-push hook |
