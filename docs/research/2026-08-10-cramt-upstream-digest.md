@@ -195,6 +195,26 @@ Tool calling works only with a server-side system prompt, delivered via an auto-
 
 Priority-ordered by architect value. "Tiny" ≈ ≤1 h, "small" ≈ half day, "medium" ≈ 1-2 days, all fork-context effort.
 
+**Verification status (2026-08-09/10, by coordinator):** items 1, 2, 4 were
+flagged "[verify]" by the digest agent — all three are **already implemented in
+the fork**:
+- Item 1: `copilot.ts` has `gpt-5.6-think-deeper → Gpt_5_6_Reasoning` (line 25)
+  and the unmapped-`claude-*` → `Claude_Sonnet` fallback (line 58). Done.
+- Item 2: `usage-builder.ts` emits `x_m365_dea_score`, `x_m365_offense_score`,
+  `x_m365_content_origin`, `x_m365_turn_count` (lines 46-58). Done.
+- Item 4: F22 softened-framing retry is in `handler.ts` (~lines 230-256),
+  guarded by `M365_NO_DISENGAGE_RETRY`, fresh conversation + `softened` variant.
+  Done.
+- Bonus: the fork's `RequestScheduler` already paces new threads
+  (`M365_NEW_THREADS_PER_MINUTE`, default 2/min = 120/hr with a burst token
+  bucket, `scheduler.ts`) — aggressive vs the ~18/hr proven-safe sustained rate
+  from the overnight sweep; degradation backoff is the safety net. Not changed
+  without evidence.
+
+Remaining actionable: items 5 (firstNewMessageIndex mining), 6 (native custom
+actions live capture), 8 (`/v1/images/generations` route), 10 (framing A/B
+harness).
+
 1. **[tiny] Sync `MODEL_TONES` + `getToneForModel` from upstream `copilot.ts`.** Adds `gpt-5.6-think-deeper` (live-validated 2026-08-06, `Gpt_5_6_Reasoning`) and the unmapped-`claude-*`→`Claude_Sonnet` fallback that keeps Claude-Code-style clients on the working agent-less path instead of the GPT confab quadrant. Also note the three-outcome tone probe (`DeepLeo` vs `BotConnection` dead-tone trap) — re-probe before mapping any new tone.
 2. **[tiny] Adopt the `usage` extension-field telemetry (`x_m365_dea_score`, `x_m365_offense_score`, conversation-quota %, `contentOrigin`, `turnCount`).** Fork already has `usage-builder.ts`; verify it carries the scores + quota (upstream `handler.ts::buildUsage`). `dea_violation` is the only live "how close to Disengaged am I" signal (clean ~1e-8, prose ~1e-6, jailbreak ~1e-3, fires >2e-3) — feeds the fork's throttle telemetry directly.
 3. **[tiny] `M365_DUMP_FRAMES` forensic NDJSON frame capture** — fork already has it (local `session.ts:63`); make sure it's exercised in the fork's live-probe workflow (`scripts/frame-dump-disengage.mjs`). Zero-cost, high debug value when M365 changes the protocol.

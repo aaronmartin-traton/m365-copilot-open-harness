@@ -2360,3 +2360,27 @@ candidate fails the held-out gate (unsafe FP > 0 or selAcc < 0.95). The
 custom-instructions conclusion dies if replicated flag-on/flag-off pairs show
 no effect. The fallback-lane option dies if passive telemetry shows throttle
 lulls are rare/short.
+## 18. Live-probe thread budget (2026-08-09) — evidence-backed cap
+
+**Question.** How many fresh M365 conversations can we start per hour before
+thread-rate throttle (F13) engages?
+
+**Evidence.**
+- Repo: June 25 overnight A/B (`scripts/bench/overnight-sweep.sh`,
+  `CELL_COOLDOWN=120`s = 0.3 threads/min ≈ **18/hour**) ran **zero
+  thread-throttle all night** on a rested account; every error was
+  content-filter Disengaged, F13 never fired.
+- Repo: per-conversation cap is 600 messages (telemetry `at-limit` current=600,
+  max=600 observed); thread-rate throttle is `oid`-keyed, recovery = idle time.
+- Online: Microsoft publishes no numeric Copilot Basic limits ("standard access
+  limits apply", MS Q&A 2026-04-23); community confirms a per-conversation cap
+  ("Sorry, this conversation has reached its limit"). Other vendors' free-tier
+  message quotas (ChatGPT 30-50/3h, Claude 10-20/5h) are message-quotas on
+  different products — not transferable.
+- Fork's own scheduler defaults to 2 threads/min (120/hr) as a token bucket with
+  degradation backoff as the safety net — above the proven-safe sustained rate.
+
+**Decision (user-authorized).** Cap live probe work at **12 threads/hour** —
+between the user's suggested 10 and the proven-safe 18 — with ≥3 min spacing
+between fresh conversations, and a hard stop at the first empty-503 / at-limit
+error (report, do not retry). One conversation per probe.
