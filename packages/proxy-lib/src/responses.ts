@@ -305,7 +305,12 @@ type BuiltResponse = { envelope: ResponseEnvelope } | { error: Response };
 async function buildResponse(
   body: ResponsesRequestBody,
   pool: SessionPool,
-  options: { signal?: AbortSignal; sessionKey?: string },
+  options: {
+    signal?: AbortSignal;
+    sessionKey?: string;
+    executionGate?: string;
+    attestationClient?: string;
+  },
 ): Promise<BuiltResponse> {
   const id = `resp_${crypto.randomUUID().replaceAll("-", "")}`;
   const metadataSessionId = body.client_metadata && typeof body.client_metadata.session_id === "string"
@@ -400,7 +405,12 @@ function streamDeferredResponse(pending: Promise<BuiltResponse>): Response {
 export async function handleResponse(
   body: ResponsesRequestBody,
   pool: SessionPool,
-  options: { signal?: AbortSignal; sessionKey?: string } = {},
+  options: {
+    signal?: AbortSignal;
+    sessionKey?: string;
+    executionGate?: string;
+    attestationClient?: string;
+  } = {},
 ): Promise<Response> {
   const pending = buildResponse(body, pool, options);
   if (body.stream) return streamDeferredResponse(pending);

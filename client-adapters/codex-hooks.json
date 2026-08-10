@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node <absolute-path>/attestation-helper.mjs --codex",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

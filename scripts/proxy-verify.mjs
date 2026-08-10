@@ -61,6 +61,18 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "bash",
+      description: "Execute a shell command",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string", description: "The shell command" } },
+        required: ["command"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "read_file",
       description: "Read a file from the filesystem",
       parameters: {

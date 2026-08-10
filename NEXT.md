@@ -8,6 +8,10 @@
   `M365_INTENT_VERIFIER=0`.
 - Safety is proven on the frozen held-out corpus. Latency remains the
   architectural constraint.
+- **Client-attested execution** is the chosen low-latency direction: opt-in
+  (`M365_CLIENT_ATTESTATION=1` + request headers), never replaces the 8H
+  baseline. See `.scratch/client-attested-execution/spec.md` and tickets
+  `01-attestation-gate.md` / `02-reference-adapters.md`.
 - Use `git status -sb`, `git branch -vv`, and `git worktree list` for all
   current checkout, branch, and push state. Do not rely on this snapshot for
   volatile Git facts.
@@ -26,6 +30,32 @@
 - Evidence: `experiments/tool-decision/execution-intent/results/03-dev-screen/`,
   `docs/hypotheses.md` §§18–24, and
   `.scratch/verifier-latency-bakeoff/issues/`.
+
+## Client-attested execution (opt-in, in progress)
+
+The chosen direction for the latency problem: instead of a slower local model
+making the same decision, the trusted local harness (pi / OMP / Codex) attests
+one exact command before the proxy may execute it. The 8H baseline stays the
+default; this path is explicitly opt-in.
+
+- **Gate**: `POST /v1/attestations` (loopback-only). Payload:
+  `{client, tool, tool_call_id, command_sha256, ts, nonce}`; signature header
+  `X-M365-Attestation-Sig` = HMAC-SHA256 over the payload lines. Single use,
+  60 s expiry, registry caps at 1000 entries.
+- **Enablers**: `M365_CLIENT_ATTESTATION=1` + shared `M365_ATTESTATION_SECRET`.
+  Request headers `X-M365-Execution-Gate: attestation-v1` and
+  `X-M365-Attestation-Client: pi|omp|codex`. Adapter helper additionally needs
+  `M365_ATTESTATION_URL=http://127.0.0.1:<port>`.
+- **Adapters**: `client-adapters/` — `pi-attestation-gate.ts`,
+  `omp-attestation-gate.ts`, `codex-hooks.json` (PreToolUse approve|block),
+  `attestation-helper.mjs`.
+- **Implementation state**: tickets 01 (gate) and 02 (adapters) resolved,
+  unit-tested. **Uncommitted** — do not commit until the LAN branch review
+  (below) clears, then one local commit, then merge/push only after secret
+  scan + pre-push hook.
+- **Next**: manual end-to-end smoke test of the attestation loop (register →
+  AUTHORIZED → tool result accepted) through a real harness; document the
+  handshake in `docs/m365-copilot-api.md` or a new doc once verified.
 
 ## Next slice
 

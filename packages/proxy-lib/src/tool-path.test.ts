@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { produceToolPath, type ToolPathDeps, type ToolPathResult } from "./tool-path.js";
 import type { ToolDef } from "@m365-copilot/core";
+import type { AttestationGate } from "./attestation.js";
 import { CONFAB_FORCE_PROMPT, HALLUCINATION_FORCE_PROMPT, REMOTE_ARTIFACT_FORCE_PROMPT } from "./force-prompts.js";
 
 /** Assert the result kind and narrow the discriminated union for typecheck. */
@@ -564,6 +565,55 @@ describe("produceToolPath — fail-closed intent verifier gate", () => {
     expect(result.text).toBe("```bash\nls -la\n```");
     expect(intentVerifier.check).toHaveBeenCalledOnce();
     expect(registerToolCalls).not.toHaveBeenCalled();
+  });
+
+  it("trusted client attestation bypasses 8H only for a registered bash command", async () => {
+    const runTurn = vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" });
+    const registerToolCalls = vi.fn();
+    const intentVerifier = { check: verifierStub("TEXT") };
+    const attestationGate: AttestationGate = {
+      register: vi.fn(() => true),
+      attest: vi.fn(() => false),
+      acceptToolResult: vi.fn(() => false),
+    };
+
+    const result = narrow(await produceToolPath(INITIAL_PROMPT, {
+      runTurn,
+      markSent: vi.fn(),
+      registerToolCalls,
+      messages: [],
+      tools: [bashTool],
+      intentVerifier,
+      attestationGate,
+      attestationClient: "pi",
+    }), "tools");
+
+    expect(attestationGate.register).toHaveBeenCalledWith("pi", result.toolCalls[0]);
+    expect(intentVerifier.check).not.toHaveBeenCalled();
+    expect(registerToolCalls).toHaveBeenCalledWith(result.toolCalls);
+  });
+
+  it("uses 8H when attestation cannot register the parsed tool call", async () => {
+    const intentVerifier = { check: verifierStub("TEXT") };
+    const attestationGate: AttestationGate = {
+      register: vi.fn(() => false),
+      attest: vi.fn(() => false),
+      acceptToolResult: vi.fn(() => false),
+    };
+
+    const result = narrow(await produceToolPath(INITIAL_PROMPT, {
+      runTurn: vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" }),
+      markSent: vi.fn(),
+      registerToolCalls: vi.fn(),
+      messages: [],
+      tools: [bashTool],
+      intentVerifier,
+      attestationGate,
+      attestationClient: "pi",
+    }), "text");
+
+    expect(result.text).toBe("```bash\nls -la\n```");
+    expect(intentVerifier.check).toHaveBeenCalledOnce();
   });
 
   it("no verifier in deps -> byte-identical legacy behavior (regression guard)", async () => {

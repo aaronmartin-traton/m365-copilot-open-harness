@@ -27,6 +27,7 @@ import {
   REMOTE_ARTIFACT_FORCE_PROMPT,
 } from "./force-prompts.js";
 import type { IntentVerifier } from "./intent-verifier.js";
+import type { AttestationClient, AttestationGate } from "./attestation.js";
 
 const log = createLogger("tool-path");
 
@@ -55,6 +56,9 @@ export interface ToolPathDeps {
    * historical unverified behavior, byte-for-byte.
    */
   intentVerifier?: IntentVerifier;
+  /** Explicit trusted-client execution path for one exact bash command. */
+  attestationGate?: AttestationGate;
+  attestationClient?: AttestationClient;
 }
 
 export type ToolPathResult =
@@ -194,11 +198,19 @@ export async function produceToolPath(
   }
 
   if (parsed.hasToolCalls && parsed.toolCalls.length > 0) {
-    // Fail-closed intent verifier (8H): the parse's tool-shaped result is NOT
-    // executed directly. It is passed to the verifier and execution proceeds
-    // only on verifier EXECUTE. Any other outcome -> raw text (matches 8H TEXT
-    // semantics: the raw M365 text is the response).
-    if (deps.intentVerifier) {
+    // A configured client hook may replace the local classifier for one exact
+    // emitted bash command. Unsupported tool shapes retain the 8H verifier.
+    const attested = !!deps.attestationGate &&
+      !!deps.attestationClient &&
+      parsed.toolCalls.length === 1 &&
+      deps.attestationGate.register(deps.attestationClient, parsed.toolCalls[0]);
+    if (attested) {
+      log.info("Client attestation candidate registered");
+    } else if (deps.intentVerifier) {
+      // Fail-closed intent verifier (8H): the parse's tool-shaped result is NOT
+      // executed directly. It is passed to the verifier and execution proceeds
+      // only on verifier EXECUTE. Any other outcome -> raw text (matches 8H TEXT
+      // semantics: the raw M365 text is the response).
       const v = await deps.intentVerifier.check(fullText);
       log.info(`Intent verifier: decision=${v.decision}`);
       if (v.decision !== "EXECUTE") {

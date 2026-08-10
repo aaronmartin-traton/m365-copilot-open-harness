@@ -1,3 +1,5 @@
+import { createHash, createHmac } from "node:crypto";
+import { getAttestationGate, resetAttestationGate } from "./attestation.js";
 import { describe, expect, it, vi } from "vitest";
 
 // Legacy tool-path tests run WITHOUT the intent verifier: opt out explicitly
@@ -130,5 +132,64 @@ describe("handler deterministic boundaries", () => {
     expect(scripted.prompts[1]).toContain('<tool_response name="apply_patch"');
     expect(scripted.prompts[1]).toContain("<task_anchor>task</task_anchor>");
     expect(scripted.prompts[1]).not.toContain("<system>");
+  });
+
+  it("requires attestation before accepting a selected client tool result", async () => {
+    process.env.M365_CLIENT_ATTESTATION = "1";
+    process.env.M365_ATTESTATION_SECRET = "handler-attestation-secret";
+    resetAttestationGate();
+    const bashTool = {
+      type: "function" as const,
+      function: {
+        name: "bash",
+        description: "Run a command",
+        parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
+      },
+    };
+    const initialMessages = [{ role: "user", content: "task" }];
+    const pool = new SessionPool();
+    try {
+      scripted.text = "```bash\necho attested\n```";
+      const first = await handleChatCompletion(
+        body(initialMessages, { tools: [bashTool], conversation_id: "attestation-test" }),
+        pool,
+        { executionGate: "attestation-v1", attestationClient: "pi" },
+      );
+      const firstJson = await first.json();
+      const call = firstJson.choices[0].message.tool_calls[0];
+      const command = JSON.parse(call.function.arguments).command;
+      const attestation = {
+        client: "pi" as const,
+        tool: "bash" as const,
+        tool_call_id: call.id,
+        command_sha256: createHash("sha256").update(command, "utf8").digest("hex"),
+        ts: Math.floor(Date.now() / 1_000),
+        nonce: "handler-attestation-nonce",
+      };
+      const signature = createHmac("sha256", process.env.M365_ATTESTATION_SECRET).update([
+        attestation.client,
+        attestation.tool,
+        attestation.tool_call_id,
+        attestation.command_sha256,
+        attestation.ts,
+        attestation.nonce,
+      ].join("\n"), "utf8").digest("hex");
+      expect(getAttestationGate()!.attest(attestation, signature)).toBe(true);
+
+      scripted.text = "done";
+      const next = await handleChatCompletion(body([
+        ...initialMessages,
+        { role: "assistant", content: null, tool_calls: firstJson.choices[0].message.tool_calls },
+        { role: "tool", tool_call_id: call.id, name: "bash", content: "attested" },
+      ], { tools: [bashTool], conversation_id: "attestation-test" }), pool, {
+        executionGate: "attestation-v1",
+        attestationClient: "pi",
+      });
+      expect(next.status).toBe(200);
+    } finally {
+      delete process.env.M365_CLIENT_ATTESTATION;
+      delete process.env.M365_ATTESTATION_SECRET;
+      resetAttestationGate();
+    }
   });
  });

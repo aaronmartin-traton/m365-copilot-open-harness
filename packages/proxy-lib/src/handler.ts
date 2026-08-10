@@ -24,6 +24,7 @@ import { OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
 import { renderImagesMarkdown } from "./image-renderer.js";
 import { produceToolPath } from "./tool-path.js";
 import { getIntentVerifier } from "./intent-verifier.js";
+import { getAttestationGate, requestedAttestationClient } from "./attestation.js";
 import { renderResponse, type Produced } from "./response-renderer.js";
 import type { z } from "zod/v4";
 
@@ -41,7 +42,13 @@ type ChatBody = z.infer<typeof ChatCompletionRequest>;
 export async function handleChatCompletion(
   body: ChatBody,
   pool: SessionPool,
-  opts: { signal?: AbortSignal; sessionKey?: string; managedKey?: string } = {},
+  opts: {
+    signal?: AbortSignal;
+    sessionKey?: string;
+    managedKey?: string;
+    executionGate?: string;
+    attestationClient?: string;
+  } = {},
 ): Promise<Response> {
   const localMeta = localMetaResponse(body);
   if (localMeta !== null) return renderLocalCompletion(body, localMeta);
@@ -53,6 +60,26 @@ export async function handleChatCompletion(
   try {
   const conv = pool.resolve(body.messages, sessionKey, opts.managedKey);
   const { session } = conv;
+  const attestationGate = getAttestationGate();
+  const attestationClient = requestedAttestationClient(
+    opts.executionGate,
+    opts.attestationClient,
+  );
+  if (attestationGate) {
+    for (const message of body.messages.slice(conv.sentMessageCount)) {
+      if (
+        message.role === "tool" &&
+        !attestationGate.acceptToolResult(message.tool_call_id, attestationClient)
+      ) {
+        return jsonResponse(409, {
+          error: {
+            message: "Tool result has no matching client attestation",
+            type: "attestation_required",
+          },
+        });
+      }
+    }
+  }
   const hasTools = body.tools && body.tools.length > 0 && body.tool_choice !== "none";
   const requestImages = body.messages.flatMap((message) => getMessageImages(message));
   const model = body.model;
@@ -326,6 +353,8 @@ export async function handleChatCompletion(
       messages: body.messages,
       tools: body.tools,
       intentVerifier: getIntentVerifier() ?? undefined,
+      attestationGate,
+      attestationClient,
     });
   } else {
     // No tools — stream deltas live (onDelta) while buffering for the retry logic.
