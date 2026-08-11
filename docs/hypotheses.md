@@ -972,15 +972,28 @@ three tokens (Sydney, Power Platform, BAP).
   Starter licence.
 - BAP (3 governance paths): **all 404**.
 
-**Confidence.** Low. The Sydney 500s are not a clean "doesn't exist" signal.
-Re-running with the full browser header set is required before declaring
-token usage genuinely unreachable.
+**Browser-headers re-run (2026-08-11, `usage-endpoint-hunt-v2.mjs`).**
+The header-gating hypothesis is now **falsified**. The full browser header
+set (`Origin: https://m365.cloud.microsoft`, Firefox 148.0 `User-Agent`,
+`Accept-Language`) produced byte-identical results to the bare-header v1
+run on the same 18 reachable endpoints: 15× Sydney **500 empty body**, 3×
+BAP 404, 0 winners. The Sydney 500s are not header-gated; they are the
+same wall regardless of request flavor. (n=1 per endpoint per header
+flavor — the endpoints are static walls, so repetition adds little.)
 
-**Falsification.** Re-run `usage-endpoint-hunt.mjs` with
-`Origin: https://m365.cloud.microsoft` and the WS client's `User-Agent`.
-If anything returns 200/4xx (not empty 500), the surface exists.
+**Confidence.** Low → **Medium that the surface is unreachable by GET**.
+The 500s are now shown to be header-independent, and the flat-rate pricing
+note (Endpoints §, 2026-08-09) makes "correctly empty" the parsimonious
+reading: no token/cost field exists on our path. Remaining avenue is the
+admin-portal dig (ticket m365-live-probes/07) for a metering dashboard API.
 
-**Raw data.** `usage-endpoint-out/2026-06-09T07-09-42-663Z/results.json`.
+**Falsification (updated).** A 200/4xx (non-empty, non-500) from any
+Sydney REST sibling on a *different verb or path shape* would reopen the
+surface. The header treatment is closed.
+
+**Raw data.** `usage-endpoint-out/2026-06-09T07-09-42-663Z/results.json` (v1,
+bare headers) · `usage-endpoint-out/2026-08-11T01-57-29-398Z/results.json`
+(v2, browser headers).
 
 ---
 
@@ -1183,7 +1196,7 @@ cancelled turn, OR the secret NOT recalled.
 | F2 | Few-shot is dead weight | Med | 5×1 | Off by default |
 | F3 | `tool_choice:"required"` is harmful | High | 2×1 prose | Documented; no enforcement change |
 | F4 | `reply()` injection routes prose | Med | 2×1 prose | `M365_INJECT_REPLY_TOOL=1` |
-| F5 | No REST token-usage endpoint | Low | 24 URLs | None — needs re-probe with headers |
+| F5 | No REST token-usage endpoint | Med | 18 URLs ×2 header flavors | Browser-headers re-probe done (v2) — 500s header-independent; admin dig remains |
 | F6 | Disengaged didn't fire | Med | 32 turns | None — needs calibration probe |
 | F7 | Diagnostic fields available | High | every turn | Parsed & surfaced |
 | F8 | Unexplored fields | Untested | n/a | TODO probes |
@@ -1347,7 +1360,7 @@ without code changes.
 | 🟢 | `scripts/frame-dump-disengage.mjs` | Targeted Disengage-shaped probe. | 1 msg | F6 |
 | 🟢 | `scripts/tool-compliance-experiment.mjs --repeat N` | Statistical version of the compliance A/B. | 30N msgs | F2, F3, F4 with real error bars |
 | 🔴 | `disengaged-calibration.mjs` | Progressively more aggressive prompts to find the `dea_violation` threshold where Disengaged fires. | ~10 msgs | Bound F6 to a real threshold |
-| 🔴 | `usage-endpoint-hunt-v2.mjs` | Same as v1 but with full browser headers (Origin/User-Agent/Accept-Language). | 0 msgs (GETs) | F5 properly |
+| 🔴 | `usage-endpoint-hunt-v2.mjs` | Same as v1 but with full browser headers (Origin/User-Agent/Accept-Language). | 0 msgs (GETs) | **DONE 2026-08-11** — 500s identical to v1; header-gating falsified |
 | 🔴 | `inputmethod-experiment.mjs` | Flip `inputMethod` (`Keyboard`/`Voice`/`Agent`?) and `experienceType` enums, watch dea_violation. | ~5 msgs | §1.7, §1.8 |
 | 🔴 | `tone-comparison.mjs` | Repeat the compliance experiment across every `MODEL_TONES` value to test whether F2–F4 generalise off `magic`. | ~50 msgs | Generalisation of F2-F4 |
 | 🔴 | `transfer-token-probe.mjs` | Try to POST `conversationTransferToken` to various Sydney paths to see if a conversation can be migrated. | ~5 msgs | F8 (the 600-msg-cap workaround) |
