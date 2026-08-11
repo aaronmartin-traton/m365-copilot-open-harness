@@ -6,6 +6,26 @@
 current mission), then `docs/agents/session-workflow.md` (operating manual),
 then `CONTEXT.md` (vocabulary).
 
+## Next session plan
+
+1. **Auth into M365 on this PC** — human-assisted interactive login, per
+   `docs/agents/m365-auth-workflow.md` (`bun run build` then
+   `bun packages/proxy/bin/m365-login.mjs`, or start the proxy with
+   `M365_ENABLE_INTERACTIVE_APPROVAL=1`). The PC currently has no
+   `msal-cache.json` and no recorded login; telemetry is NOT evidence
+   (test pollution, see the runbook).
+2. **Verify auth** — `M365_DEBUG=1 bun scripts/proxy-verify.mjs --agent
+   --multiturn` (real tool loop). Mind the thread budget (~12 new
+   conversations/hour, ~600 msgs/conversation).
+3. **Live tests** — attestation-gate end-to-end smoke (register →
+   AUTHORIZED → tool result accepted) incl. the proof-header re-verification
+   the local machine smoke predates; any framing/Disengaged checks from
+   `docs/hypotheses.md` backlog.
+4. **Implementation** — `.scratch/de-overengineering/issues/01-ponytail-
+   cleanup-pass.md` item 6 (CdpClient → playwright) is now actionable once
+   login works; triage `.scratch/review-triage/issues/01-review-findings.md`
+   (AGENTS.md `bun test` correction, polluted-evidence cleanup decision).
+
 **STE status:** All operational docs pass under pragmatic STE (2026-08-09).
 The scientific notebooks (`docs/hypotheses.md`, `docs/experiments.md`,
 `docs/overnight-log.md`) and the `.scratch/*` tickets and specs keep their
