@@ -143,7 +143,9 @@ the quantitative benchmark. See the hypothesis-driven section above.
 ```sh
 bun install
 bun run build          # tsdown, all packages (tests import from dist/, so build first)
-bun test               # = test:unit; pure unit tests, NO auth/network
+bun run test:unit      # canonical suite: bun run build && bun run vitest run. Pure unit tests, NO auth/network.
+                       # Use `bun run test` / `bun run test:unit`, NOT bare `bun test` — bare `bun test`
+                       # invokes Bun's native runner, which cannot run this vitest suite (20 fails / 11 errors on pristine HEAD).
 bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
 ```
 

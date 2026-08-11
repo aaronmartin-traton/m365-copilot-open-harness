@@ -2384,3 +2384,31 @@ thread-rate throttle (F13) engages?
 between the user's suggested 10 and the proven-safe 18 — with ≥3 min spacing
 between fresh conversations, and a hard stop at the first empty-503 / at-limit
 error (report, do not retry). One conversation per probe.
+
+## 19. LM Studio can serve the frozen 8H verifier on the local machine (2026-08-10) — functional
+
+**Question.** Can Bonsai-27B-Q1_0 (frozen 8H verifier model,
+`prism-ml/Bonsai-27B-gguf`) run under LM Studio on the local machine instead of the
+llama.cpp server used for the local machine bake-off, without breaking the verifier
+contract?
+
+**Evidence.** Installed via `lms get`; loaded id `bonsai-27b` (4.73 GB, ctx
+32768). Probes against `127.0.0.1:1234/v1/chat/completions`:
+- The endpoint echoes the **actual loaded** model id, not the requested one
+  (`model: "bonsai-27b-q1"` → response `model: "bonsai-27b"`; unknown ids get
+  200, not 404). The identity guard (intent-verifier) therefore trips unless
+  `M365_INTENT_VERIFIER_MODEL=bonsai-27b` on this box; the echo being the
+  loaded id still catches a wrong loaded model.
+- Bonsai reasons by default under LM Studio: `max_tokens: 8` → `content: ""`
+  (29 reasoning chars, finish=length). With the frozen 2048 budget the decision
+  token lands in content (`ls -la` → TEXT; 1443 completion tokens = 1439
+  reasoning + 4 answer), `reasoning_content` separated (LM Studio ≥0.3.9),
+  finish=stop.
+- Latency on this AMD box (~25 s per 2048-budget call) is NOT representative;
+  target machine is NVIDIA CUDA. No performance conclusion drawn here.
+
+**Decision.** Verifier contract (echo identity, reasoning separation, decision
+token within 2048) holds under LM Studio. local proxy runs set
+`M365_INTENT_VERIFIER_MODEL=bonsai-27b` (LM Studio identifier); the llama.cpp
+`--alias bonsai-27b-q1` path stays valid for the local machine. Functional on the local machine
+only — latency/safety parity must be re-verified on the target machine.
