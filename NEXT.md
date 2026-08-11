@@ -37,7 +37,7 @@ ADHD+GLM cross-check) and `docs/agents/m365-ui-investigation.md` (runbook).
 
 1. ~~**Auth into M365 on this PC**~~ DONE 2026-08-10 — interactive login
    completed (playwright path; run under `node` on this PC, see
-   `docs/agents/m365-auth-workflow.md` → *PC (PC_HOST) environment notes*);
+   `docs/agents/m365-auth-workflow.md` → *PC environment notes*);
    `msal-cache.json` present.
 2. ~~**Verify auth**~~ DONE — `M365_DEBUG=1 bun scripts/proxy-verify.mjs
    --agent --multiturn` passed end to end (real tool loop; 8H verifier on
@@ -49,7 +49,7 @@ ADHD+GLM cross-check) and `docs/agents/m365-ui-investigation.md` (runbook).
    landed (`e15b103`); review-triage items 1–2 fixed (`3a6d3de`); tickets
    closed.
 
-## PC (PC_HOST) environment facts (2026-08-10)
+## PC environment facts (2026-08-10)
 
 - Browser-driving bins (login) run under **`node`**; playwright's connection
   layer (pipe + connectOverCDP) times out under Bun 1.3.14 on this box.

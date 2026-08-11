@@ -28,7 +28,7 @@ established 2026-08-09.
 
 ## 2. Sync & branching — the the remote
 
-- **the remote remote**: `kenja@<pc-ip>:/path/to/the remote/shared/m365-copilot-proxy.git` (SSH). The local machine's `origin` points at the same bare repo over SSH.
+- **the remote remote**: `user@lan-host:/path/to/the remote/shared/m365-copilot-proxy.git` (SSH). The local machine's `origin` points at the same bare repo over SSH.
 - **Push model**: work is committed on the local machine, pushed to a **sync feature
   branch** (`sync/<topic>-<date>`), never `lan/main` and never GitHub directly.
 - **LAN main the egress check**: still in force — do NOT push to `lan/main` or GitHub

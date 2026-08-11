@@ -12,7 +12,7 @@ To investigate the live UI you need three things working together:
 
 | Part | What | Current state (2026-08-11) |
 |---|---|---|
-| **Auth** | MSAL token cache (no password in scripts) | ✅ `~/.config/opencode-m365/msal-cache.json` live (`getTokenSilent()` works, `account@example.com`) |
+| **Auth** | MSAL token cache (no password in scripts) | ✅ `~/.config/opencode-m365/msal-cache.json` live (`getTokenSilent()` works, `<account-email>`) |
 | **Browser** | Persistent Playwright profile stays logged in | ✅ `browser-profile-cdp`, but see lock caveat |
 | **CDP attach** | Drive the live browser + read tabs | ✅ port 9222 |
 

@@ -27,8 +27,8 @@ operational companion to the protocol details in
 
 | Machine | Role | Auth state (2026-08-10) |
 |---|---|---|
-| Laptop (`LAPTOP`) | The live-M365 machine | Cache present; silent refresh works |
-| PC (`PC_HOST`, this box) | Implementation; live M365 only after a human login | No cache, no recorded login |
+| Laptop | The live-M365 machine | Cache present; silent refresh works |
+| PC (this box) | Implementation; live M365 only after a human login | No cache, no recorded login |
 
 No live M365 run is on record for locally. The throttle-telemetry file
 (`~/.config/opencode-m365/throttle-telemetry.ndjson`) contains only
@@ -89,7 +89,7 @@ wait for a settled URL.
 - Never store a password or MFA seed in this repo. The login flow keeps
   credentials on Microsoft's page only.
 
-## PC (PC_HOST) environment notes (2026-08-10)
+## PC environment notes (2026-08-10)
 
 - **Run the login under Node, not Bun.** Playwright's connection layer
   (launchPersistentContext pipe and connectOverCDP WebSocket) times out under
