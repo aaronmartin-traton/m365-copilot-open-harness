@@ -74,15 +74,6 @@ export class SessionPool {
     };
   }
 
-  async withConversation<T>(messages: Array<{ role: string; tool_calls?: Array<{ id: string }> }>, explicitKey: string | undefined, task: () => Promise<T>): Promise<T> {
-    const release = await this.acquire(messages, explicitKey);
-    try {
-      return await task();
-    } finally {
-      release();
-    }
-  }
-
   resolve(messages: Array<{ role: string; tool_calls?: Array<{ id: string }> }>, explicitKey?: string, managedKey?: string): ConversationState {
     const key = managedKey ?? this.managedKey(messages, explicitKey);
     const persistent = managedKey !== undefined || !!explicitKey?.trim();

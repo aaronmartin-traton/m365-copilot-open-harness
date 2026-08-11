@@ -2,12 +2,12 @@
 // framing still (a) avoid the "replace X->Y" Disengage AND (b) emit tool fences?
 // If yes, "on Disengaged, retry agent-less" is a viable proxy fix.
 //
-// Builds the EXACT proxy prompt via formatMessages (minimal framing + the 4 bench
+// Builds the EXACT proxy prompt via formatMessages (baseline framing + the 4 bench
 // tools), then sends it two ways: agentId=null (agent-less / DeepLeo) and with the
 // real tool agent (control, expected to Disengage). n each, sequential.
 //
 // Usage: bun scripts/disengage-agentless-probe.mjs [repeat]
-process.env.M365_FRAMING_VARIANT = process.env.M365_FRAMING_VARIANT || "minimal";
+process.env.M365_FRAMING_VARIANT = process.env.M365_FRAMING_VARIANT || "baseline";
 
 import { getToken, decodeJwt, formatMessages, getOrCreateAgent } from "../packages/core/dist/index.mjs";
 import { oneTurn } from "./_probe-chat.mjs";

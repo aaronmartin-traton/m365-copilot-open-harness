@@ -28,9 +28,8 @@ export { ImageGenerationRequest, handleImageGeneration, type ImageGenerationBody
 export { ResponsesRequest, handleResponse } from "./responses.js";
 export { RequestScheduler, SchedulerBusyError, type SchedulerStats } from "./scheduler.js";
 export {
-  contextCompiler,
-  type ContextCompiler,
-  type FullContextInput,
+  compileDelta,
+  LOCAL_TOOL_REMINDER,
   type DeltaContextInput,
 } from "./context-compiler.js";
 export { buildUsage, type UsageInput } from "./usage-builder.js";
@@ -76,9 +75,6 @@ export {
   type ParseResult,
 } from "@m365-copilot/core";
 
-
-/** Static body for `GET /health`. */
-export const HEALTH_PAYLOAD = { status: "ok" } as const;
 
 export function buildHealthPayload(pool?: SessionPool, reaper?: { lastRunAt: number | null; pruned: number; failed: number; disabled?: boolean }) {
   const backoff = getDegradationBackoffState();

@@ -58,6 +58,15 @@ describe("parseToolCalls", () => {
     expect(result.toolCalls[0].function.name).toBe("bash");
   });
 
+  it("should parse a legacy fenced call with a name-first JSON object", () => {
+    const input = '```tool_call\n{"name": "bash", "arguments": {"command": "ls"}}\n```';
+    const result = parseToolCalls(input);
+
+    expect(result.hasToolCalls).toBe(true);
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].function.name).toBe("bash");
+  });
+
   it("should cleanly parse a ```json fenced tool call (M365's natural markdown)", () => {
     const input = '```json\n{"tool": "read_file", "arguments": {"path": "/etc/hostname"}}\n```';
     const result = parseToolCalls(input);

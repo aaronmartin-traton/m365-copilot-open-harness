@@ -12,7 +12,7 @@ const files = readdirSync(OUT).filter((f) => f.startsWith(PREFIX + "-") && f.end
 
 // label shape: s2-<task>-<strategy>  (task may contain a hyphen: fix-bug, find-needle, edit-config)
 const TASKS = ["fix-bug", "find-needle", "edit-config", "fizzbuzz", "count-lines"];
-const STRATS = ["baseline", "minimal", "recency", "fewshot", "proof_demand", "persona", "react", "negative", "terse", "reply_tool"];
+const STRATS = ["baseline", "softened", "demo_only", "session_facts", "fewshot", "reply_tool"];
 
 const OUTCOME_GLYPH = { SOLVED: "✔", GAVE_UP_PROSE: "prose", MAX_TURNS: "maxT", ERROR: "ERR" };
 

@@ -173,9 +173,6 @@ class BonsaiIntentVerifier implements IntentVerifier {
   /** LRU decision cache: full cache-key -> entry. Cap 1000 entries. */
   private readonly cache = new Map<string, CachedEntry>();
 
-  /** drift map: prefix key -> last responseHash seen at that prefix. */
-  private readonly drift = new Map<string, string>();
-
   /** in-flight full-key -> Promise (single-flight). */
   private readonly inflight = new Map<string, Promise<IntentCheck>>();
 
@@ -197,11 +194,6 @@ class BonsaiIntentVerifier implements IntentVerifier {
   /** full key: sha256(model|promptHash|kwargsHash|responseHash|policyVersion) */
   private fullKey(responseHash: string): string {
     return sha256(`${this.model}|${this.promptHash}|${this.kwargsHash}|${responseHash}|${POLICY_VERSION}`);
-  }
-
-  /** drift prefix: sha256(model|promptHash|kwargsHash|policyVersion) */
-  private prefixKey(): string {
-    return sha256(`${this.model}|${this.promptHash}|${this.kwargsHash}|${POLICY_VERSION}`);
   }
 
   private cacheSet(key: string, entry: CachedEntry): void {
@@ -231,7 +223,6 @@ class BonsaiIntentVerifier implements IntentVerifier {
     const t0 = Date.now();
     const responseHash = sha256(plannerText);
     const key = this.fullKey(responseHash);
-    const prefix = this.prefixKey();
 
     // cache hit
     const cached = this.cache.get(key);
@@ -250,14 +241,6 @@ class BonsaiIntentVerifier implements IntentVerifier {
         responseHash,
       );
     }
-
-    // drift probe: responseHash changed under the same prefix => planner text
-    // moved; log and treat as miss (never serve stale).
-    const last = this.drift.get(prefix);
-    if (last !== undefined && last !== responseHash) {
-      log.info(`intent-verifier drift: responseHash changed (${last.slice(0, 8)} -> ${responseHash.slice(0, 8)}), treating as miss`);
-    }
-    this.drift.set(prefix, responseHash);
 
     // single-flight: identical in-flight request -> share its result
     const flying = this.inflight.get(key);

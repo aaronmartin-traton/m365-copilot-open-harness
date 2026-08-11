@@ -12,9 +12,8 @@ These modules are now separate from `handler.ts`.
 - It removes idle sessions.
 
 **context-compiler.ts** - Message formatting
-- The `ContextCompiler` interface has two methods.
-- `compileFull()` formats the first message.
 - `compileDelta()` formats follow-up messages.
+- The handler formats the first message directly with `formatMessages`.
 
 **usage-builder.ts** - Usage data formatting
 - `buildUsage()` makes usage objects.

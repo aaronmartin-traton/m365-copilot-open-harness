@@ -5,8 +5,6 @@
  * hallucinates file changes, or produces remote artifacts that can't be applied locally.
  */
 
-import { looksLikeConfabulation, looksLikeHallucinatedCompletion, looksLikeRemoteArtifactCompletion } from "@m365-copilot/core";
-
 /**
  * Force follow-up when M365 confabulates an inability to act instead of calling a tool.
  * See the confab-retry loop in handleChatCompletion().
@@ -26,27 +24,3 @@ export const HALLUCINATION_FORCE_PROMPT =
  */
 export const REMOTE_ARTIFACT_FORCE_PROMPT =
   "The patch or download link you produced exists only in M365's remote environment and is NOT a file in the caller's working directory. Do NOT create, download, or apply a patch, and do NOT use a Teams artifact link. Use the provided local edit/write tool directly; if needed, emit ONE ```bash block that modifies the named local file in place. Output only that single local tool call, nothing else.";
-
-export type ForcePromptType = 'confab' | 'hallucination' | 'remote_artifact';
-
-/**
- * Determine which force prompt (if any) should be applied based on the response text.
- */
-export function getForcePrompt(text: string): { type: ForcePromptType; prompt: string } | null {
-  // Check for confabulation patterns
-  if (looksLikeConfabulation(text)) {
-    return { type: 'confab', prompt: CONFAB_FORCE_PROMPT };
-  }
-
-  // Check for hallucinated completion patterns
-  if (looksLikeHallucinatedCompletion(text)) {
-    return { type: 'hallucination', prompt: HALLUCINATION_FORCE_PROMPT };
-  }
-
-  // Check for remote artifact patterns
-  if (looksLikeRemoteArtifactCompletion(text)) {
-    return { type: 'remote_artifact', prompt: REMOTE_ARTIFACT_FORCE_PROMPT };
-  }
-
-  return null;
-}

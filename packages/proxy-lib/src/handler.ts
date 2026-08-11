@@ -4,6 +4,7 @@ import {
   getToneForModel,
   getMessageContent,
   getMessageImages,
+  formatMessages,
   noteRequestOutcome,
   awaitDegradationBackoff,
   getImageArtifactToken,
@@ -16,7 +17,7 @@ import { ChatCompletionRequest } from "./schemas.js";
 import { RequestScheduler, SchedulerBusyError, type ScheduleOptions, type SchedulerStats } from "./scheduler.js";
 import { SessionStateStore } from "./session-store.js";
 import { SessionPool, type ConversationState, type ConversationPruneSelector, type RemoteConversationPruner, type SessionPoolOptions } from "./session-pool.js";
-import { contextCompiler, LOCAL_TOOL_REMINDER } from "./context-compiler.js";
+import { compileDelta, LOCAL_TOOL_REMINDER } from "./context-compiler.js";
 import { buildUsage } from "./usage-builder.js";
 import { jsonResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse } from "./response-helpers.js";
 import { localMetaResponse, renderLocalCompletion } from "./local-response-helpers.js";
@@ -128,19 +129,14 @@ export async function handleChatCompletion(
   const convId = session.conversationId;
   let text: string;
   if (isFirstTurn || conv.sentMessageCount === 0) {
-    text = contextCompiler.compileFull({
-      messages: body.messages,
-      tools: body.tools,
-      toolChoice: body.tool_choice,
-      conversationId: convId,
-    });
+    text = formatMessages(body.messages, body.tools, body.tool_choice, convId);
     log.info(`Chat completion: model=${model}, routed=${routedModel}, tone=${tone}, stream=${body.stream}, messages=${body.messages.length}, turn=${session.turnCount}, mode=full, cid=${convId}`);
   } else {
     const firstUser = body.messages.find((message) => message.role === "user");
     const taskAnchor = firstUser ? getMessageContent(firstUser) : "";
     const newMessages = body.messages.slice(conv.sentMessageCount);
     const delta = newMessages.length > 0
-      ? contextCompiler.compileDelta({ messages: newMessages, taskAnchor, hasTools: !!hasTools })
+      ? compileDelta({ messages: newMessages, taskAnchor, hasTools: !!hasTools })
       : "";
     if (delta.length > 0) {
       text = delta;
@@ -258,13 +254,7 @@ export async function handleChatCompletion(
             convIdHash: hashConversationId(convId ?? "anon"),
           });
           session.newConversation();
-          text = contextCompiler.compileFull({
-            messages: body.messages,
-            tools: body.tools,
-            toolChoice: body.tool_choice,
-            conversationId: session.conversationId,
-            framingVariant: "softened",
-          });
+          text = formatMessages(body.messages, body.tools, body.tool_choice, session.conversationId, "softened");
           log.info("Upstream Disengaged — retrying once with 'softened' framing in a fresh conversation (F22)");
           attempt--; // free retry; bounded — disengageRetried flips once
           continue;

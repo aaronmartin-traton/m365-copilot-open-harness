@@ -7,7 +7,7 @@
 // caused by our PAYLOAD (the agent) or by our proxy's CONNECTION (token/headers/params).
 //
 // Usage: CHROMIUM_PATH=$(which chromium) node scripts/m365-gui-emulate.mjs
-process.env.M365_FRAMING_VARIANT = process.env.M365_FRAMING_VARIANT || "minimal";
+process.env.M365_FRAMING_VARIANT = process.env.M365_FRAMING_VARIANT || "baseline";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadSecrets, formatMessages, getOrCreateAgent } from "../packages/core/dist/index.mjs";

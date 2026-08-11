@@ -18,14 +18,10 @@ PIDFILE=/tmp/m365-sweep-proxy.pid
 # strategy_name|extra_env (space-separated KEY=VAL pairs)
 STRATEGIES=(
   "baseline|"
-  "minimal|M365_FRAMING_VARIANT=minimal"
-  "recency|M365_FRAMING_VARIANT=recency"
+  "softened|M365_FRAMING_VARIANT=softened"
+  "demo_only|M365_FRAMING_VARIANT=demo_only"
+  "session_facts|M365_FRAMING_VARIANT=session_facts"
   "fewshot|M365_FRAMING_VARIANT=fewshot"
-  "proof_demand|M365_FRAMING_VARIANT=proof_demand"
-  "persona|M365_FRAMING_VARIANT=persona"
-  "react|M365_FRAMING_VARIANT=react"
-  "negative|M365_FRAMING_VARIANT=negative"
-  "terse|M365_FRAMING_VARIANT=terse"
   "reply_tool|M365_INJECT_REPLY_TOOL=1"
 )
 

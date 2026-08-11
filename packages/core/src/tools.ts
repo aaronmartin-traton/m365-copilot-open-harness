@@ -66,12 +66,13 @@ export type ToolChoice =
 // --- Tool call format ---
 
 // Fenced Markdown is the format we instruct and primarily parse (see fenced.ts).
-// The two regexes below are tolerance-only FALLBACKS: M365 occasionally ignores the
-// fenced contract and emits a stray `{"tool":...,"arguments":{...}}` object, or wraps
-// it in a legacy ```tool_call fence. We parse those if they show up but never teach
-// the model to produce them — the JSON format scored 0/5 and was removed (§9).
-const TOOL_CALL_REGEX = /\{\s*"tool"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/g;
-const FENCED_TOOL_CALL_REGEX = /```tool_call\s*\n(\{[\s\S]*?\})\s*\n\s*```/g;
+// The regex below is a tolerance-only FALLBACK: M365 occasionally ignores the
+// fenced contract and emits a stray `{"tool":...,"arguments":{...}}` object, bare
+// or wrapped in a ```json / ```tool_call fence (the fence markers are cleaned up
+// when the matched JSON is stripped from the leftover). We parse it if it shows
+// up but never teach the model to produce it — the JSON format scored 0/5 and
+// was removed (§9).
+const TOOL_CALL_REGEX = /\{\s*"(?:tool|name)"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/g;
 
 // M365 invents bookkeeping objects ({"confidence": 0.5}) and wraps its answer in
 // {"final": "..."} — neither is a real tool call. Strip confidence everywhere;
@@ -174,7 +175,7 @@ function maybeInjectReplyTool(tools: ToolDef[]): ToolDef[] {
 
 const TOOL_RESULT_MAX_CHARS = Number(process.env.M365_TOOL_RESULT_MAX_CHARS ?? 12_000);
 
-function boundedToolResult(text: string): string {
+export function boundedToolResult(text: string): string {
   if (!Number.isFinite(TOOL_RESULT_MAX_CHARS) || TOOL_RESULT_MAX_CHARS <= 0 || text.length <= TOOL_RESULT_MAX_CHARS) {
     return text;
   }
@@ -421,32 +422,29 @@ export function isProseDocument(parsed: ParseResult): boolean {
 }
 
 export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
-  // Fenced is the format: parse ```toolname blocks first. Needs the tool schemas
-  // to map header/body args. The JSON parse below is only a tolerance fallback for
-  // when M365 ignores the contract and emits a `{"tool":...}` object anyway.
+  // Fenced is the format: parse ```toolname blocks first (unknown info-strings
+  // survive in `leftover`). The JSON parse below is a tolerance fallback for
+  // when M365 ignores the contract and emits a `{"tool":...}` object anyway —
+  // bare or wrapped in a ```json / ```tool_call fence whose markers the cleanup
+  // below strips.
   const specMap = tools && tools.length > 0 ? buildSpecMap(tools) : null;
-  if (specMap) {
-    const { calls, leftover } = parseFencedToolCalls(text, specMap);
-    if (calls.length > 0) {
-      return { hasToolCalls: true, toolCalls: calls, textContent: cleanLooseText(leftover) };
-    }
-  }
+  const fenced = specMap
+    ? parseFencedToolCalls(text, specMap)
+    : { calls: [] as ParsedToolCall[], leftover: text };
 
   const resolveName = (raw: unknown): string | undefined =>
     typeof raw === "string" ? (specMap?.get(raw)?.name ?? raw) : undefined;
 
-  const toolCalls: ParsedToolCall[] = [];
-
   // Tolerance fallback: a stray JSON tool call {"tool": "...", "arguments": {...}}
   const jsonRegex = new RegExp(TOOL_CALL_REGEX.source, "g");
+  const jsonCalls: ParsedToolCall[] = [];
   let match: RegExpExecArray | null;
-
-  while ((match = jsonRegex.exec(text)) !== null) {
+  while ((match = jsonRegex.exec(fenced.leftover)) !== null) {
     try {
       const parsed = JSON.parse(match[0]);
-      const name = resolveName(parsed.tool);
+      const name = resolveName(parsed.tool ?? parsed.name);
       if (name) {
-        toolCalls.push({
+        jsonCalls.push({
           id: `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
           type: "function",
           function: {
@@ -462,44 +460,19 @@ export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
     }
   }
 
-  // Fallback: try legacy fenced format
+  const toolCalls = [...fenced.calls, ...jsonCalls];
   if (toolCalls.length === 0) {
-    const fencedRegex = new RegExp(FENCED_TOOL_CALL_REGEX.source, "g");
-    while ((match = fencedRegex.exec(text)) !== null) {
-      try {
-        const parsed = JSON.parse(match[1]);
-        const name = resolveName(parsed.tool || parsed.name);
-        if (name) {
-          toolCalls.push({
-            id: `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
-            type: "function",
-            function: {
-              name,
-              arguments: typeof parsed.arguments === "string"
-                ? parsed.arguments
-                : JSON.stringify(parsed.arguments ?? {}),
-            },
-          });
-        }
-      } catch {
-        log.error("Failed to parse fenced tool call JSON:", match[1]);
-      }
-    }
+    return { hasToolCalls: false, toolCalls: [], textContent: cleanLooseText(fenced.leftover) };
   }
 
-  if (toolCalls.length === 0) {
-    return { hasToolCalls: false, toolCalls: [], textContent: cleanLooseText(text) };
-  }
-
-  // Strip matched tool calls from text to get remaining content.
+  // Strip matched tool calls from the leftover to get remaining content.
   // M365 is a markdown model and often wraps the JSON in a ```json / ```tool_call
   // fence even when told not to; remove the now-empty fence markers it leaves
   // behind so they aren't mistaken for real assistant prose. Also drop the
   // invented confidence/final objects so a premature "✅ SUCCESS" never reaches
   // the client and a junk-only leftover isn't flagged as mixed output.
-  let remaining = text
+  const remaining = fenced.leftover
     .replace(jsonRegex, "")
-    .replace(new RegExp(FENCED_TOOL_CALL_REGEX.source, "g"), "")
     .replace(CONFIDENCE_REGEX, "")
     .replace(FINAL_OBJECT_REGEX, "")
     .replace(/```(?:json|tool_call)?\s*```/g, "") // empty fence pair

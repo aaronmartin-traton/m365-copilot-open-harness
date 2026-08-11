@@ -1,34 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { formatMessages } from "@m365-copilot/core";
-import { contextCompiler, LOCAL_TOOL_REMINDER } from "./context-compiler.js";
+import { compileDelta, LOCAL_TOOL_REMINDER } from "./context-compiler.js";
 
-describe("contextCompiler", () => {
-  it("preserves full compilation output", () => {
-    const messages = [{ role: "user", content: "task" }];
-    const tools = [{
-      type: "function" as const,
-      function: {
-        name: "bash",
-        description: "Run a shell command",
-        parameters: {
-          type: "object",
-          properties: { command: { type: "string" } },
-          required: ["command"],
-        },
-      },
-    }];
-
-    expect(contextCompiler.compileFull({
-      messages,
-      tools,
-      toolChoice: "auto",
-      conversationId: "conv-1",
-      framingVariant: "softened",
-    })).toBe(formatMessages(messages, tools, "auto", "conv-1", "softened"));
-  });
-
+describe("compileDelta", () => {
   it("preserves delta compilation behavior", () => {
-    const output = contextCompiler.compileDelta({
+    const output = compileDelta({
       messages: [
         { role: "system", content: "ignored" },
         { role: "assistant", content: "already upstream" },
@@ -48,10 +23,21 @@ describe("contextCompiler", () => {
   });
 
   it("does not synthesize tool context in tool-less delta mode", () => {
-    expect(contextCompiler.compileDelta({
+    expect(compileDelta({
       messages: [{ role: "user", content: "continue" }],
       taskAnchor: "task",
       hasTools: false,
     })).toBe("<user>\ncontinue\n</user>");
+  });
+
+  it("truncates oversized tool results via the shared bounded truncation", () => {
+    const big = "x".repeat(20_000);
+    const output = compileDelta({
+      messages: [{ role: "tool", name: "bash", tool_call_id: "call-1", content: big }],
+      taskAnchor: "task",
+      hasTools: true,
+    });
+    expect(output.length).toBeLessThan(big.length + 400);
+    expect(output).toContain("[tool output truncated:");
   });
 });

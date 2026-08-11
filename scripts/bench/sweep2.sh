@@ -16,7 +16,7 @@ COOLDOWN="${COOLDOWN:-45}"
 BLOCK_COOLDOWN="${BLOCK_COOLDOWN:-60}"
 : > "$SUMMARY"
 
-STRATS=(baseline minimal recency fewshot proof_demand persona react negative terse reply_tool)
+STRATS=(baseline softened demo_only session_facts fewshot reply_tool)
 TASKS=(fix-bug find-needle edit-config)
 
 ti=0

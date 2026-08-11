@@ -78,6 +78,7 @@ export {
   getMessageContent,
   getMessageImages,
   parseToolCalls,
+  boundedToolResult,
   looksLikeConfabulation,
   looksLikeHallucinatedCompletion,
   looksLikeRemoteArtifactCompletion,
