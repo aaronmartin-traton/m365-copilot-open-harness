@@ -1,5 +1,8 @@
 # M365 Copilot knowledge-gap + ecosystem dig (2026-08-11)
 
+> Snapshot as of 2026-08-11. Records the ecosystem state then; supersede, do not
+> edit, if it is revisited later.
+
 Deep research pass (DSV4 subagent, in parallel with the capture-browser fix).
 Scope: four knowledge gaps + an ecosystem scan of projects exposing M365
 Copilot with tunable knobs. Read-only — no live probes, no threads spent.

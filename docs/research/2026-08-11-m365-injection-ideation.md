@@ -1,5 +1,8 @@
 # M365 programmatic-injection ideation + GLM-5.2 cross-check (2026-08-11)
 
+> Snapshot as of 2026-08-11. Records the ideation + cross-check then; supersede,
+> do not edit, if revisited.
+
 Source: ADHD skill fan-out (2 rounds, 10 frames, 60 ideas) on "expose more of
 M365 so we can inject steering/tools/instructions programmatically", then an
 independent adversarial judge (GLM-5.2 via Command Code pane) scored the 8
