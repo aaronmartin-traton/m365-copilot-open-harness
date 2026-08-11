@@ -8,23 +8,34 @@ then `CONTEXT.md` (vocabulary).
 
 ## Next session plan
 
-1. **Auth into M365 on this PC** — human-assisted interactive login, per
-   `docs/agents/m365-auth-workflow.md` (`bun run build` then
-   `bun packages/proxy/bin/m365-login.mjs`, or start the proxy with
-   `M365_ENABLE_INTERACTIVE_APPROVAL=1`). The PC currently has no
-   `msal-cache.json` and no recorded login; telemetry is NOT evidence
-   (test pollution, see the runbook).
-2. **Verify auth** — `M365_DEBUG=1 bun scripts/proxy-verify.mjs --agent
-   --multiturn` (real tool loop). Mind the thread budget (~12 new
-   conversations/hour, ~600 msgs/conversation).
+1. ~~**Auth into M365 on this PC**~~ DONE 2026-08-10 — interactive login
+   completed (playwright path; run under `node` on this PC, see
+   `docs/agents/m365-auth-workflow.md` → *PC (PC_HOST) environment notes*);
+   `msal-cache.json` present.
+2. ~~**Verify auth**~~ DONE — `M365_DEBUG=1 bun scripts/proxy-verify.mjs
+   --agent --multiturn` passed end to end (real tool loop; 8H verifier on
+   LM Studio with `M365_INTENT_VERIFIER_MODEL=bonsai-27b`).
 3. **Live tests** — attestation-gate end-to-end smoke (register →
    AUTHORIZED → tool result accepted) incl. the proof-header re-verification
-   the local machine smoke predates; any framing/Disengaged checks from
-   `docs/hypotheses.md` backlog.
-4. **Implementation** — `.scratch/de-overengineering/issues/01-ponytail-
-   cleanup-pass.md` item 6 (CdpClient → playwright) is now actionable once
-   login works; triage `.scratch/review-triage/issues/01-review-findings.md`
-   (AGENTS.md `bun test` correction, polluted-evidence cleanup decision).
+   the local machine smoke predates — STILL PENDING, local machine task.
+4. ~~**Implementation**~~ DONE — ponytail item 6 (CdpClient → playwright)
+   landed (`e15b103`); review-triage items 1–2 fixed (`3a6d3de`); tickets
+   closed.
+
+## PC (PC_HOST) environment facts (2026-08-10)
+
+- Browser-driving bins (login) run under **`node`**; playwright's connection
+  layer (pipe + connectOverCDP) times out under Bun 1.3.14 on this box.
+  The proxy itself runs under Bun.
+- LM Studio serves the frozen 8H verifier: `bonsai-27b` loaded; proxy runs
+  need `M365_INTENT_VERIFIER_MODEL=bonsai-27b` (LM Studio echoes the loaded
+  id, so the default `bonsai-27b-q1` trips the identity guard).
+- After `bun run build`, refresh the nested
+  `packages/proxy/node_modules/@m365-copilot/*/dist` copies (stale copies
+  shadow the workspace links; there is also a deeper core copy under
+  `@m365-copilot/proxy-lib/node_modules`).
+- Unit-test evidence pollution the egress checkd to
+  `~/.config/opencode-m365/the egress check-2026-08-10/`.
 
 **STE status:** All operational docs pass under pragmatic STE (2026-08-09).
 The scientific notebooks (`docs/hypotheses.md`, `docs/experiments.md`,
