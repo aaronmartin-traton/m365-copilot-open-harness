@@ -1,10 +1,37 @@
 # NEXT.md — M365 Copilot Proxy
-> Snapshot as of 2026-08-10.
+> Snapshot as of 2026-08-11.
 
 **Start a new session here:** read
 `docs/agents/working-methodology.md` (startup sequence + operating rules +
 current mission), then `docs/agents/session-workflow.md` (operating manual),
 then `CONTEXT.md` (vocabulary).
+
+## 2026-08-11 session carry-over (live M365 investigation)
+
+Big finding: **custom-instructions is a proven, no-approval, durable injection
+channel** — saved instructions apply to raw agent-less WS turns by default (the
+`add_custom_instructions` flag is NOT required). Write via the CDP
+Settings→Personalization textarea using the **native value-setter +
+input/change events** (React); `tab.fill('')` or synthetic `new Event('input')`
+alone leave Save disabled (silent no-op — first A1 save and clear both failed
+this way). See `docs/research/2026-08-11-m365-injection-ideation.md` (the
+ADHD+GLM cross-check) and `docs/agents/m365-ui-investigation.md` (runbook).
+
+- **User wants a possible Copilot plan upgrade** — the durable-memory slot
+  (injection idea 2) is license-gated on Basic; if the plan is upgraded to one
+  with Copilot Memory authoring enabled, re-test H8.14 (mailbox write → recall)
+  — the memory channel could become viable.
+- **Injection ladder (ticket 02, ready-for-agent):** primary channel is now
+  textarea custom-instructions (proven). Memory-plugin + Graph/Mail channels
+  dropped (dead on Basic). Build the `set_custom_instruction` helper + the
+  `system_fingerprint: steered/unsteered` contract.
+- **Agent/App store** has more to explore (parked): "Create agent" self-service
+  surface + per-app Add/Install gates live in detail views, not the browse
+  view. Next session can resume at the store tab.
+- Browser processes all ended cleanly (m365-cdp exit-13 was the browser-close +
+  `await new Promise(()=>{})` unsettled-await script bug — benign; CDP 9222
+  DOWN now). Note: `_profile-cdp.mjs`'s hold-promise should handle context-close
+  for a clean exit next time.
 
 ## Next session plan
 
