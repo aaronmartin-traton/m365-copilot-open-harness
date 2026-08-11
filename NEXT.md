@@ -78,11 +78,14 @@ stays the default. This path is explicitly opt-in.
   *Client-attested execution (opt-in)*. Adapter setup lives in
   `client-adapters/README.md` (cross-referenced, not duplicated).
 - **Next**: manual end-to-end smoke test of the attestation loop (register →
-  AUTHORIZED → tool result accepted) through a real harness. Auth-blocked on
-  locally as of 2026-08-09 (no `msal-cache.json`). Live M365 steps need a
-  human interactive login first. The local machine live-smoke passed 2026-08-09
-  before the proof-header change — the proof header must be re-verified live
-  when the local machine is next available.
+  AUTHORIZED → tool result accepted) through a real harness. The PC **can**
+  authenticate: it ran live M365 2026-08-09/10 (throttle-telemetry: 37 events,
+  one conversation pinned at the 600-msg cap, softened disengage retries).
+  The cache is disposable and currently absent. Re-auth workflow:
+  `bun run build && bun packages/proxy/bin/m365-login.mjs` (visible Chromium,
+  human SSO/MFA), or start the proxy with `M365_ENABLE_INTERACTIVE_APPROVAL=1`.
+  The local machine live-smoke passed 2026-08-09 before the proof-header change —
+  the proof header must be re-verified live when the local machine is next available.
 
 ## New surface — `/v1/images/generations` (2026-08-09)
 
