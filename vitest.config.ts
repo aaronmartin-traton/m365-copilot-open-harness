@@ -7,5 +7,6 @@ export default defineConfig({
         inline: ["zod"],
       },
     },
+    setupFiles: ["./vitest.setup.ts"],
   },
 });
