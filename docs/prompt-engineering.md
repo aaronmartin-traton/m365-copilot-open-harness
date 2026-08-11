@@ -86,9 +86,12 @@ registered in `packages/core/src/fenced.ts` (`FRAMING_VARIANTS`) and selected pe
 - `M365_FRAMING_FILE=<path>` → first line of the file names the active variant, so **one
   long-lived proxy switches strategy per request** without a restart (used by the sweep).
 
-Current strategies: `baseline` (shipped default, unchanged), `minimal`, `recency`,
-`fewshot`, `proof_demand`, `persona`, `react`, `negative`, `terse`, and `reply_tool`
-(synthetic `reply()` tool; also `M365_INJECT_REPLY_TOOL=1`).
+Current strategies: `baseline` (shipped default, unchanged), `softened` (live
+Disengaged-retry path), `fewshot`, `demo_only`, `session_facts`, and `reply_tool`
+(synthetic `reply()` tool; also `M365_INJECT_REPLY_TOOL=1`). The 2026-08-10
+ponytail cleanup culled the measured losers (`minimal`, `recency`, `proof_demand`,
+`persona`, `react`, `negative`, `terse` — F18 verdicts); an unknown variant
+resolves to `baseline`.
 
 **Run a sweep** (persistent proxy + control file; sequential, generously spaced):
 

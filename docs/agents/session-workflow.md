@@ -15,12 +15,12 @@ established 2026-08-09.
 
 - The PC **never runs local models** (user rule 2026-08-10). All verifier /
   local-model work happens on the local machine.
-- Live M365 verification by default happens on the local machine (it holds the
-  fresh auth cache and the verifier). The PC **can** authenticate with a
-  human interactive login (`bun packages/proxy/bin/m365-login.mjs`, visible
-  Chromium SSO/MFA) and did run live M365 2026-08-09/10 (telemetry:
-  at-limit 600/600 + softened disengage events). The token cache is
-  `oid`-keyed; a fresh login does not clear account throttling.
+- Live M365 verification happens only on the local machine. The PC is auth-blocked
+  (no cache, no recorded login; the telemetry that looked like live traffic
+  is unit-test pollution — traced 2026-08-10, see
+  `docs/agents/m365-auth-workflow.md`). The interactive-login workflow
+  exists; a human must complete it before locally can run live. The token
+  cache is `oid`-keyed; a fresh login does not clear account throttling.
 - The local machine's M365 auth cache:
   `~/.config/opencode-m365/msal-cache.json`.
 - The verifier on the local machine: llama-server (build b10321), Bonsai-27B-Q1_0.gguf,

@@ -87,7 +87,9 @@ This is the active work stream. The contract is frozen. Do not bend it.
 
 - The PC **never runs local models** (user rule 2026-08-10). All verifier
   and local-model work happens on the local machine.
-- Live M365 verification happens **only** on the local machine.
+- Live M365 verification happens **only** on the local machine. The PC is
+  auth-blocked; it can authenticate via the documented interactive login
+  when a human is present (`docs/agents/m365-auth-workflow.md`).
 - The local machine verifier: llama-server (build b10321), Bonsai-27B-Q1_0 GGUF,
   `--alias bonsai-27b-q1 --seed 42 -ngl 99 -c 8192`, port 1234.
 
