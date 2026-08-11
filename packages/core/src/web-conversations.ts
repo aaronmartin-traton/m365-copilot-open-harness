@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import { z } from "zod/v4";
-import type { BrowserContext, LaunchPersistentContextOptions, Page, Request } from "playwright";
+import type { BrowserContext, chromium, Page, Request } from "playwright";
 import { getBrowserProfileDir } from "./auth.js";
 import { createLogger } from "./log.js";
+
+/** playwright 1.58 inlines launchPersistentContext options; keep the seam typed. */
+type LaunchPersistentContextOptions = Parameters<typeof chromium.launchPersistentContext>[1];
 
 const log = createLogger("web-conversations");
 const CHAT_URL = "https://m365.cloud.microsoft/chat/";

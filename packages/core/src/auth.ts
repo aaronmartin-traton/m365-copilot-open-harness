@@ -1,9 +1,5 @@
 import * as msal from "@azure/msal-node";
-import { spawn } from "node:child_process";
-import { get as httpGet } from "node:http";
-import { createServer } from "node:net";
 import { chromium } from "playwright";
-import { z } from "zod";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -27,6 +23,8 @@ const CONFIG_DIR = join(homedir(), ".config", "opencode-m365");
 
 mkdirSync(CONFIG_DIR, { recursive: true });
 const CACHE_FILE = process.env.M365_CACHE_FILE ?? join(CONFIG_DIR, "msal-cache.json");
+/** Playwright's persistent-context profile dir. The "cdp" suffix is legacy
+ * (predates the playwright migration); renaming would orphan logged-in profiles. */
 export function getBrowserProfileDir(): string {
   return process.env.M365_BROWSER_PROFILE ?? join(CONFIG_DIR, "browser-profile-cdp");
 }
@@ -61,138 +59,54 @@ function getApp(): msal.PublicClientApplication {
   return appInstance;
 }
 
-async function reserveLoopbackPort(): Promise<number> {
-  const server = createServer();
-  const listening = Promise.withResolvers<void>();
-  server.once("error", listening.reject);
-  server.listen(0, "127.0.0.1", listening.resolve);
-  await listening.promise;
-  const address = server.address();
-  if (!address || typeof address === "string") {
-    server.close();
-    throw new Error("Could not reserve a loopback port for Chromium");
-  }
-  const closed = Promise.withResolvers<void>();
-  server.close((error) => (error ? closed.reject(error) : closed.resolve()));
-  await closed.promise;
-  return address.port;
-}
-
-const cdpVersionSchema = z.object({ webSocketDebuggerUrl: z.string() });
-const cdpEnvelopeSchema = z.object({
-  id: z.number().optional(),
-  method: z.string().optional(),
-  params: z.unknown().optional(),
-  result: z.unknown().optional(),
-  sessionId: z.string().optional(),
-  error: z.object({ message: z.string() }).optional(),
-});
-const targetResultSchema = z.object({ targetId: z.string() });
-const sessionResultSchema = z.object({ sessionId: z.string() });
-const requestEventSchema = z.object({
-  request: z.object({ url: z.string() }),
-});
-
-interface PendingCdpOperation {
-  promise: Promise<unknown>;
-  resolve(value: unknown | PromiseLike<unknown>): void;
-  reject(reason?: unknown): void;
-}
-
-type CdpEventHandler = (method: string, params: unknown, sessionId?: string) => void;
-
-class CdpClient {
-  private readonly socket: WebSocket;
-  private readonly pending = new Map<number, PendingCdpOperation>();
-  private readonly eventHandlers = new Set<CdpEventHandler>();
-  private nextId = 1;
-
-  private constructor(socket: WebSocket) {
-    this.socket = socket;
-    socket.addEventListener("message", (event) => this.handleMessage(event.data));
-    socket.addEventListener("close", () => {
-      for (const operation of this.pending.values()) {
-        operation.reject(new Error("Chromium debugging connection closed"));
-      }
-      this.pending.clear();
-    });
-  }
-
-  static async connect(url: string): Promise<CdpClient> {
-    const socket = new WebSocket(url);
-    const opened = Promise.withResolvers<void>();
-    socket.addEventListener("open", () => opened.resolve(), { once: true });
-    socket.addEventListener("error", () => opened.reject(new Error("Could not connect to Chromium debugging WebSocket")), { once: true });
-    await opened.promise;
-    return new CdpClient(socket);
-  }
-
-  onEvent(handler: CdpEventHandler): () => void {
-    this.eventHandlers.add(handler);
-    return () => this.eventHandlers.delete(handler);
-  }
-
-  command(method: string, params: Record<string, unknown> = {}, sessionId?: string): Promise<unknown> {
-    const id = this.nextId++;
-    const operation = Promise.withResolvers<unknown>();
-    this.pending.set(id, operation);
-    this.socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
-    return operation.promise;
-  }
-
-  close(): void {
-    this.socket.close();
-  }
-
-  private handleMessage(data: unknown): void {
-    if (typeof data !== "string") return;
-    let decoded: unknown;
-    try {
-      decoded = JSON.parse(data);
-    } catch {
-      return;
-    }
-    const parsed = cdpEnvelopeSchema.safeParse(decoded);
-    if (!parsed.success) return;
-    const message = parsed.data;
-    if (message.id !== undefined) {
-      const operation = this.pending.get(message.id);
-      if (!operation) return;
-      this.pending.delete(message.id);
-      if (message.error) operation.reject(new Error(message.error.message));
-      else operation.resolve(message.result);
-      return;
-    }
-    if (message.method) {
-      for (const handler of this.eventHandlers) {
-        handler(message.method, message.params, message.sessionId);
-      }
-    }
-  }
-}
-
-async function getCdpWebSocketUrl(endpoint: string): Promise<string> {
-  const completed = Promise.withResolvers<string>();
-  const request = httpGet(`${endpoint}/json/version`, (response) => {
-    response.setEncoding("utf-8");
-    let body = "";
-    response.on("data", (chunk: string) => {
-      body += chunk;
-    });
-    response.on("end", () => {
-      try {
-        completed.resolve(cdpVersionSchema.parse(JSON.parse(body)).webSocketDebuggerUrl);
-      } catch (error: unknown) {
-        completed.reject(error);
-      }
-    });
-  });
-  request.once("error", completed.reject);
-  request.setTimeout(500, () => request.destroy(new Error("Chromium endpoint timed out")));
-  return completed.promise;
-}
-
 export type AuthUrlHandler = (url: string) => void;
+
+/** Minimal request-event source; playwright's Page satisfies this structurally. */
+export interface AuthCodeEventSource {
+  on(
+    event: "request",
+    handler: (request: { url(): string }) => void,
+  ): () => void;
+}
+
+/**
+ * Parse the Microsoft authorization code from a nativeclient redirect URL.
+ * Returns null when the URL is not the nativeclient redirect or has no code.
+ */
+export function extractAuthCode(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (!parsed.pathname.includes("/oauth2/nativeclient")) return null;
+  return parsed.searchParams.get("code");
+}
+
+/**
+ * Resolve with the authorization code the moment the nativeclient redirect
+ * fires. All other traffic is ignored; rejects after `timeoutMs` (default:
+ * 15 minutes, matching the previous interactive-login deadline).
+ */
+export function waitForAuthCode(
+  source: AuthCodeEventSource,
+  timeoutMs = 900_000,
+): Promise<string> {
+  const code = Promise.withResolvers<string>();
+  const timer = setTimeout(() => {
+    unsubscribe();
+    code.reject(new Error("Timed out waiting for Microsoft login"));
+  }, timeoutMs);
+  const unsubscribe = source.on("request", (request) => {
+    const authCode = extractAuthCode(request.url());
+    if (!authCode) return;
+    clearTimeout(timer);
+    unsubscribe();
+    code.resolve(authCode);
+  });
+  return code.promise;
+}
 
 function interactiveApprovalEnabled(): boolean {
   return process.env.M365_ENABLE_INTERACTIVE_APPROVAL === "1";
@@ -208,8 +122,9 @@ function canPromptForInteractiveApproval(): boolean {
 
 /**
  * Authenticate in a visible Chromium window through Microsoft's authorization-code
- * flow with PKCE. Bun drives Chromium through its native WebSocket implementation;
- * credentials and MFA are entered only on Microsoft's sign-in page.
+ * flow with PKCE. Playwright drives Chromium (launchPersistentContext); credentials
+ * and MFA are entered only on Microsoft's sign-in page. The auth code is scraped
+ * from the nativeclient redirect navigation — it is never present in the settled URL.
  */
 export async function loginInteractive(
   scopes: string[] = SCOPES,
@@ -225,66 +140,36 @@ export async function loginInteractive(
     codeChallengeMethod: "S256",
   });
 
-  const debuggingPort = await reserveLoopbackPort();
-  const browserProcess = spawn(
-    process.env.CHROMIUM_PATH ?? chromium.executablePath(),
-    [
-      `--remote-debugging-port=${debuggingPort}`,
-      `--user-data-dir=${getBrowserProfileDir()}`,
-      "--no-first-run",
-      "--no-default-browser-check",
-    ],
-    { stdio: "ignore" },
-  );
-  const endpoint = `http://127.0.0.1:${debuggingPort}`;
-  let webSocketUrl: string | null = null;
-  for (let attempt = 0; attempt < 100 && !webSocketUrl; attempt++) {
-    try {
-      webSocketUrl = await getCdpWebSocketUrl(endpoint);
-    } catch {
-      const delay = Promise.withResolvers<void>();
-      setTimeout(delay.resolve, 100);
-      await delay.promise;
-    }
-  }
-  if (!webSocketUrl) {
-    browserProcess.kill();
-    throw new Error("Chromium did not expose its local debugging endpoint");
-  }
-
-  const cdp = await CdpClient.connect(webSocketUrl);
-  const target = targetResultSchema.parse(
-    await cdp.command("Target.createTarget", { url: "about:blank" }),
-  );
-  const session = sessionResultSchema.parse(
-    await cdp.command("Target.attachToTarget", { targetId: target.targetId, flatten: true }),
-  );
-  await cdp.command("Network.enable", {}, session.sessionId);
-  await cdp.command("Page.enable", {}, session.sessionId);
-  await cdp.command("Target.activateTarget", { targetId: target.targetId });
-
-  const authCode = Promise.withResolvers<string>();
-  const removeEventHandler = cdp.onEvent((method, params, sessionId) => {
-    if (method !== "Network.requestWillBeSent" || sessionId !== session.sessionId) return;
-    const event = requestEventSchema.safeParse(params);
-    if (!event.success) return;
-    const url = event.data.request.url;
-    if (!url.includes("/oauth2/nativeclient") || !url.includes("code=")) return;
-    const code = new URL(url).searchParams.get("code");
-    if (code) authCode.resolve(code);
+  const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+    headless: false,
+    timeout: 60_000,
+    ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+    args: ["--no-first-run", "--no-default-browser-check"],
   });
-
   try {
-    await cdp.command("Page.navigate", { url: authUrl }, session.sessionId);
+    const page = context.pages()[0] ?? (await context.newPage());
+    const source: AuthCodeEventSource = {
+      on: (event, handler) => {
+        page.on(event, handler);
+        return () => page.off(event, handler);
+      },
+    };
+    const authCode = waitForAuthCode(source);
+    let codeArrived = false;
+    // Navigate without blocking the flow; the code promise (15-min timeout) governs.
+    // A rejection after the code arrived is a teardown artifact (context.close()
+    // cancels the in-flight redirect) — not a real navigation failure.
+    void page
+      .goto(authUrl, { waitUntil: "domcontentloaded", timeout: 60_000 })
+      .catch((error: unknown) => {
+        if (codeArrived) return;
+        log.error(
+          `Could not navigate to the sign-in page: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      });
     onAuthUrl(authUrl);
-    const loginTimeout = Promise.withResolvers<string>();
-    const loginTimeoutHandle = setTimeout(
-      () => loginTimeout.reject(new Error("Timed out waiting for Microsoft login")),
-      900_000,
-    );
-    const code = await Promise.race([authCode.promise, loginTimeout.promise]).finally(() =>
-      clearTimeout(loginTimeoutHandle),
-    );
+    const code = await authCode;
+    codeArrived = true;
     const result = await app.acquireTokenByCode({
       code,
       scopes,
@@ -295,9 +180,7 @@ export async function loginInteractive(
     log.info(`Interactive login succeeded as ${result.account?.username ?? "unknown account"}`);
     return result.accessToken;
   } finally {
-    removeEventHandler();
-    cdp.close();
-    if (!browserProcess.killed) browserProcess.kill();
+    await context.close();
   }
 }
 
