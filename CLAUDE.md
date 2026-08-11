@@ -16,3 +16,17 @@ hypothesis-driven** sections. In short:
 
 Protocol source of truth: [`docs/m365-copilot-api.md`](docs/m365-copilot-api.md).
 Open-questions notebook: [`docs/hypotheses.md`](docs/hypotheses.md).
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as markdown files under `.scratch/<feature>/issues/` — local tracker, no external service. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical roles recorded as `Status:` lines in each issue file (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.

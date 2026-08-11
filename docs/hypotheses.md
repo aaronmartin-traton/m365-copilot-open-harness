@@ -1732,6 +1732,47 @@ The genuine, zero-cost wins this session — code interpreter (compute, not egre
 Claude for plain chat, GPT-5.5, the I/O + cancel work — stand on their own and are
 exactly the right kind of improvement: capability with no license attached.
 
+### 8.13 — Copilot Tuning (early access): a distinct, license-free-at-tenant format lever to watch
+
+**Source reconciliation 2026-08-11** — `learn.microsoft.com/en-us/microsoft-365/copilot/copilot-tuning-process` (ms.date 2026-04-13) + `copilot-tuning-faq` + `copilot-tuning-admin-guide`.
+
+**What it is.** Microsoft 365 Copilot Tuning lets a tenant fine-tune **task-specific
+agents** on org data via **SFT / RL / RFT**. Tuned tasks: summarization, writing,
+expert answer, style editing, validation, optimization. Tuned models are private,
+processed in-tenant; only named admins control training.
+
+**Why it matters to THIS repo (and the nuance):** this is a *format / behavior / tone*
+lever, **not** a tool-attachment lever. It does **NOT** reopen §8.11's locked
+"native tool-calling / MCP is out of scope" decision — tuning steers how the model
+*talks* (style, tone, tool *preference* — e.g. "prefer Graph APIs over RAG"), not
+whether it can *attach* a native tool. So it is orthogonal to the Dataverse/license
+wall. What it *could* do, if it ever landed on a reachable tenant:
+- **Format steering without the Disengage-prone agent.** Tune an agent to emit the
+  fenced ```` ```bash ```` shape reliably (the F17/F21/F23 core problem) — a server-side,
+  format-native way to get shell-routing output, instead of prompt-framing it past
+  Prompt-Shields (§8.13/F22 additive-shape threshold).
+- **A style/tone per org** — the SFT/RL "reflect a specific tone" and "prefer certain
+  tools" axes map to our per-request framing goals, but server-side and persistent.
+
+**Gates (why it is NOT actionable now):**
+1. **Early access / Frontier** — limited preview; "Access through the Frontier program
+   is planned for April 2026". Features volatile.
+2. **Enterprise / tenant-admin** — tuning is org-level, controlled by admins, needs
+   licensing the proxy's target users (free student / zero-cost corporate seats) lack.
+   This is the **same license wall** that parked §8.11, just at the *tenant-orchestration*
+   tier rather than the per-bot Studio tier.
+3. **Task-specific, not general** — tuned agents are scoped to specific tasks; no
+   evidence it produces a general coding-model lane.
+
+**Net:** record as a **watch item, not a probe**. Do not spend threads or licences on
+it. Revisit only if (a) this tenant's Enhanced-personalization/tuning surface becomes
+reachable without billing, or (b) the Frontier program ships a no-cost path. It is the
+closest documented server-side route to "shape shell-routing output without per-request
+framing" other than the (Disengage-prone) `minimalBots` agent — worth one line in the
+architecture notes, zero action now. Reconciles with H8.14 / lane F on custom
+instructions: that remains the *cheap, now-actionable* memory/format lever; tuning is
+the heavyweight, licensed future version of the same idea.
+
 ## 12. Multi-agent research dig (July 13 2026)
 
 Four parallel subagents re-attacked "other ways to get tool calls in/out of M365"

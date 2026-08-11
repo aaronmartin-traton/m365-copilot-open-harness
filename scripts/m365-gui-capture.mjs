@@ -1,28 +1,34 @@
 // Capture what Microsoft's OWN M365 Copilot web client sends/receives over the
 // substrate Chathub WebSocket — to VERIFY our Disengage model with eyes-on and to
 // diff the GUI's request payload (optionsSets / variants / agent / tone) against
-// ours. Reuses the repo's Playwright+secrets login (cf. gateway-capture.mjs).
+// ours. Uses the msal/persistent-profile auth path (no password/MFA in this
+// script); the msal cache + persistent Playwright profile keep the session logged in.
 //
-// Usage: CHROMIUM_PATH=$(which chromium) node scripts/m365-gui-capture.mjs ["task text"]
+// Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/m365-gui-capture.mjs ["task text"]
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadSecrets } from "../packages/core/dist/index.mjs";
+import { getBrowserProfileDir } from "../packages/core/dist/index.mjs";
 
 const OUT = join(process.cwd(), "scripts", "gui-capture-out");
 mkdirSync(OUT, { recursive: true });
-const creds = loadSecrets();
-if (!creds) { console.log("no secrets"); process.exit(1); }
 
 const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import("../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 
 const TASK = process.argv[2] || "Edit config.json so the port is 8080 instead of 3000. Leave every other field unchanged.";
 const RS = "\x1e";
 
-const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
-const page = await browser.newPage();
+// Launch the persistent profile — already logged in from the msal cache / profile.
+// headless:true would work too but the persistent profile is validated headful;
+// keep it visible so interactive re-login can happen if the profile is signed out.
+const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+  headless: false,
+  timeout: 60_000,
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+});
+const page = context.pages()[0] ?? (await context.newPage());
 
 const frames = [];
 let chathubUrl = null, sawDisengaged = false, firstChatPayload = null, botText = "";
@@ -51,12 +57,20 @@ page.on("websocket", (ws) => {
 });
 
 async function login() {
-  const fill = async (sel, val) => { const loc = page.locator(`${sel}:visible`).first(); await loc.waitFor({ state: "visible", timeout: 30000 }); await loc.fill(val); };
-  const submit = () => page.locator('input[type="submit"]:visible, button[type="submit"]:visible').first().click();
-  await fill('input[name="loginfmt"]', creds.email); await submit(); await page.waitForTimeout(2500);
-  await fill('input[name="passwd"]', creds.password); await submit(); await page.waitForTimeout(2500);
-  try { await fill('input[name="otc"]', new TOTP({ secret: creds.mfaSecret }).generate()); await submit(); await page.waitForTimeout(2500); } catch {}
-  try { await page.locator("#idSIButton9:visible").click({ timeout: 8000 }); } catch {}
+  // Authenticate IN this existing context (no second launch — a second
+  // launchPersistentContext on the same profile dir is what caused the
+  // "existing browser session" lock). The user completes sign-in in this
+  // window; we wait for the URL to leave the Microsoft login tenant.
+  console.log("[gui] login required — complete sign-in in the open window");
+  console.log("[gui] waiting for auth redirect back to m365.cloud...");
+  try {
+    await page.waitForURL((u) => !/login\.microsoftonline|oauth2|signin/i.test(u.toString()), { timeout: 180_000 });
+  } catch {
+    // Timed out waiting for the redirect — user may be stuck; report the URL.
+    console.log("[gui] auth wait timeout, current url:", page.url());
+  }
+  console.log("[gui] post-auth url:", page.url());
+  await page.waitForTimeout(3000);
 }
 
 try {
@@ -99,4 +113,17 @@ if (firstChatPayload) {
   console.log("[gui] plugins:", JSON.stringify(a.plugins), "tone:", a.tone, "source:", a.source);
   console.log("[gui] allowedMessageTypes:", JSON.stringify(a.allowedMessageTypes));
 }
-await browser.close();
+
+// M365_KEEP_OPEN=1 keeps the persistent-profile browser alive for an interactive
+// investigation session (frames keep collecting on the WS listener). The process
+// stays up until the user closes the browser window (context 'close' event) or
+// sends SIGINT. Default: close after capture (one-shot probe behaviour).
+if (process.env.M365_KEEP_OPEN === "1") {
+  console.log("[gui] M365_KEEP_OPEN=1 — keeping browser open for investigation; close the window to end.");
+  await new Promise((resolve) => {
+    context.on("close", resolve);
+    // Safety net: also exit if the page itself navigates away / dies.
+    page.on("close", () => resolve());
+  });
+}
+await context.close();
