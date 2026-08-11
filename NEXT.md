@@ -33,6 +33,38 @@ ADHD+GLM cross-check) and `docs/agents/m365-ui-investigation.md` (runbook).
   DOWN now). Note: `_profile-cdp.mjs`'s hold-promise should handle context-close
   for a clean exit next time.
 
+## 2026-08-11 — history scrub (PII audit + rewrite)
+
+PII audit found personal identifiers and machine topology in the working
+tree and in git history (corporate email in commit metadata + docs, machine
+usernames, LAN IPs/paths, a session ID). Fixed in two passes:
+
+- **Tree scrub:** 20 edits across 10 files (docs + scratch tickets) —
+  genericized emails, usernames, machine paths, the LAN remote URL, and
+  internal IPs. Committed.
+- **History rewrite:** two `git-filter-repo` passes (mailmap for the
+  corporate-email identity + replace-text for content strings). All 11
+  target strings verified at 0 hits across all refs. Identities now: the
+  upstream author (public upstream) + the GitHub no-reply address only.
+- **Published:** `origin/main` + `origin/feat/fenced-shell-routing`
+  force-pushed. GitHub may still serve pre-rewrite SHAs by direct URL until
+  GC (accepted — let GitHub GC purge them).
+
+**Carry-over:**
+
+- Backup of the full pre-rewrite history:
+  `../m365-copilot-proxy-pre-rewrite.bundle` (relative to the repo).
+- Rewrite rules kept for re-runs: `.git/filter-mailmap`,
+  `.git/filter-replace.txt`.
+- **the remote + clones are still pre-rewrite.** Reconcile next session
+  (local machine: fetch origin, rebase local work, re-scrub local doc copies; do
+  NOT merge stale LAN branches into GitHub-bound work).
+- The rewrite changed every fork-internal commit SHA. SHA references in the
+  evidence docs (hypotheses.md, overnight-log.md, .scratch tickets, research
+  digest) now point at pre-rewrite commits — reconcile opportunistically.
+- Keep docs PII-free going forward: no machine usernames, corporate emails,
+  internal IPs, or personal session IDs in committed prose.
+
 ## Next session plan
 
 1. ~~**Auth into M365 on this PC**~~ DONE 2026-08-10 — interactive login
@@ -46,8 +78,7 @@ ADHD+GLM cross-check) and `docs/agents/m365-ui-investigation.md` (runbook).
    AUTHORIZED → tool result accepted) incl. the proof-header re-verification
    the local machine smoke predates — STILL PENDING, local machine task.
 4. ~~**Implementation**~~ DONE — ponytail item 6 (CdpClient → playwright)
-   landed (`e15b103`); review-triage items 1–2 fixed (`3a6d3de`); tickets
-   closed.
+   landed; review-triage items 1–2 fixed; tickets closed.
 
 ## PC environment facts (2026-08-10)
 
@@ -183,11 +214,15 @@ local machine. When the panes reconnect:
 
 1. Laptop (w8:p6): report pruner outcome — `prune-results.json` content,
    remaining session-store entries, port 1234 free, no stray chromium.
-2. Laptop: `git fetch origin sync/attestation-2026-08-09 && git merge
-   --no-edit origin/sync/attestation-2026-08-09` — pulls 10 commits:
-   attestation gate + adapters, images route, proof-header security fix,
-   telemetry fixes, STE docs, cramt digest, NEXT.md. Preserve local machine-local
-   edits (hypotheses.md, logprob ticket, lightweight spec, local machine AGENTS.md).
+2. Laptop: **do NOT merge the stale LAN sync branches** — they carry
+   pre-rewrite history (old PII strings). Their content (attestation gate +
+   adapters, images route, proof-header security fix, telemetry fixes, STE
+   docs, cramt digest, NEXT.md) is already in the rewritten `origin/main`.
+   Instead: `git fetch origin`, rebase any local machine-local work onto
+   `origin/main`, and re-scrub local machine working copies of the docs (the
+   local machine's local files still contain the old machine paths/names). Preserve
+   local machine-local edits (hypotheses.md, logprob ticket, lightweight spec,
+   local machine AGENTS.md).
 3. Laptop: re-verify attestation LIVE with the new proof header —
    `X-M365-Attestation-Proof` is now REQUIRED to opt into the gate. Positive
    (register → allow → result accepted) and negative (no proof → 8H stays on;
@@ -195,9 +230,10 @@ local machine. When the panes reconnect:
    hard stop at first empty-503/at-limit.
 4. PC (w8:p1): nothing pending — all work committed and pushed to the sync
    branch. STE pass done (cramt-derived docs excluded per user override).
-5. LAN the egress check still in force: do NOT push to `lan/main` or GitHub until
-   `review/local machine-preparation` + `review/lan-bakeoff-disposition` are reviewed,
-   then secret scan + pre-push hook.
+5. GitHub `main` was force-pushed with rewritten history (2026-08-11 scrub —
+   see the history-scrub section above). LAN refs are still pre-rewrite: do
+   NOT merge them into GitHub-bound work until the local machine reconcile runs.
+   Keep the secret scan + pre-push hook at every egress point.
 
 ## Standing verification and safety
 
