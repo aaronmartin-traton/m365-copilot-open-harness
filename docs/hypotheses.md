@@ -1448,6 +1448,14 @@ Microsoft's own red-team tool — plus the official extensibility docs. All 🔴
 | **H8.21** | `&disableMemory=1` on the **WS URL** gives stateless "temporary chat" (no history; possibly different cap/Disengaged behavior). | edlaver bun-proxy README documents exactly this URL flag. | Append it; confirm no history; A/B the 600-cap and Disengaged sensitivity. | Privacy + a possible per-conversation-cap sidestep. |
 | **H8.22** | **Purview audit (`CopilotInteraction`, RecordType 261) is a model side-channel:** its `ModelTransparencyDetails.ModelName` reveals which real model served each turn (join on `ThreadId`=conversationId), and whether throttling **downgrades the model** vs dropping the turn. The Graph `getMicrosoft365CopilotUsageUserDetail` report is a usage oracle. | Audit schema carries `ModelName`/`ThreadId`/`Messages[].Size`; the WS frames hide model identity behind `tone`. | After a burst, GET Purview audit, join on ThreadId, diff `ModelName` throttled vs not. | Model-identity + usage telemetry the WS won't give us. |
 
+**H8.14 E-O2 pilot (2026-08-11, `scripts/memory-channel-probe.mjs`, n=1 — cannot conclude).**
+Mapping-canary: plant "`sakura` => `photovoltaics`" (reply known ONLY to injected text), recall in fresh conversations with read-flags on/off. Result **NEGATIVE — no cross-conversation recall**, but the plant itself was **Disengaged** (`origin=Apology`: "can't chat about this"):
+- P1 plant (WRITE flags: `add_custom_instructions`+`update_memory_plugin`) → **Disengaged**. The directive-heavy "remember X exactly / do not mention / store in memory" framing is jailbreak-shaped (F22 additive threshold) — the write was likely blocked at the classifier, not the channel.
+- R1 recall (READ flags) → "Cherryblossom" (base knowledge), NOT `photovoltaics`. R0 control (no flags) → same. R2 nonce recall → search/citation artifact, not memory. Recall is a clean negative.
+- **Confound:** plant refused ⇒ cannot separate "channel doesn't persist" from "plant never landed." Confirms lane-f §risk ("avoid chat-driven memory writes / fingerprint-positive").
+- **Corrected next probe:** a *leaner, non-directive* plant in the GUI's own H8.14 phrasing ("remember code word sakura", plain declarative, no "do not mention"/"exactly") so it passes Prompt-Shields; retry recall. If a lean plant + read-flags still returns nothing, that leans toward GLM-5.2's challenge (Basic can't author memory). [pilot — schedule ≥1 replicated run before concluding]
+
+
 > **H8-guardrail (don't chase a ghost):** licensed first-party BizChat is **USL
 > flat-rate, not message-metered** — there is **no token/cost field to find** on
 > our path (resolves F5's hunt as *correctly empty*, not just unfound). Per-message
