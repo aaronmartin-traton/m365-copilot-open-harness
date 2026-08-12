@@ -19,6 +19,7 @@ import {
 } from "./native-actions.js";
 import { createLogger, trunc } from "./log.js";
 import { prepareImageAttachments, type ImageInput } from "./images.js";
+import { ensureSteered, type SteeringFingerprint } from "./steering.js";
 
 const RS = "\x1E";
 const log = createLogger("session");
@@ -192,6 +193,10 @@ export class CopilotSession {
   private agentId?: string;
   private nativeActions?: NativeActionConfig;
   private enableCodeInterpreter: boolean;
+  /** Steering-ladder fingerprint stamped on responses this session (ticket 02). */
+  private steeringFingerprint: SteeringFingerprint = "unsteered";
+  /** The steering hook runs once per CopilotSession (fresh or resumed). */
+  private steeringInitialized = false;
 
   constructor(options?: CopilotSessionOptions) {
     this.sessionId = options?.sessionId ?? crypto.randomUUID();
@@ -228,6 +233,21 @@ export class CopilotSession {
     this._turnCount++;
 
     log.info(`Chat turn ${this._turnCount - 1}: model=${model}, isFirst=${isFirst}, images=${attachments.length}, text=${JSON.stringify(trunc(text, 200))}`);
+
+    // Steering ladder (programmatic-injection ticket 02): replay the latched
+    // channel / run the canary-verified channel walk once per session, before
+    // the first user turn. Never throws — degrade to 'unsteered'. With
+    // M365_STEERING_LIVE unset this is a state-file read only (rehydration).
+    if (!this.steeringInitialized) {
+      this.steeringInitialized = true;
+      try {
+        this.steeringFingerprint = await ensureSteered();
+      } catch (err) {
+        log.error(`steering hook failed: ${err instanceof Error ? err.message : String(err)}`);
+        this.steeringFingerprint = "unsteered";
+      }
+    }
+    const steeringFingerprint = this.steeringFingerprint;
 
     const requestId = crypto.randomUUID();
 
@@ -386,6 +406,9 @@ export class CopilotSession {
         },
         get sawAction() {
           return sawAction;
+        },
+        get steeringFingerprint() {
+          return steeringFingerprint;
         },
 
         [Symbol.asyncIterator]() {

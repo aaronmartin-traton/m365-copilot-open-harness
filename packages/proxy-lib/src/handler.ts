@@ -166,6 +166,7 @@ export async function handleChatCompletion(
   let lastMessageType: string | null | undefined;
   let lastScores: Record<string, number> | null | undefined;
   let lastTurnCount: number | null | undefined;
+  let lastSteeringFingerprint: string | undefined;
 
   // `onDelta` (when provided) forwards each text delta to the caller AS IT ARRIVES,
   // for live incremental streaming. It's safe to forward without ever retracting:
@@ -226,6 +227,7 @@ export async function handleChatCompletion(
       lastMessageType = copilotStream.messageType;
       lastScores = copilotStream.scores;
       lastTurnCount = copilotStream.turnCount;
+      lastSteeringFingerprint = copilotStream.steeringFingerprint;
 
       if (copilotStream.hasContent || fullText.length > 0) {
         noteRequestOutcome(false, convId); // clean response → degradation has lifted
@@ -382,6 +384,7 @@ export async function handleChatCompletion(
     requestedModel: model,
     routedModel: routedModel,
     tone: tone,
+    steeringFingerprint: lastSteeringFingerprint,
   });
 
   return renderResponse({
@@ -393,6 +396,7 @@ export async function handleChatCompletion(
     completionId,
     created,
     model,
+    fingerprint: lastSteeringFingerprint,
   });
   } finally {
     release();

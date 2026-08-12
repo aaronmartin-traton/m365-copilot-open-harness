@@ -63,6 +63,26 @@ describe("renderResponse non-stream", () => {
     expect(a.usage).toHaveBeenCalledOnce();
   });
 
+  it("emits system_fingerprint when the session is steered", async () => {
+    const a = args({ stream: false, fingerprint: "steered:channel=textarea" });
+    const body = await (await renderResponse(a)).json();
+    expect(body.system_fingerprint).toBe("steered:channel=textarea");
+    expect(body.choices[0].message.content).toBe("hello");
+  });
+
+  it("omits system_fingerprint when unset", async () => {
+    const body = await (await renderResponse(args({ stream: false }))).json();
+    expect(body.system_fingerprint).toBeUndefined();
+  });
+
+  it("carries system_fingerprint on streamed chunks when steered", async () => {
+    const a = args({ stream: true, fingerprint: "unsteered" });
+    const { events } = await readSSE(await renderResponse(a));
+    const withFp = events.filter((e) => e.system_fingerprint != null);
+    expect(withFp.length).toBeGreaterThan(0);
+    expect(withFp[0].system_fingerprint).toBe("unsteered");
+  });
+
   it("renders tool calls as OpenAI tool-call JSON", async () => {
     const a = args({
       produce: vi.fn(async () => ({ kind: "tools" as const, toolCalls: [bashCall] })),

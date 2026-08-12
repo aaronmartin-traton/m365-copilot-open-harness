@@ -109,4 +109,6 @@ export interface CopilotStream {
   turnState?: string | null;
   /** True if the model triggered a native custom action this turn (H-NATIVE-6). */
   sawAction?: boolean;
+  /** Steering-ladder fingerprint (ticket 02): `unsteered` | `steered:channel=…`. */
+  steeringFingerprint?: string;
 }

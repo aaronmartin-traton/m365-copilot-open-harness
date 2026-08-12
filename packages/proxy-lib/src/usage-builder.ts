@@ -12,6 +12,8 @@ export interface UsageInput {
   requestedModel?: string;
   routedModel?: string;
   tone?: string;
+  /** Steering-ladder fingerprint (ticket 02); mirrored for streamed chunks. */
+  steeringFingerprint?: string;
 }
 
 export function buildUsage(input: UsageInput): Record<string, unknown> {
@@ -24,6 +26,7 @@ export function buildUsage(input: UsageInput): Record<string, unknown> {
     requestedModel,
     routedModel,
     tone,
+    steeringFingerprint,
   } = input;
 
   const base: Record<string, unknown> = {
@@ -46,6 +49,7 @@ export function buildUsage(input: UsageInput): Record<string, unknown> {
   if (contentOrigin) base.x_m365_content_origin = contentOrigin;
   if (messageType) base.x_m365_message_type = messageType;
   if (typeof turnCount === "number") base.x_m365_turn_count = turnCount;
+  if (steeringFingerprint) base.x_m365_system_fingerprint = steeringFingerprint;
 
   // Disengaged-classifier scores. Empirically: clean tool calls sit at
   // ~1e-13 / ~1e-8, jailbreak-shaped prompts climb to ~1e-3 / ~1e-3. The

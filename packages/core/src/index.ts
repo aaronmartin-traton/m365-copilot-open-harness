@@ -26,6 +26,27 @@ export {
   type ThrottleEventType,
 } from "./throttle-telemetry.js";
 
+export {
+  ensureSteered,
+  getSteeringFingerprint,
+  readSteeringState,
+  writeSteeringState,
+  replayLastGood,
+  recordChannelPass,
+  recordChannelFailure,
+  verifyChannel,
+  setCustomInstruction,
+  steeringStateFile,
+  STEERING_BREAKER_THRESHOLD,
+  STEERING_REVERIFY_MS,
+  STEERING_MIN_CANARY_SPACING_MS,
+  type SteeringChannel,
+  type SteeringFingerprint,
+  type SteeringState,
+  type ChannelBreaker,
+  type CanaryVerdict,
+} from "./steering.js";
+
 export { getOrCreateAgent, getAgentAvailability } from "./agent.js";
 
 export {

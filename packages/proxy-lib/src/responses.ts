@@ -65,6 +65,7 @@ const ChatCompletionResponse = z.object({
     completion_tokens: z.number().optional(),
     total_tokens: z.number().optional(),
   }).passthrough().optional(),
+  system_fingerprint: z.string().optional(),
 });
 
 export type ResponsesRequestBody = z.infer<typeof ResponsesRequest>;
@@ -183,7 +184,7 @@ interface ResponseEnvelope {
   [key: string]: unknown;
 }
 
-function responseEnvelope(body: ResponsesRequestBody, id: string, createdAt: number, output: OutputItem[], usage: z.infer<typeof ChatCompletionResponse>["usage"]): ResponseEnvelope {
+function responseEnvelope(body: ResponsesRequestBody, id: string, createdAt: number, output: OutputItem[], usage: z.infer<typeof ChatCompletionResponse>["usage"], fingerprint?: string): ResponseEnvelope {
   return {
     id,
     object: "response" as const,
@@ -204,6 +205,7 @@ function responseEnvelope(body: ResponsesRequestBody, id: string, createdAt: num
     tool_choice: body.tool_choice ?? "auto",
     tools: body.tools,
     truncation: "disabled",
+    ...(fingerprint ? { system_fingerprint: fingerprint } : {}),
     usage: {
       input_tokens: usage?.prompt_tokens ?? 0,
       input_tokens_details: { cached_tokens: 0 },
@@ -363,7 +365,7 @@ async function buildResponse(
         content: [{ type: "output_text", text: message.content ?? "", annotations: [] }],
       }];
   pool.bindResponseId(id, managedKey ?? pool.managedKeyForSessionKey(sessionKey));
-  return { envelope: responseEnvelope(body, id, Math.floor(Date.now() / 1000), output, completion.usage) };
+  return { envelope: responseEnvelope(body, id, Math.floor(Date.now() / 1000), output, completion.usage, completion.system_fingerprint) };
 }
 
 function streamDeferredResponse(pending: Promise<BuiltResponse>): Response {

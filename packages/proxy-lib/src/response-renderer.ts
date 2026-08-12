@@ -31,6 +31,8 @@ export interface RenderResponseArgs {
   completionId: string;
   created: number;
   model: string;
+  /** Steering-ladder fingerprint (ticket 02); omitted from the body when unset. */
+  fingerprint?: string;
 }
 
 /**
@@ -40,23 +42,24 @@ export interface RenderResponseArgs {
  * out the whole (up to ~160s) M365 turn before the first byte.
  */
 export async function renderResponse(args: RenderResponseArgs): Promise<Response> {
-  const { stream, produce, hasTools, usage, includeUsage, completionId, created, model } = args;
+  const { stream, produce, hasTools, usage, includeUsage, completionId, created, model, fingerprint } = args;
+  const fp = (extra: Record<string, unknown> = {}) => (fingerprint ? { ...extra, system_fingerprint: fingerprint } : extra);
 
   if (!stream) {
     const p = await produce();
     if (p.kind === "error") return p.resp;
     if (p.kind === "tools") {
-      return jsonResponse(200, {
+      return jsonResponse(200, fp({
         id: completionId, object: "chat.completion", created, model,
         choices: [{ index: 0, message: { role: "assistant", content: null, tool_calls: p.toolCalls }, finish_reason: "tool_calls" }],
         usage: usage(),
-      });
+      }));
     }
-    return jsonResponse(200, {
+    return jsonResponse(200, fp({
       id: completionId, object: "chat.completion", created, model,
       choices: [{ index: 0, message: { role: "assistant", content: p.text }, finish_reason: outputFinishReason(p.text) }],
       usage: usage(),
-    });
+    }));
   }
 
   // Streaming: send HTTP 200 + a role chunk + keepalive comments from t=0, then run
@@ -71,7 +74,7 @@ export async function renderResponse(args: RenderResponseArgs): Promise<Response
     async start(controller) {
       const enc = new TextEncoder();
       const send = (obj: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
-      const base = { id: completionId, object: "chat.completion.chunk", created, model };
+      const base = fp({ id: completionId, object: "chat.completion.chunk", created, model });
       send({ ...base, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
       const hb = setInterval(() => { try { controller.enqueue(enc.encode(": keepalive\n\n")); } catch {} }, 15000);
 
