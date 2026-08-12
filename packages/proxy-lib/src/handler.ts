@@ -27,6 +27,7 @@ import { produceToolPath } from "./tool-path.js";
 import { getIntentVerifier } from "./intent-verifier.js";
 import { getAttestationGate, requestedAttestationClient } from "./attestation.js";
 import { renderResponse, type Produced } from "./response-renderer.js";
+import { driftAlert, recordDriftSample } from "./drift-guard.js";
 import type { z } from "zod/v4";
 
 const log = createLogger("handler");
@@ -229,6 +230,20 @@ export async function handleChatCompletion(
       lastTurnCount = copilotStream.turnCount;
       lastSteeringFingerprint = copilotStream.steeringFingerprint;
 
+      // Disengagement/dea-drift guard (ticket 03): observational sink keyed by
+      // fingerprint bucket — alerts (log line) when steered turns drift above
+      // the unsteered baseline. Never fails the request, never fails the ladder.
+      recordDriftSample({
+        fingerprint: lastSteeringFingerprint ?? "unsteered",
+        disengaged: copilotStream.messageType === "Disengaged",
+        deaScore: typeof copilotStream.scores?.dea_violation === "number"
+          ? copilotStream.scores.dea_violation
+          : undefined,
+        at: Date.now(),
+      });
+      const drift = driftAlert();
+      if (drift) log.info(`Drift alert: ${drift}`);
+
       if (copilotStream.hasContent || fullText.length > 0) {
         noteRequestOutcome(false, convId); // clean response → degradation has lifted
         return { fullText };
@@ -360,6 +375,7 @@ export async function handleChatCompletion(
       registerToolCalls: (calls) => pool.registerToolCalls(conv, calls),
       messages: body.messages,
       tools: body.tools,
+      steeringFingerprint: () => lastSteeringFingerprint,
       intentVerifier: getIntentVerifier() ?? undefined,
       attestationGate,
       attestationClient,

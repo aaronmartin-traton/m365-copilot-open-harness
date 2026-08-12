@@ -485,6 +485,33 @@ Evidence (`scripts/dataverse-bot-probe.mjs`, with a `<org>.crm4.dynamics.com/.de
 
 ---
 
+### Output-boundary steering: `system_fingerprint` + drift guard (ticket 03)
+
+The proxy formalizes steering at the **output boundary** — route/interleave,
+never rewrite (the fence ```` ```bash ```` block is routed to the shell tool;
+Copilot prose is never rewritten into tool calls, which would fabricate model
+intent and break multi-turn coherence).
+
+- **`system_fingerprint`** — first-class OpenAI-compatible field on every
+  response: `'steered:channel=textarea'` | `'steered:channel=custom-instr'` |
+  `'unsteered'`. Emitted top-level on chat-completions JSON + stream chunks,
+  on the Responses envelope, and mirrored as `x_m365_system_fingerprint` in
+  usage. Downstream agents gate their own behavior on it.
+- **Attribution gate (`tool-path.ts`)** — with `M365_STEERING=1` (ladder
+  active), a parsed fence routes to tools ONLY when the turn's fingerprint is
+  `steered:*`; an `unsteered` turn degrades to raw text (honest degrade)
+  instead of executing on a possibly-unsteered turn. `M365_STEERING` unset ⇒
+  legacy routing, byte-for-byte.
+- **Drift guard (`drift-guard.ts`)** — observational sink keyed by
+  fingerprint bucket accumulating per-turn Disengaged events +
+  `scores.dea_violation`. `driftAlert()` fires a log line when the steered
+  window's Disengaged rate or mean `x_m365_dea_score` clears the unsteered
+  baseline (`DRIFT_DEA_FACTOR=3`, `DRIFT_DISENGAGED_GAP=0.1`,
+  `DRIFT_MIN_SAMPLES=5`). It NEVER fails a request and NEVER auto-fails the
+  ladder — injection legitimately shifts the Prompt-Shields shape balance
+  (F22); the alert exists to surface drift for human tuning, with thresholds
+  set from baseline first.
+
 ## 11. Client-attested execution (opt-in)
 
 An **opt-in control plane** where a trusted local harness (pi, Oh My Pi, or Codex) attests one exact `bash` command to the loopback proxy **before** executing it. On success the proxy skips the 8H intent verifier for that single call — the latency win — and instead records the attestation as proof-of-authorization for the tool result. Nothing here changes M365 protocol framing (§3–§6), tool parsing (§10), or the default behavior: **every request that does not opt in keeps the 8H verifier**, byte-for-byte.
@@ -717,6 +744,8 @@ The shared secret authenticates a configured adapter to the local proxy. It is *
 | `packages/core/src/agent.ts` | Copilot Studio agent create/publish, BAP env discovery |
 | `packages/core/src/schemas.ts` | Zod schemas for SignalR frames & JWT claims |
 | `packages/proxy-lib/src/handler.ts` | OpenAI ↔ M365 translation, `SessionPool`, delta mode, tool-call parsing, one-call-per-turn, empty-response fail-fast |
+| `packages/proxy-lib/src/tool-path.ts` | Buffered-turn tool-path producer: fence parse, confab/artifact retries, prose-document guard, reply conversion, steering-attribution gate (`M365_STEERING=1`) |
+| `packages/proxy-lib/src/drift-guard.ts` | Observational Disengaged/dea drift sink keyed by fingerprint bucket (baseline vs steered alert) |
 | `packages/core/src/tools.ts` | Tool-definition prompt, real-tool few-shot, `parseToolCalls` (bare + fenced, strips `confidence`/`final`) |
 
 ### Reverse-engineering probe scripts (`scripts/`, read-only)

@@ -50,6 +50,14 @@ export interface ToolPathDeps {
   messages: Message[];
   tools?: ToolDef[];
   /**
+   * Steering-attribution gate (ticket 03): thunk returning the fingerprint of
+   * the last buffered turn, read at decision time (after retries). When the
+   * ladder is active (`M365_STEERING=1`), a parsed fence routes to tools ONLY
+   * when the response is attributable as steered; unsteered responses degrade
+   * to raw text. Omit => legacy routing, byte-for-byte.
+   */
+  steeringFingerprint?: () => string | undefined;
+  /**
    * Fall-closed intent verifier (8H). When present, the final tools return is
    * gated on the verifier's EXECUTE; any non-EXECUTE (TEXT/UNCERTAIN/invalid/
    * error/timeout) returns the raw text instead of executing. Absent => the
@@ -194,6 +202,19 @@ export async function produceToolPath(
     if (!process.env.M365_ALLOW_MULTI_TOOL && parsed.toolCalls.length > 1) {
       log.info(`One-call-per-turn: keeping ${parsed.toolCalls[0].function.name}, dropping ${parsed.toolCalls.length - 1} batched call(s)`);
       parsed.toolCalls = [parsed.toolCalls[0]];
+    }
+  }
+
+  // Steering-attribution gate (ticket 03): when the injection ladder is
+  // active, route a parsed fence ONLY when the response is attributable as
+  // steered. An unsteered response degrades to raw text (honest degrade)
+  // instead of executing on a possibly-unsteered turn. Legacy routing is
+  // preserved byte-for-byte when M365_STEERING is unset.
+  if (process.env.M365_STEERING === "1" && parsed.hasToolCalls && parsed.toolCalls.length > 0) {
+    const fp = deps.steeringFingerprint?.();
+    if (!fp || fp === "unsteered") {
+      log.info(`Steering ladder active but response is unsteered (${fp ?? "no fingerprint"}), returning raw text instead of ${parsed.toolCalls.length} tool call(s)`);
+      return { kind: "text", text: fullText };
     }
   }
 

@@ -632,3 +632,85 @@ describe("produceToolPath — fail-closed intent verifier gate", () => {
     expect(Object.prototype.hasOwnProperty.call(depsWithout, "intentVerifier")).toBe(false);
   });
 });
+
+describe("produceToolPath steering-attribution gate (ticket 03)", () => {
+  beforeEach(() => {
+    delete process.env.M365_STEERING;
+  });
+
+  afterEach(() => {
+    delete process.env.M365_STEERING;
+  });
+
+  it("degrades to raw text when the ladder is active but the response is unsteered", async () => {
+    process.env.M365_STEERING = "1";
+    const deps: ToolPathDeps = {
+      runTurn: vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" }),
+      markSent: vi.fn(),
+      registerToolCalls: vi.fn(),
+      messages: [],
+      tools: [bashTool],
+      steeringFingerprint: () => "unsteered",
+    };
+
+    const result = narrow(await produceToolPath(INITIAL_PROMPT, deps), "text");
+
+    expect(result.text).toContain("ls -la");
+    expect(deps.registerToolCalls).not.toHaveBeenCalled();
+  });
+
+  it("degrades to raw text when the ladder is active and no fingerprint is available", async () => {
+    process.env.M365_STEERING = "1";
+    const registerToolCalls = vi.fn();
+    const deps: ToolPathDeps = {
+      runTurn: vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" }),
+      markSent: vi.fn(),
+      registerToolCalls,
+      messages: [],
+      tools: [bashTool],
+    };
+
+    const result = narrow(await produceToolPath(INITIAL_PROMPT, deps), "text");
+
+    expect(result.text).toContain("ls -la");
+    expect(registerToolCalls).not.toHaveBeenCalled();
+  });
+
+  it("routes the fence when the response is attributable as steered", async () => {
+    process.env.M365_STEERING = "1";
+    const registerToolCalls = vi.fn();
+    const deps: ToolPathDeps = {
+      runTurn: vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" }),
+      markSent: vi.fn(),
+      registerToolCalls,
+      messages: [],
+      tools: [bashTool],
+      steeringFingerprint: () => "steered:channel=textarea",
+    };
+
+    const result = narrow(await produceToolPath(INITIAL_PROMPT, deps), "tools");
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].function.name).toBe("bash");
+    expect(registerToolCalls).toHaveBeenCalledOnce();
+  });
+
+  it("preserves legacy routing when the ladder is disabled (M365_STEERING unset)", async () => {
+    delete process.env.M365_STEERING;
+    const registerToolCalls = vi.fn();
+    const deps: ToolPathDeps = {
+      runTurn: vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" }),
+      markSent: vi.fn(),
+      registerToolCalls,
+      messages: [],
+      tools: [bashTool],
+      steeringFingerprint: () => "unsteered",
+    };
+
+    const result = narrow(await produceToolPath(INITIAL_PROMPT, deps), "tools");
+
+    expect(result.toolCalls).toHaveLength(1);
+    expect(result.toolCalls[0].function.name).toBe("bash");
+    expect(registerToolCalls).toHaveBeenCalledOnce();
+  });
+});
