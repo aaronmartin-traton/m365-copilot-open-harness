@@ -96,10 +96,9 @@ wait for a settled URL.
   Bun 1.3.14 on this PC, while raw WebSocket clients connect fine. Use
   `node packages/proxy/bin/m365-login.mjs`. The proxy itself still runs
   under Bun (`bun packages/proxy/bin/m365-proxy.mjs`).
-- **Refresh the nested workspace copies after `bun run build`.** The login
-  resolves `@m365-copilot/core` from `packages/proxy/node_modules/@m365-copilot/core`
-  — a stale nested COPY (Aug 2026) that shadows the workspace link, plus a
-  deeper copy under `@m365-copilot/proxy-lib/node_modules`. Copy the fresh
-  `dist/` into both after any rebuild, or the bins run old code.
+- **No nested copies to refresh (removed 2026-08-11).** `@m365-copilot/*`
+  resolve through the root workspace symlinks
+  (`node_modules/@m365-copilot/*` → `packages/*`), which serve the freshly
+  built `dist/` after `bun run build`.
 - Playwright's bundled Chromium must be installed first:
   `bun x playwright install chromium`.

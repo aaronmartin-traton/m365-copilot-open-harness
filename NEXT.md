@@ -88,10 +88,10 @@ usernames, LAN IPs/paths, a session ID). Fixed in two passes:
 - LM Studio serves the frozen 8H verifier: `bonsai-27b` loaded; proxy runs
   need `M365_INTENT_VERIFIER_MODEL=bonsai-27b` (LM Studio echoes the loaded
   id, so the default `bonsai-27b-q1` trips the identity guard).
-- After `bun run build`, refresh the nested
-  `packages/proxy/node_modules/@m365-copilot/*/dist` copies (stale copies
-  shadow the workspace links; there is also a deeper core copy under
-  `@m365-copilot/proxy-lib/node_modules`).
+- Nested `@m365-copilot/*/dist` copies deleted 2026-08-11 (stale copies had
+  shadowed the workspace links). Resolution now goes through the root
+  workspace symlinks (`node_modules/@m365-copilot/*` → `packages/*`); no
+  refresh step after `bun run build`.
 - Unit-test evidence pollution the egress checkd to
   `~/.config/opencode-m365/the egress check-2026-08-10/`.
 

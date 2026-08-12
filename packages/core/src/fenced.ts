@@ -75,7 +75,7 @@ export function findShellTool(tools: ToolDef[]): ToolDef | undefined {
     });
 }
 
-export interface FencedToolSpec {
+interface FencedToolSpec {
   name: string;
   description?: string;
   /** Scalar params rendered as `key: value` header lines. */
@@ -525,7 +525,7 @@ function parseFencedInner(spec: FencedToolSpec, inner: string): Record<string, u
   return args;
 }
 
-export interface FencedParseResult {
+interface FencedParseResult {
   calls: ParsedToolCall[];
   /** Text with the matched tool fences removed (for mixed-output detection). */
   leftover: string;

@@ -37,7 +37,7 @@ interface QueueEntry<T> {
   removeAbort?: () => void;
 }
 
-export interface RequestSchedulerOptions {
+interface RequestSchedulerOptions {
   maxConcurrency?: number;
   maxQueueLength?: number;
   newThreadsPerMinute?: number;

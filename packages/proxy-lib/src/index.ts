@@ -148,7 +148,7 @@ function json(status: number, body: unknown): Response {
 }
 
 /** A minimal Web fetch handler — the same shape Hono exposed via `app.fetch`. */
-export interface FetchApp {
+interface FetchApp {
   fetch(req: Request): Promise<Response>;
 }
 

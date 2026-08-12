@@ -73,7 +73,7 @@ interface AdaptiveCard {
 }
 
 /** A bot message that may be an action confirmation trigger. */
-export interface MaybeTriggerMessage {
+interface MaybeTriggerMessage {
   messageType?: string;
   layout?: string;
   copilotMessageType?: string;
@@ -154,7 +154,7 @@ export function parseActionConfirmation(m: MaybeTriggerMessage | null | undefine
   };
 }
 
-export interface ResumeInvokeOptions {
+interface ResumeInvokeOptions {
   author?: string;
   text?: string;
 }

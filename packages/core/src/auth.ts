@@ -59,7 +59,7 @@ function getApp(): msal.PublicClientApplication {
   return appInstance;
 }
 
-export type AuthUrlHandler = (url: string) => void;
+type AuthUrlHandler = (url: string) => void;
 
 /** Minimal request-event source; playwright's Page satisfies this structurally. */
 export interface AuthCodeEventSource {
@@ -215,7 +215,7 @@ export async function getTokenForScope(scopes: string[]): Promise<string | null>
 
 let inflightReauth: Promise<boolean> | null = null;
 
-export function forceReauth(): Promise<boolean> {
+function forceReauth(): Promise<boolean> {
   return (inflightReauth ??= getTokenSilent()
     .then(async (token) => {
       if (token) return true;

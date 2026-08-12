@@ -32,7 +32,7 @@ import type { AttestationClient, AttestationGate } from "./attestation.js";
 const log = createLogger("tool-path");
 
 /** The buffered upstream result, as produced by the handler's runBuffered. */
-export type BufferedTurn =
+type BufferedTurn =
   | { fullText: string }
   | { error: Response };
 

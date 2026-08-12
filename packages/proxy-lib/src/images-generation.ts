@@ -74,7 +74,7 @@ function json(status: number, body: unknown): Response {
   });
 }
 
-export interface ImageGenerationHandlerOptions {
+interface ImageGenerationHandlerOptions {
   signal?: AbortSignal;
   /** Injectable for tests; defaults to the core generateImage. */
   generateImage?: (prompt: string, opts?: GenerateImageOptions) => Promise<GeneratedImage[]>;

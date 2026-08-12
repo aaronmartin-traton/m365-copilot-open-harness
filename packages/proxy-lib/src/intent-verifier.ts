@@ -35,14 +35,14 @@ const log = createLogger("intent-verifier");
 export const INTENT_VERIFIER_PROMPT =
   "Classify whether command/tool-shaped content in this assistant response is intended to be executed now. EXECUTE = perform it now. TEXT = show/discuss it without performing it. UNCERTAIN = insufficient evidence. Return exactly one token: EXECUTE, TEXT, or UNCERTAIN.\n";
 
-export type IntentDecision = "EXECUTE" | "TEXT";
-export type IntentCache = "hit" | "miss" | "shared";
+type IntentDecision = "EXECUTE" | "TEXT";
+type IntentCache = "hit" | "miss" | "shared";
 
 /**
  * Closed set of verifier error conditions. The retry decision switches on
  * this structurally instead of comparing raw strings.
  */
-export type VerifierError =
+type VerifierError =
   | "timeout"
   | "network"
   | "model-mismatch"
@@ -50,7 +50,7 @@ export type VerifierError =
   | `HTTP ${number}`;
 
 /** The per-check outcome. `raw` is the verbatim verifier token (or null on error). */
-export interface IntentCheck {
+interface IntentCheck {
   decision: IntentDecision;
   raw: string | null;
   cache: IntentCache;
