@@ -248,3 +248,31 @@ local machine. When the panes reconnect:
   approval.
 - The repository is public. Run the secret scan and preserve the pre-push
   hook at each egress point.
+ 
+## 2026-08-12 session wrap-up
+
+Shipped on the local machine checkout:
+
+- Steering injection ladder and honest-degrade fingerprint.
+- Output-boundary attribution gate and drift guard.
+- Nested distribution-shadow cleanup and dead-export removal.
+- Verification: `bun run test:unit` passed 346 tests with 3 skipped.
+
+Laptop sanitized mirror:
+
+- Fresh-history mirror remains private/local-only with no remote and no push.
+- H8.1 code-interpreter live probe passed with the SHA-256 oracle.
+- H8.2 declarative-agent probe remains unresolved because both Power Platform
+  environment host candidates failed DNS resolution before the WebSocket turn.
+
+Carry-over:
+
+- The PC worktree has 16 modified files and 9 untracked plan/issue paths.
+  These pre-existing changes were intentionally not absorbed into the shipped
+  commits.
+- The PC branch has not been pushed from this session.
+- Do not start more live M365 threads until the H8.2 DNS environment is
+  resolvable. Keep live probes sequential and observe the thread cooldown.
+- Next action: reconcile the pre-existing migration/auth-document changes into
+  their own tickets, then perform the local machine attestation proof-header smoke
+  when the live environment is available.
