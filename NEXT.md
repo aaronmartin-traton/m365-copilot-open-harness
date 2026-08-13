@@ -258,6 +258,11 @@ Shipped on the local machine checkout:
 - Nested distribution-shadow cleanup and dead-export removal.
 - Verification: `bun run test:unit` passed 346 tests with 3 skipped.
 
+- Steering cleanup now exposes only the proven textarea channel. The former
+  `custom-instr` fallback was removed because it never wrote its payload or
+  passed it to the canary; old state files with that channel degrade to
+  `unsteered`.
+
 Laptop sanitized mirror:
 
 - Fresh-history mirror remains private/local-only with no remote and no push.
