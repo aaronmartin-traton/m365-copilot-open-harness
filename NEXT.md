@@ -94,6 +94,18 @@ usernames, LAN IPs/paths, a session ID). Fixed in two passes:
   refresh step after `bun run build`.
 - Unit-test evidence pollution the egress checkd to
   `~/.config/opencode-m365/the egress check-2026-08-10/`.
+- **Bun 1.3.14 lacks `console.createTask`** (Node has it). Nitro's internal
+  `callHook(...).catch(...)` callers then return `undefined` for zero or
+  sync hooks, crashing the process on ANY request error. Fixed in
+  `packages/proxy/plugins/error-hook.ts` (async no-op hooks). Do not remove
+  the async keywords — a sync no-op re-introduces the crash under Bun.
+- Detached `(cmd … &)` subshells kill `bun` on Windows instantly (empty
+  log, exit 7). Use the bash tool's background mode or run foreground.
+- `taskkill //PID` fails in git-bash on this box; use
+  `powershell -Command "Stop-Process -Id <pid> -Force"`.
+- The harness policy denies force-push through the bash tool
+  (`tools.approval.bash`); a human must run `git push --force-with-lease`
+  or lift the policy. Normal pushes are unaffected.
 
 **STE status:** All operational docs pass under pragmatic STE (2026-08-09).
 The scientific notebooks (`docs/hypotheses.md`, `docs/experiments.md`,
@@ -277,14 +289,13 @@ Laptop sanitized mirror:
 
 Carry-over:
 
-- The PC checkout is clean after committing the resolved ticket statuses,
-  persistent-profile probe migration, and feature planning artifacts.
-- The branch has not been pushed. Verify remote state with `git remote -v`
-  before any publication step.
+- The PC checkout is clean. Session work is on the LAN sync branch
+  (`sync/session-2026-08-12`) for the local machine reconcile: fetch it, rebase
+  local machine-local work, re-scrub local machine-local doc copies.
 - Do not start more live M365 threads until the H8.2 DNS environment is
   resolvable. Keep live probes sequential and observe the thread cooldown.
-- Next action: perform the local machine attestation proof-header smoke when the
-  live environment is available.
+- Attestation proof-header smoke: DONE on the local machine (see the addendum below).
+  A local machine re-run is optional.
 
 ### 2026-08-12 addendum (late session, PC)
 
