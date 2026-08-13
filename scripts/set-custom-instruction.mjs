@@ -31,74 +31,72 @@ const settingsUrl = process.env.M365_SETTINGS_URL ?? "https://m365.cloud.microso
 
 if (!payload) {
   console.error("usage: node scripts/set-custom-instruction.mjs --payload <text> [--port N]");
-  process.exit(2);
-}
+  process.exitCode = 2;
+} else {
+  let browser;
+  try {
+    browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
 
-let browser;
-try {
-  browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
-} catch (err) {
-  console.error(`[set-custom-instruction] CDP attach failed on port ${port} — is _profile-cdp.mjs holding the profile open? ${err.message.split("\n")[0]}`);
-  process.exit(1);
-}
+    const context = browser.contexts()[0];
+    if (!context) {
+      console.error("[set-custom-instruction] no browser context");
+      process.exitCode = 1;
+    } else {
+      const page = await context.newPage();
+      try {
+        await page.goto(settingsUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
+        // The custom-instructions textarea lives under Settings → Personalization.
+        // Tried in order: labelled textarea near "Custom instructions", then any
+        // textarea whose aria-label mentions instructions/personalization.
+        const textarea = await page
+          .getByLabel(/custom instructions/i)
+          .or(page.locator('textarea[aria-label*="instruction" i]'))
+          .or(page.locator("textarea").filter({ has: page.locator("text=/custom instructions/i") }))
+          .first()
+          .waitFor({ timeout: 20_000 })
+          .catch(() => null);
+        if (!textarea) {
+          console.error("[set-custom-instruction] custom-instructions textarea not found on the settings page");
+          process.exitCode = 1;
+        } else {
+          await textarea.evaluate((el, value) => {
+            const proto = Object.getPrototypeOf(el);
+            const desc = Object.getOwnPropertyDescriptor(proto, "value");
+            if (desc && typeof desc.set === "function") desc.set.call(el, value);
+            else el.value = value;
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+            el.dispatchEvent(new Event("change", { bubbles: true }));
+          }, payload);
 
-const context = browser.contexts()[0];
-if (!context) {
-  console.error("[set-custom-instruction] no browser context on the CDP endpoint");
-  await browser.close();
-  process.exit(1);
-}
+          // React enables Save only after a real value change; click it once enabled.
+          const save = page.getByRole("button", { name: /save/i }).last();
+          await save.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
+          const enabled = await save.isEnabled().catch(() => false);
+          if (!enabled) {
+            console.error("[set-custom-instruction] Save button stayed disabled after value write");
+            process.exitCode = 1;
+          } else {
+            await save.click();
+            await page.waitForTimeout(800);
 
-const page = await context.newPage();
-try {
-  await page.goto(settingsUrl, { waitUntil: "domcontentloaded", timeout: 45_000 });
-  // The custom-instructions textarea lives under Settings → Personalization.
-  // Tried in order: labelled textarea near "Custom instructions", then any
-  // textarea whose aria-label mentions instructions/personalization.
-  const textarea = await page
-    .getByLabel(/custom instructions/i)
-    .or(page.locator('textarea[aria-label*="instruction" i]'))
-    .or(page.locator("textarea").filter({ has: page.locator("text=/custom instructions/i") }))
-    .first()
-    .waitFor({ timeout: 20_000 })
-    .catch(() => null);
-  if (!textarea) {
-    console.error("[set-custom-instruction] custom-instructions textarea not found on the settings page");
-    process.exit(1);
+            const reRead = await textarea.inputValue().catch(() => null);
+            if (reRead === payload) {
+              console.log(`[set-custom-instruction] OK — write + save verified (${payload.length} chars)`);
+              process.exitCode = 0;
+            } else {
+              console.error(`[set-custom-instruction] re-read mismatch: expected ${payload.length} chars, got ${reRead?.length ?? -1}`);
+              process.exitCode = 1;
+            }
+          }
+        }
+      } finally {
+        await page.close().catch(() => {});
+      }
+    }
+  } catch (err) {
+    console.error(`[set-custom-instruction] failed: ${err instanceof Error ? err.message : String(err)}`);
+    process.exitCode = 1;
+  } finally {
+    await browser?.close().catch(() => {});
   }
-
-  await textarea.evaluate((el, value) => {
-    const proto = Object.getPrototypeOf(el);
-    const desc = Object.getOwnPropertyDescriptor(proto, "value");
-    if (desc && typeof desc.set === "function") desc.set.call(el, value);
-    else el.value = value;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-  }, payload);
-
-  // React enables Save only after a real value change; click it once enabled.
-  const save = page.getByRole("button", { name: /save/i }).last();
-  await save.waitFor({ state: "visible", timeout: 10_000 }).catch(() => {});
-  const enabled = await save.isEnabled().catch(() => false);
-  if (enabled) {
-    await save.click();
-    await page.waitForTimeout(800);
-  } else {
-    console.error("[set-custom-instruction] Save button stayed disabled after value write");
-    process.exit(1);
-  }
-
-  const reRead = await textarea.inputValue().catch(() => null);
-  if (reRead === payload) {
-    console.log(`[set-custom-instruction] OK — write + save verified (${payload.length} chars)`);
-    process.exit(0);
-  }
-  console.error(`[set-custom-instruction] re-read mismatch: expected ${payload.length} chars, got ${reRead?.length ?? -1}`);
-  process.exit(1);
-} catch (err) {
-  console.error(`[set-custom-instruction] failed: ${err instanceof Error ? err.message : String(err)}`);
-  process.exit(1);
-} finally {
-  await page.close().catch(() => {});
-  await browser.close().catch(() => {});
 }
