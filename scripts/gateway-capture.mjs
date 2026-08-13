@@ -3,27 +3,31 @@
 // Authorization header (decode JWT `aud`) off its gateway calls. Unblocks the
 // MCP-tool path (we need to know which token to acquire + the gateway host).
 //
-// Usage: CHROMIUM_PATH=$(which chromium) node scripts/gateway-capture.mjs
+// Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/gateway-capture.mjs
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadSecrets } from "../packages/core/dist/index.mjs";
+import { getBrowserProfileDir } from "../packages/core/dist/index.mjs";
 
 const OUT = join(process.cwd(), "scripts", "gateway-capture-out");
 mkdirSync(OUT, { recursive: true });
-const creds = loadSecrets();
-if (!creds) { console.log("no secrets"); process.exit(1); }
 
 const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import("../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 
 function jwtAud(auth) {
   try { const t = auth.replace(/^Bearer\s+/i, ""); const p = JSON.parse(Buffer.from(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/") + "==", "base64").toString()); return { aud: p.aud, appid: p.appid, scp: p.scp }; } catch { return null; }
 }
 
-const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
-const page = await browser.newPage();
+// Launch the persistent profile — already logged in from the msal cache / profile.
+// Keep it visible so interactive re-login can happen if the profile is signed out.
+const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+  headless: false,
+  timeout: 60_000,
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+});
+const page = context.pages()[0] ?? (await context.newPage());
 
 const gatewayCalls = new Map(); // url-path -> {method, aud, appid}
 const interesting = /island\.powerapps\.com|powervamg|botmanagement|gateway\.prod/i;
@@ -40,12 +44,20 @@ page.on("request", (req) => {
 });
 
 async function login() {
-  const fill = async (sel, val) => { const loc = page.locator(`${sel}:visible`).first(); await loc.waitFor({ state: "visible", timeout: 30000 }); await loc.fill(val); };
-  const submit = () => page.locator('input[type="submit"]:visible, button[type="submit"]:visible').first().click();
-  await fill('input[name="loginfmt"]', creds.email); await submit(); await page.waitForTimeout(2500);
-  await fill('input[name="passwd"]', creds.password); await submit(); await page.waitForTimeout(2500);
-  await fill('input[name="otc"]', new TOTP({ secret: creds.mfaSecret }).generate()); await submit(); await page.waitForTimeout(2500);
-  try { await page.locator("#idSIButton9:visible").click({ timeout: 8000 }); } catch {}
+  // Authenticate IN this existing context (no second launch — a second
+  // launchPersistentContext on the same profile dir = "existing browser session"
+  // lock). The user completes sign-in in this window; we wait for the URL to
+  // leave the Microsoft login tenant.
+  console.log("[gw] login required — complete sign-in in the open window");
+  console.log("[gw] waiting for auth redirect back to copilotstudio...");
+  try {
+    await page.waitForURL((u) => !/login\.microsoftonline|oauth2|signin/i.test(u.toString()), { timeout: 180_000 });
+  } catch {
+    // Timed out waiting for the redirect — user may be stuck; report the URL.
+    console.log("[gw] auth wait timeout, current url:", page.url());
+  }
+  console.log("[gw] post-auth url:", page.url());
+  await page.waitForTimeout(3000);
 }
 
 try {
@@ -70,5 +82,5 @@ finally {
   console.log(`[gw] gateway hosts: ${hosts.join(", ") || "(none captured)"}`);
   console.log(`[gw] token audiences: ${auds.join(", ") || "(none)"}`);
   console.log(`[gw] ${gatewayCalls.size} distinct gateway calls → ${join(OUT, "gateway-calls.json")}`);
-  await browser.close();
+  await context.close();
 }

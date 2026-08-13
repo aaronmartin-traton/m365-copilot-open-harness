@@ -2,32 +2,32 @@
 // every API call it makes, to discover (a) the endpoint that returns a full
 // agent definition and (b) whether an agent can be bound to a model. Read-only
 // — we only navigate and observe; we never save/publish anything.
-// Usage: CHROMIUM_PATH=... node scripts/studio-dig.mjs
+// Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/studio-dig.mjs
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { readFileSync } from "node:fs";
-import { loadSecrets } from "../packages/core/dist/index.mjs";
+import { getBrowserProfileDir } from "../packages/core/dist/index.mjs";
 
 const OUT = join(process.cwd(), "scripts", "studio-dig-out");
 mkdirSync(OUT, { recursive: true });
 
-const creds = loadSecrets();
-if (!creds) { console.log("no secrets"); process.exit(1); }
 const cache = JSON.parse(readFileSync(join(homedir(), ".config", "opencode-m365", "agent-id.json"), "utf-8"));
 const botId = cache.botId;
 
 const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import("../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 
-const browser = await chromium.launch({
-  headless: true,
-  executablePath: process.env.CHROMIUM_PATH,
+// Launch the persistent profile — already logged in from the msal cache / profile.
+// Keep it visible so interactive re-login can happen if the profile is signed out.
+const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+  headless: false,
+  timeout: 60_000,
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });
-const page = await browser.newPage();
+const page = context.pages()[0] ?? (await context.newPage());
 
 // --- network capture ---
 const apiHits = new Set();
@@ -54,20 +54,20 @@ page.on("response", async (res) => {
 });
 
 async function login() {
-  const fill = async (sel, val) => {
-    const loc = page.locator(`${sel}:visible`).first();
-    await loc.waitFor({ state: "visible", timeout: 30000 });
-    await loc.fill(val);
-  };
-  const submit = () => page.locator('input[type="submit"]:visible, button[type="submit"]:visible').first().click();
-  await fill('input[name="loginfmt"]', creds.email); await submit();
-  await page.waitForTimeout(2500);
-  await fill('input[name="passwd"]', creds.password); await submit();
-  await page.waitForTimeout(2500);
-  const otp = new TOTP({ secret: creds.mfaSecret }).generate();
-  await fill('input[name="otc"]', otp); await submit();
-  await page.waitForTimeout(2500);
-  try { await page.locator("#idSIButton9:visible").click({ timeout: 8000 }); } catch {}
+  // Authenticate IN this existing context (no second launch — a second
+  // launchPersistentContext on the same profile dir = "existing browser session"
+  // lock). The user completes sign-in in this window; we wait for the URL to
+  // leave the Microsoft login tenant.
+  console.log("[dig] login required — complete sign-in in the open window");
+  console.log("[dig] waiting for auth redirect back to copilotstudio...");
+  try {
+    await page.waitForURL((u) => !/login\.microsoftonline|oauth2|signin/i.test(u.toString()), { timeout: 180_000 });
+  } catch {
+    // Timed out waiting for the redirect — user may be stuck; report the URL.
+    console.log("[dig] auth wait timeout, current url:", page.url());
+  }
+  console.log("[dig] post-auth url:", page.url());
+  await page.waitForTimeout(3000);
 }
 
 const shot = async (n) => { try { await page.screenshot({ path: join(OUT, `${n}.png`), fullPage: true }); writeFileSync(join(OUT, `${n}.url.txt`), page.url()); } catch {} };
@@ -107,9 +107,9 @@ try {
   writeFileSync(join(OUT, "model-hits.json"), JSON.stringify(modelHits, null, 2));
   console.log(`\n[dig] ${apiHits.size} distinct API endpoints, ${modelHits.length} model-related responses`);
   console.log("[dig] model-ish fragments:");
-  for (const h of modelHits.filter((m) => m.frags)) {
-    console.log(`  --- ${h.url}`);
-    for (const f of h.frags) console.log("    " + f);
-  }
-  await browser.close();
+    for (const h of modelHits.filter((m) => m.frags)) {
+      console.log(`  --- ${h.url}`);
+      for (const f of h.frags) console.log("    " + f);
+    }
+  await context.close();
 }

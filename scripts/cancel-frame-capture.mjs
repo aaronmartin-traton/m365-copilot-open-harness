@@ -11,39 +11,39 @@
 // This also (bonus) captures the live chat invocation the first-party client
 // sends, so we can diff our hand-built payload against the real one.
 //
-// Method: Playwright-drive the real UI (TOTP login reused from studio-dig),
-// intercept ALL ws frames on substrate.office.com/m365Copilot/Chathub, send a
-// deliberately long-generating prompt, then click Stop a couple seconds in.
+// Method: Playwright-drive the real UI from the msal/persistent-profile auth
+// path (no password/MFA in this script), intercept ALL ws frames on
+// substrate.office.com/m365Copilot/Chathub, send a deliberately
+// long-generating prompt, then click Stop a couple seconds in.
 // Everything is dumped — even if the Stop click misses, we keep the captured
 // invocation + deltas.
 //
-// Usage: M365_NO_INTERACTIVE=1 CHROMIUM_PATH=$(which chromium) node scripts/cancel-frame-capture.mjs
+// Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/cancel-frame-capture.mjs
 // Read-only-ish: sends ONE chat message to the user's real BizChat, then cancels it.
 
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { loadSecrets } from "../packages/core/dist/index.mjs";
+import { getBrowserProfileDir } from "../packages/core/dist/index.mjs";
 
 const TS = new Date().toISOString().replace(/[:.]/g, "-");
 const OUT = join(process.cwd(), "scripts", "cancel-frame-out", TS);
 mkdirSync(OUT, { recursive: true });
 const framesPath = join(OUT, "ws-frames.ndjson");
 
-const creds = loadSecrets();
-if (!creds) { console.log("no secrets"); process.exit(1); }
-
 const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import("../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 
-const browser = await chromium.launch({
-  headless: true,
-  executablePath: process.env.CHROMIUM_PATH,
+// Launch the persistent profile — already logged in from the msal cache / profile.
+// Keep it visible so interactive re-login can happen if the profile is signed out.
+const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+  headless: false,
+  timeout: 60_000,
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });
-const ctx = await browser.newPage();
+const ctx = context.pages()[0] ?? (await context.newPage());
 
 const RS = "\x1E";
 let frameIdx = 0;
@@ -84,20 +84,20 @@ ctx.on("websocket", (ws) => {
 const shot = async (n) => { try { await ctx.screenshot({ path: join(OUT, `${n}.png`), fullPage: false }); writeFileSync(join(OUT, `${n}.url.txt`), ctx.url()); } catch {} };
 
 async function login() {
-  const fill = async (sel, val) => {
-    const loc = ctx.locator(`${sel}:visible`).first();
-    await loc.waitFor({ state: "visible", timeout: 30000 });
-    await loc.fill(val);
-  };
-  const submit = () => ctx.locator('input[type="submit"]:visible, button[type="submit"]:visible').first().click();
-  await fill('input[name="loginfmt"]', creds.email); await submit();
-  await ctx.waitForTimeout(2500);
-  await fill('input[name="passwd"]', creds.password); await submit();
-  await ctx.waitForTimeout(2500);
-  const otp = new TOTP({ secret: creds.mfaSecret }).generate();
-  await fill('input[name="otc"]', otp); await submit();
-  await ctx.waitForTimeout(2500);
-  try { await ctx.locator("#idSIButton9:visible").click({ timeout: 8000 }); } catch {}
+  // Authenticate IN this existing context (no second launch — a second
+  // launchPersistentContext on the same profile dir = "existing browser session"
+  // lock). The user completes sign-in in this window; we wait for the URL to
+  // leave the Microsoft login tenant.
+  console.log("[cap] login required — complete sign-in in the open window");
+  console.log("[cap] waiting for auth redirect back to m365.cloud...");
+  try {
+    await ctx.waitForURL((u) => !/login\.microsoftonline|oauth2|signin/i.test(u.toString()), { timeout: 180_000 });
+  } catch {
+    // Timed out waiting for the redirect — user may be stuck; report the URL.
+    console.log("[cap] auth wait timeout, current url:", ctx.url());
+  }
+  console.log("[cap] post-auth url:", ctx.url());
+  await ctx.waitForTimeout(3000);
 }
 
 // Try hard to find the chat composer across the various BizChat surfaces.
@@ -199,5 +199,5 @@ try {
   console.log(`[cap] frames sent AFTER stop click: ${sentAfterStopClick.length}`);
   for (const f of sentAfterStopClick) console.log(`   +${f.dt_after_stop_ms}ms type=${f.type} target=${f.target}: ${f.raw.slice(0, 200)}`);
   console.log(`[cap] full capture: ${OUT}`);
-  await browser.close();
+  await context.close();
 }

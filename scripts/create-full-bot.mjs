@@ -3,23 +3,29 @@
 // full bot is reachable over the BizChat WebSocket (the decisive MCP question).
 //
 // Captures every gateway POST/PUT body + screenshots each step so the flow can be
-// debugged/iterated. Usage: CHROMIUM_PATH=$(which chromium) node scripts/create-full-bot.mjs
+// debugged/iterated. Uses the msal/persistent-profile auth path (no password/MFA
+// in this script). Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/create-full-bot.mjs
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadSecrets } from "../packages/core/dist/index.mjs";
+import { getBrowserProfileDir } from "../packages/core/dist/index.mjs";
 
 const OUT = join(process.cwd(), "scripts", "create-full-bot-out");
 mkdirSync(OUT, { recursive: true });
-const creds = loadSecrets();
 const NAME = `mcp-fullbot-${Date.now().toString(36)}`;
 
 const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import("../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 
-const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
-const page = await browser.newPage();
+// Launch the persistent profile — already logged in from the msal cache / profile.
+// Keep it visible so interactive re-login can happen if the profile is signed out.
+const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+  headless: false,
+  timeout: 60_000,
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+});
+const page = context.pages()[0] ?? (await context.newPage());
 page.setDefaultTimeout(45000);
 
 const gwLog = join(OUT, "gateway-calls.ndjson");
@@ -42,12 +48,20 @@ page.on("response", async (res) => {
 const shot = async (n) => { try { await page.screenshot({ path: join(OUT, `${n}.png`) }); writeFileSync(join(OUT, `${n}.url.txt`), page.url()); } catch {} };
 
 async function login() {
-  const fill = async (sel, val) => { const loc = page.locator(`${sel}:visible`).first(); await loc.waitFor({ state: "visible", timeout: 30000 }); await loc.fill(val); };
-  const submit = () => page.locator('input[type="submit"]:visible, button[type="submit"]:visible').first().click();
-  await fill('input[name="loginfmt"]', creds.email); await submit(); await page.waitForTimeout(2500);
-  await fill('input[name="passwd"]', creds.password); await submit(); await page.waitForTimeout(2500);
-  await fill('input[name="otc"]', new TOTP({ secret: creds.mfaSecret }).generate()); await submit(); await page.waitForTimeout(2500);
-  try { await page.locator("#idSIButton9:visible").click({ timeout: 8000 }); } catch {}
+  // Authenticate IN this existing context (no second launch — a second
+  // launchPersistentContext on the same profile dir = "existing browser session"
+  // lock). The user completes sign-in in this window; we wait for the URL to
+  // leave the Microsoft login tenant.
+  console.log("[cf] login required — complete sign-in in the open window");
+  console.log("[cf] waiting for auth redirect back to copilotstudio...");
+  try {
+    await page.waitForURL((u) => !/login\.microsoftonline|oauth2|signin/i.test(u.toString()), { timeout: 180_000 });
+  } catch {
+    // Timed out waiting for the redirect — user may be stuck; report the URL.
+    console.log("[cf] auth wait timeout, current url:", page.url());
+  }
+  console.log("[cf] post-auth url:", page.url());
+  await page.waitForTimeout(3000);
 }
 
 async function tryClick(rx, label) {
@@ -101,5 +115,5 @@ finally {
   console.log(`[cf] name: ${NAME}`);
   console.log(`[cf] gateway POST/PUT bodies → ${gwLog}`);
   console.log(`[cf] screenshots → ${OUT}`);
-  await browser.close();
+  await context.close();
 }

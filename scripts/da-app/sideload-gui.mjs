@@ -6,36 +6,47 @@
 // Screenshot-heavy + graceful: a single run either completes the flow or leaves
 // enough diagnostics (screenshots + page text) to see exactly where it's gated.
 //
-// Usage: CHROMIUM_PATH=$(which chromium) node scripts/da-app/sideload-gui.mjs
+// Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/da-app/sideload-gui.mjs
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadSecrets } from "../../packages/core/dist/index.mjs";
+import { getBrowserProfileDir } from "../../packages/core/dist/index.mjs";
 
 const OUT = join(process.cwd(), "scripts", "da-app", "gui-out");
 mkdirSync(OUT, { recursive: true });
 const ZIP = join(process.cwd(), "scripts", "da-app", "sentinel-agent.zip");
-const creds = loadSecrets();
-if (!creds) { console.log("no secrets"); process.exit(1); }
 
 const ROOT = process.cwd();
 const pwMod = await import("../../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import("../../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 
 const shot = async (page, name) => { await page.screenshot({ path: join(OUT, name + ".png"), fullPage: false }).catch(() => {}); console.log(`[shot] ${name}`); };
 const dump = async (page, name) => { const t = await page.evaluate(() => document.body?.innerText?.slice(0, 1500) || "").catch(() => ""); writeFileSync(join(OUT, name + ".txt"), `URL: ${page.url()}\n\n${t}`); return t; };
 
-const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
-const ctx = await browser.newContext();
-const page = await ctx.newPage();
+// Launch the persistent profile — already logged in from the msal cache / profile.
+// Keep it visible so interactive re-login can happen if the profile is signed out.
+const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+  headless: false,
+  timeout: 60_000,
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+});
+const page = context.pages()[0] ?? (await context.newPage());
 
 async function login() {
-  const fill = async (sel, val) => { const loc = page.locator(`${sel}:visible`).first(); await loc.waitFor({ state: "visible", timeout: 30000 }); await loc.fill(val); };
-  const submit = () => page.locator('input[type="submit"]:visible, button[type="submit"]:visible').first().click();
-  await fill('input[name="loginfmt"]', creds.email); await submit(); await page.waitForTimeout(2500);
-  await fill('input[name="passwd"]', creds.password); await submit(); await page.waitForTimeout(2500);
-  try { await fill('input[name="otc"]', new TOTP({ secret: creds.mfaSecret }).generate()); await submit(); await page.waitForTimeout(2500); } catch {}
-  try { await page.locator("#idSIButton9:visible").click({ timeout: 8000 }); } catch {}
+  // Authenticate IN this existing context (no second launch — a second
+  // launchPersistentContext on the same profile dir = "existing browser session"
+  // lock). The user completes sign-in in this window; we wait for the URL to
+  // leave the Microsoft login tenant.
+  console.log("[da] login required — complete sign-in in the open window");
+  console.log("[da] waiting for auth redirect back to m365.cloud...");
+  try {
+    await page.waitForURL((u) => !/login\.microsoftonline|oauth2|signin/i.test(u.toString()), { timeout: 180_000 });
+  } catch {
+    // Timed out waiting for the redirect — user may be stuck; report the URL.
+    console.log("[da] auth wait timeout, current url:", page.url());
+  }
+  console.log("[da] post-auth url:", page.url());
+  await page.waitForTimeout(3000);
 }
 
 async function clickByText(re, timeout = 6000) {
@@ -112,4 +123,4 @@ try {
   console.log("[da] ERR", e.message);
   await shot(page, "99-error");
 }
-await browser.close();
+await context.close();

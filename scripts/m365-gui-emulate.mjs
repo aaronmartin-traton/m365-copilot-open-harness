@@ -6,20 +6,17 @@
 // origin, WS params) EXCEPT the message payload — isolating whether the Disengage is
 // caused by our PAYLOAD (the agent) or by our proxy's CONNECTION (token/headers/params).
 //
-// Usage: CHROMIUM_PATH=$(which chromium) node scripts/m365-gui-emulate.mjs
+// Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/m365-gui-emulate.mjs
 process.env.M365_FRAMING_VARIANT = process.env.M365_FRAMING_VARIANT || "baseline";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadSecrets, formatMessages, getOrCreateAgent } from "../packages/core/dist/index.mjs";
+import { getBrowserProfileDir, formatMessages, getOrCreateAgent } from "../packages/core/dist/index.mjs";
 
 const OUT = join(process.cwd(), "scripts", "gui-capture-out");
 mkdirSync(OUT, { recursive: true });
-const creds = loadSecrets();
-if (!creds) { console.log("no secrets"); process.exit(1); }
 const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import("../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 
 const TASK = "Edit config.json so the port is 8080 instead of 3000. Leave every other field unchanged.";
 const BENCH_TOOLS = [{ type: "function", function: { name: "bash", description: "Run a shell command", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } }];
@@ -28,18 +25,33 @@ const agentId = await getOrCreateAgent().catch(() => null);
 const framingText = formatMessages([{ role: "user", content: TASK }], BENCH_TOOLS, "auto", crypto.randomUUID());
 console.log(`[emu] agent=${agentId ?? "none"} framing=${process.env.M365_FRAMING_VARIANT} textlen=${framingText.length}`);
 
-const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
-const page = await browser.newPage();
+// Launch the persistent profile — already logged in from the msal cache / profile.
+// Keep it visible so interactive re-login can happen if the profile is signed out.
+const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+  headless: false,
+  timeout: 60_000,
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+});
+const page = context.pages()[0] ?? (await context.newPage());
 let chathubUrl = null;
 page.on("websocket", (ws) => { const u = ws.url(); if (/Chathub|substrate\.office\.com/i.test(u) && !chathubUrl) { chathubUrl = u; console.log("[emu] captured GUI chathub URL (token+params)"); } });
 
 async function login() {
-  const fill = async (sel, val) => { const loc = page.locator(`${sel}:visible`).first(); await loc.waitFor({ state: "visible", timeout: 30000 }); await loc.fill(val); };
-  const submit = () => page.locator('input[type="submit"]:visible, button[type="submit"]:visible').first().click();
-  await fill('input[name="loginfmt"]', creds.email); await submit(); await page.waitForTimeout(2500);
-  await fill('input[name="passwd"]', creds.password); await submit(); await page.waitForTimeout(2500);
-  try { await fill('input[name="otc"]', new TOTP({ secret: creds.mfaSecret }).generate()); await submit(); await page.waitForTimeout(2500); } catch {}
-  try { await page.locator("#idSIButton9:visible").click({ timeout: 8000 }); } catch {}
+  // Authenticate IN this existing context (no second launch — a second
+  // launchPersistentContext on the same profile dir = "existing browser session"
+  // lock). The user completes sign-in in this window; we wait for the URL to
+  // leave the Microsoft login tenant.
+  console.log("[emu] login required — complete sign-in in the open window");
+  console.log("[emu] waiting for auth redirect back to m365.cloud...");
+  try {
+    await page.waitForURL((u) => !/login\.microsoftonline|oauth2|signin/i.test(u.toString()), { timeout: 180_000 });
+  } catch {
+    // Timed out waiting for the redirect — user may be stuck; report the URL.
+    console.log("[emu] auth wait timeout, current url:", page.url());
+  }
+  console.log("[emu] post-auth url:", page.url());
+  await page.waitForTimeout(3000);
 }
 
 try {
@@ -129,4 +141,4 @@ try {
     ? "[emu] -> our PAYLOAD (the agent) Disengages even in the GUI's own context => connection/token is NOT the difference."
     : "[emu] -> our payload did NOT disengage in GUI context => our proxy's CONNECTION (token/headers/params) is the difference, not the agent!");
 } catch (e) { console.log("[emu] ERR", e.message); }
-await browser.close();
+await context.close();

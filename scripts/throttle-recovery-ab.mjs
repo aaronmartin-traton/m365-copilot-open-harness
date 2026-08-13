@@ -31,7 +31,7 @@
 // Output: NDJSON of every probe → scripts/throttle-recovery-out/run-<ts>.ndjson
 // plus a printed per-token recovery summary + a verdict.
 
-import { getTokenSilent, loginAutomated, loadSecrets, decodeJwt } from "../packages/core/dist/index.mjs";
+import { getTokenSilent, loginInteractive, decodeJwt } from "../packages/core/dist/index.mjs";
 import { oneTurn } from "./_probe-chat.mjs";
 import { mkdirSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
@@ -132,13 +132,13 @@ console.log("Confirmed degraded (OLD token empties). Proceeding to A/B.\n");
 // --- mint token_NEW (the thing F13 credits with recovery) ---
 let tokenNew = null, claimsNew = null;
 if (NEWTOKEN !== "none") {
-  const secrets = loadSecrets();
-  if (!secrets) { console.log("No secrets.json — cannot mint token_NEW. Use --no-new."); process.exit(1); }
   console.log(`Minting token_NEW via ${NEWTOKEN}...`);
   const t0 = Date.now();
-  // Faithful to F13: a full fresh login. (silent path would just return the
-  // cached token on most stacks, which isn't a "fresh" token.)
-  tokenNew = await loginAutomated(secrets.email, secrets.password, secrets.mfaSecret);
+  // Faithful to F13: a full fresh login — interactive persistent-profile login
+  // (visible window, human completes sign-in; no password/MFA in this script).
+  // The silent path just returns the cached token on most stacks, which isn't a
+  // "fresh" token — that's what --newtoken=silent explicitly asks for.
+  tokenNew = NEWTOKEN === "silent" ? await getTokenSilent() : await loginInteractive();
   claimsNew = decodeJwt(tokenNew);
   const rawNew = rawClaims(tokenNew);
   console.log(`token_NEW minted in ${Date.now() - t0}ms: oid=${claimsNew.oid?.slice(0, 8)} uti-differs=${rawNew.uti !== rawOld.uti}`);

@@ -3,21 +3,18 @@
 // 2) M365 Copilot chat → open the "Sentinel Probe" agent → ask for the sentinel.
 // Oracle: scripts/sentinel-hits.log gains a Microsoft-originated GET /sentinel, and
 // the reply contains the sentinel value. Screenshot-heavy + adaptive.
-import { mkdirSync, writeFileSync, existsSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadSecrets } from "../../packages/core/dist/index.mjs";
+import { getBrowserProfileDir } from "../../packages/core/dist/index.mjs";
 
 const OUT = join(process.cwd(), "scripts", "da-app", "gui-out");
 mkdirSync(OUT, { recursive: true });
-const STATE = join(process.cwd(), "scripts", "da-app", "state.json");
 const HITLOG = join(process.cwd(), "scripts", "sentinel-hits.log");
 const SENTINEL = readFileSync(join(process.cwd(), "scripts", "sentinel-value.txt"), "utf8").trim();
 const APP_ID = "5e27c1a0-7b3d-4f2a-9c11-a1b2c3d4e5f6";
-const creds = loadSecrets();
 const ROOT = process.cwd();
 const pwMod = await import("../../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import("../../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
 const hitCount = () => { try { return readFileSync(HITLOG, "utf8").split("\n").filter(l => /\/sentinel\b/.test(l) && !/openapi/.test(l)).length; } catch { return 0; } };
@@ -31,20 +28,36 @@ const click = async (p, re, timeout = 6000) => {
   return false;
 };
 const login = async (page) => {
-  const fill = async (sel, val) => { const l = page.locator(`${sel}:visible`).first(); await l.waitFor({ state: "visible", timeout: 30000 }); await l.fill(val); };
-  const submit = () => page.locator('input[type="submit"]:visible, button[type="submit"]:visible').first().click();
-  try { await fill('input[name="loginfmt"]', creds.email); await submit(); await page.waitForTimeout(2500); } catch {}
-  try { await fill('input[name="passwd"]', creds.password); await submit(); await page.waitForTimeout(2500); } catch {}
-  try { await fill('input[name="otc"]', new TOTP({ secret: creds.mfaSecret }).generate()); await submit(); await page.waitForTimeout(2500); } catch {}
-  try { await page.locator("#idSIButton9:visible").click({ timeout: 8000 }); } catch {}
+  // Authenticate IN this existing context (no second launch — a second
+  // launchPersistentContext on the same profile dir = "existing browser session"
+  // lock). The user completes sign-in in this window; we wait for the URL to
+  // leave the Microsoft login tenant.
+  console.log("[e2e] login required — complete sign-in in the open window");
+  console.log("[e2e] waiting for auth redirect back to m365.cloud...");
+  try {
+    await page.waitForURL((u) => !/login\.microsoftonline|oauth2|signin/i.test(u.toString()), { timeout: 180_000 });
+  } catch {
+    // Timed out waiting for the redirect — user may be stuck; report the URL.
+    console.log("[e2e] auth wait timeout, current url:", page.url());
+  }
+  console.log("[e2e] post-auth url:", page.url());
+  await page.waitForTimeout(3000);
 };
 
 const before = hitCount();
 console.log(`[e2e] sentinel /sentinel hits before: ${before}  (sentinel=${SENTINEL})`);
 
-const browser = await chromium.launch({ headless: false, executablePath: process.env.CHROMIUM_PATH, args: ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"] });
-const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1440, height: 900 }, storageState: existsSync(STATE) ? STATE : undefined });
-const page = await ctx.newPage();
+// Launch the persistent profile — already logged in from the msal cache / profile.
+// Keep it visible so interactive re-login can happen if the profile is signed out.
+const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+  headless: false,
+  timeout: 60_000,
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+  userAgent: UA,
+  viewport: { width: 1440, height: 900 },
+});
+const page = context.pages()[0] ?? (await context.newPage());
 
 try {
   // --- 1) Install via Developer Portal preview ---
@@ -52,14 +65,13 @@ try {
   await page.goto(`https://dev.teams.microsoft.com/apps/${APP_ID}/dashboard`, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForTimeout(5000);
   if (/login\.microsoftonline|oauth2|signin/i.test(page.url())) { await login(page); await page.waitForTimeout(6000); }
-  await ctx.storageState({ path: STATE }).catch(() => {});
   await shot(page, "e-01-dashboard");
 
   await click(page, /Preview in Teams|Preview in Copilot|^Preview$/i, 10000);
   console.log("[e2e] preview clicked; waiting for Teams install to render...");
   await page.waitForTimeout(12000);
   // Preview may be same tab or a popup.
-  let teams = ctx.pages()[ctx.pages().length - 1];
+  let teams = context.pages()[context.pages().length - 1];
   await teams.waitForTimeout(8000).catch(() => {});
   await shot(teams, "e-02-teams-install");
   await dump(teams, "e-02-teams-install");
@@ -72,7 +84,7 @@ try {
 
   // --- 2) Trigger in Copilot ---
   console.log("[e2e] opening Copilot chat...");
-  const cop = await ctx.newPage();
+  const cop = await context.newPage();
   await cop.goto("https://m365.cloud.microsoft/chat/", { waitUntil: "domcontentloaded", timeout: 60000 });
   await cop.waitForTimeout(9000);
   if (/login\.microsoftonline|oauth2|signin/i.test(cop.url())) { await login(cop); await cop.waitForTimeout(8000); }
@@ -111,5 +123,5 @@ try {
   console.log(`\n[e2e] === RESULT === sentinel /sentinel hits: before=${before} after=${after}  DELTA=${after - before}`);
   console.log(after > before ? "🎉 MICROSOFT'S ORCHESTRATOR CALLED OUR ENDPOINT — native action fired" : "❌ no outbound call to our endpoint observed");
 } catch (e) { console.log("[e2e] ERR", e.message); await shot(page, "e-99-error"); }
-await browser.close();
+await context.close();
 console.log(`[e2e] final /sentinel hits: ${hitCount()}`);

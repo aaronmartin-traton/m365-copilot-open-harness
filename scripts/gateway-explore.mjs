@@ -2,15 +2,14 @@
 // frontend, then probe whether the gateway sees OUR minimalBots agent and lets
 // us read/write its components (the path to attaching an MCP tool).
 //
-// Usage: CHROMIUM_PATH=$(which chromium) node scripts/gateway-explore.mjs
+// Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/gateway-explore.mjs
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { loadSecrets } from "../packages/core/dist/index.mjs";
+import { getBrowserProfileDir } from "../packages/core/dist/index.mjs";
 
 const OUT = join(process.cwd(), "scripts", "gateway-explore-out");
 mkdirSync(OUT, { recursive: true });
-const creds = loadSecrets();
 const cache = JSON.parse(readFileSync(join(homedir(), ".config", "opencode-m365", "agent-id.json"), "utf8"));
 const BOT_ID = cache.botId;
 const TENANT = "00000000-0000-4000-8000-000000000000";
@@ -20,10 +19,16 @@ const GW = "https://powervamg.eu-il105.gateway.prod.island.powerapps.com";
 const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
-const { TOTP } = await import("../packages/core/node_modules/otpauth/dist/otpauth.esm.js");
 
-const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROMIUM_PATH, args: ["--no-sandbox", "--disable-dev-shm-usage"] });
-const page = await browser.newPage();
+// Launch the persistent profile — already logged in from the msal cache / profile.
+// Keep it visible so interactive re-login can happen if the profile is signed out.
+const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
+  headless: false,
+  timeout: 60_000,
+  ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
+  args: ["--no-sandbox", "--disable-dev-shm-usage"],
+});
+const page = context.pages()[0] ?? (await context.newPage());
 
 let gwToken = null;
 let resolveToken;
@@ -36,12 +41,20 @@ page.on("request", (req) => {
 });
 
 async function login() {
-  const fill = async (sel, val) => { const loc = page.locator(`${sel}:visible`).first(); await loc.waitFor({ state: "visible", timeout: 30000 }); await loc.fill(val); };
-  const submit = () => page.locator('input[type="submit"]:visible, button[type="submit"]:visible').first().click();
-  await fill('input[name="loginfmt"]', creds.email); await submit(); await page.waitForTimeout(2500);
-  await fill('input[name="passwd"]', creds.password); await submit(); await page.waitForTimeout(2500);
-  await fill('input[name="otc"]', new TOTP({ secret: creds.mfaSecret }).generate()); await submit(); await page.waitForTimeout(2500);
-  try { await page.locator("#idSIButton9:visible").click({ timeout: 8000 }); } catch {}
+  // Authenticate IN this existing context (no second launch — a second
+  // launchPersistentContext on the same profile dir = "existing browser session"
+  // lock). The user completes sign-in in this window; we wait for the URL to
+  // leave the Microsoft login tenant.
+  console.log("[gw] login required — complete sign-in in the open window");
+  console.log("[gw] waiting for auth redirect back to copilotstudio...");
+  try {
+    await page.waitForURL((u) => !/login\.microsoftonline|oauth2|signin/i.test(u.toString()), { timeout: 180_000 });
+  } catch {
+    // Timed out waiting for the redirect — user may be stuck; report the URL.
+    console.log("[gw] auth wait timeout, current url:", page.url());
+  }
+  console.log("[gw] post-auth url:", page.url());
+  await page.waitForTimeout(3000);
 }
 
 const H = () => ({
@@ -86,4 +99,4 @@ try {
 
   console.log(`\n[gw] outputs in ${OUT}`);
 } catch (e) { console.log("[gw] error:", e.message); }
-finally { await browser.close(); }
+finally { await context.close(); }

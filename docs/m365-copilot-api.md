@@ -67,7 +67,7 @@ wss://substrate.office.com/m365Copilot/Chathub/{oid}@{tid}?{query}
 ### Flow: MSAL PKCE
 We use `@azure/msal-node` `PublicClientApplication` with PKCE. The token cache is persisted to `~/.config/opencode-m365/msal-cache.json` and refreshed silently when possible.
 
-> **The cache is disposable (tested June 2026, `scripts/token-regen-probe.mjs`).** Delete `msal-cache.json` and the next `getToken()` self-heals: silent fails → automated browser login (stored creds + TOTP) → a fresh, working token in **~12s**, no human in the loop. The regenerated token is **functionally identical** — same `aud`/`appid`/`tid`/`oid`/scopes, only `iat`/`exp`/`uti` change. Point auth at a throwaway cache with `M365_CACHE_FILE` to test this without touching the real one.
+> **The cache is disposable (tested June 2026, `scripts/token-regen-probe.mjs`).** Delete `msal-cache.json` and the next `getToken()` self-heals: silent fails → `loginInteractive()` opens the persistent-profile browser (human completes sign-in once; no password/MFA in code) → a fresh, working token. The regenerated token is **functionally identical** — same `aud`/`appid`/`tid`/`oid`/scopes, only `iat`/`exp`/`uti` change. Point auth at a throwaway cache with `M365_CACHE_FILE` to test this without touching the real one.
 >
 > **Re-auth does NOT clear account throttling** — the fresh token carries the same `oid`, so it lands in the same account-keyed throttle bucket. Throttling is identity-level, not token-level.
 >
@@ -77,13 +77,13 @@ We use `@azure/msal-node` `PublicClientApplication` with PKCE. The token cache i
 The `nativeclient` redirect URI is designed to be **intercepted by an embedded native host** (WebView2 etc.) *before the page loads*. A real browser instead follows the redirect one hop further and lands on **`https://login.microsoftonline.com/common/wrongplace`** ("This is not the right page"). So:
 
 - `page.waitForURL("**/oauth2/nativeclient**")` **misses** the auth code — the `?code=` URL exists only transiently before the bounce.
-- **Fix:** attach a `page.on("request")` listener and pull `code` out of the *navigation request* to `…/oauth2/nativeclient?code=…`. See `runBrowserLogin()` in `auth.ts`.
+- **Fix:** attach a `page.on("request")` listener and pull `code` out of the *navigation request* to `…/oauth2/nativeclient?code=…`. `loginInteractive()` in `auth.ts` does exactly this via `waitForAuthCode()` / `extractAuthCode()`.
 
-### Automated login quirks (Playwright)
-- The converged AAD login page keeps **hidden duplicate `<input type=password>` nodes**; a naive `fill()` can target a stale hidden one and submit an empty password. Fill the **visible** `name=`-selected field and verify the value landed (`fillVerified()`).
-- Field selectors: email `input[name="loginfmt"]`, password `input[name="passwd"]`, TOTP `input[name="otc"]`.
-- If the bundled Playwright browser is unavailable on the host, point `CHROMIUM_PATH` at a compatible system Chromium (`resolveChromiumPath()`).
-- TOTP codes are single-use per 30s window — space retries past the window.
+### Interactive login (persistent Playwright profile)
+- The browser session lives in the persistent profile dir from `getBrowserProfileDir()` (`~/.config/opencode-m365/browser-profile-cdp`), launched with `chromium.launchPersistentContext(...)` — the same profile every capture script boots.
+- Login is **interactive**: scripts detect `login.microsoftonline` and wait for the human to complete sign-in **in the open window** (waitForURL off the login tenant). No password/MFA/TOTP filling anywhere — credentials never appear in scripts or docs.
+- One browser per profile at a time: a second `launchPersistentContext` on the same profile dir fails with the "existing browser session" lock.
+- If the bundled Playwright browser is unavailable on the host, point `CHROMIUM_PATH` at a compatible system Chromium.
 
 ---
 
@@ -493,10 +493,10 @@ Copilot prose is never rewritten into tool calls, which would fabricate model
 intent and break multi-turn coherence).
 
 - **`system_fingerprint`** — first-class OpenAI-compatible field on every
-  response: `'steered:channel=textarea'` | `'steered:channel=custom-instr'` |
-  `'unsteered'`. Emitted top-level on chat-completions JSON + stream chunks,
-  on the Responses envelope, and mirrored as `x_m365_system_fingerprint` in
-  usage. Downstream agents gate their own behavior on it.
+  response: `'steered:channel=textarea'` | `'unsteered'`. Emitted top-level
+  on chat-completions JSON + stream chunks, on the Responses envelope, and
+  mirrored as `x_m365_system_fingerprint` in usage. Downstream agents gate
+  their own behavior on it.
 - **Attribution gate (`tool-path.ts`)** — with `M365_STEERING=1` (ladder
   active), a parsed fence routes to tools ONLY when the turn's fingerprint is
   `steered:*`; an `unsteered` turn degrades to raw text (honest degrade)
@@ -507,10 +507,12 @@ intent and break multi-turn coherence).
   `scores.dea_violation`. `driftAlert()` fires a log line when the steered
   window's Disengaged rate or mean `x_m365_dea_score` clears the unsteered
   baseline (`DRIFT_DEA_FACTOR=3`, `DRIFT_DISENGAGED_GAP=0.1`,
-  `DRIFT_MIN_SAMPLES=5`). It NEVER fails a request and NEVER auto-fails the
-  ladder — injection legitimately shifts the Prompt-Shields shape balance
+  `DRIFT_MIN_SAMPLES=5`). It NEVER fails a request and NEVER auto-fails
+  the ladder — injection legitimately shifts the Prompt-Shields shape balance
   (F22); the alert exists to surface drift for human tuning, with thresholds
   set from baseline first.
+
+---
 
 ## 11. Client-attested execution (opt-in)
 
@@ -711,8 +713,8 @@ The shared secret authenticates a configured adapter to the local proxy. It is *
 | 3 | Frames terminated by `0x1E` (RS); multiple per WS message | everywhere |
 | 4 | **Metrics frame required** in the same send as the chat frame | `sendChat()` |
 | 5 | Model chosen by `tone` string, not model id | `MODEL_TONES` |
-| 6 | `nativeclient` redirect bounces to `/common/wrongplace`; scrape `code` from the request | `runBrowserLogin()` |
-| 7 | Hidden duplicate password inputs on the AAD page | `fillVerified()` |
+| 6 | `nativeclient` redirect bounces to `/common/wrongplace`; scrape `code` from the request | `loginInteractive()` / `extractAuthCode()` |
+| 7 | Hidden duplicate password inputs on the AAD page | n/a — interactive login, no auto-fill |
 | 8 | `Disengaged` returns empty content (≠ rate limit) | §9 |
 | 9 | Tool calling needs a Copilot Studio agent | §10 |
 | 10 | Power Platform env host needs last-2-chars trimmed to resolve DNS | `getEnvironmentUrl()` |
@@ -720,7 +722,7 @@ The shared secret authenticates a configured adapter to the local proxy. It is *
 | 12 | Only bot messages **without** `messageType` are real content | `handleMsg()` |
 | 13 | **Reasoning tones** (`*_Reasoning`/`DeepLeo`) meta-analyze the prompt and disengage; only `magic` + `*_Quick` work with the agent | §5/§10 |
 | 14 | Our `minimalBots` agents are **not** Dataverse bots (that table is empty) and have **no model field** — can't bind a model | §10 |
-| 15 | Agent is **versioned by name** (`m365-tool-agent-<sha256-prefix>`); editing instructions auto-provisions a new one + cleans up old | §10 |
+| 15 | Agent is **versioned by name** (`m365-tool-agent-<sha256-prefix>`); editing instructions auto-provisions a new one and leaves old agents in place | §10 |
 | 16 | Empty reply ≠ rate limit unless throttle is at-limit; otherwise fail fast (don't burn 60s of retries) | `handler.ts` |
 | 17 | M365 invents `{"confidence":N}` / `{"final":"…"}` JSON and batches calls + premature `✅ SUCCESS`; proxy strips them + enforces one call/turn | `tools.ts`/`handler.ts` |
 | 18 | **Deleted-agent trap:** a long-lived host caches its agent id for life (`reset()` won't clear it) and can't self-heal when its bot is cleaned up; dead agent → instant empty reply (`throttle:null`, ~0.7s) misread as "rate limited". Restart, or clear `cachedAgentId` on empty | `model.ts`/§10 |
@@ -737,16 +739,14 @@ The shared secret authenticates a configured adapter to the local proxy. It is *
 
 | File | Responsibility |
 |---|---|
-| `packages/core/src/auth.ts` | MSAL PKCE, silent refresh, automated Playwright login, token-for-scope |
+| `packages/core/src/auth.ts` | MSAL PKCE, silent refresh, interactive persistent-profile Playwright login, token-for-scope |
 | `packages/core/src/copilot.ts` | One-shot WS chat, `decodeJwt`, `MODEL_TONES`, `VARIANTS` |
 | `packages/core/src/session.ts` | Stateful `CopilotSession` (reconnect per turn, reuse ids), SignalR frame handling |
 | `packages/core/src/model.ts` | `ModelSession` — auth + agent + conversation continuity, string-in/stream-out |
 | `packages/core/src/agent.ts` | Copilot Studio agent create/publish, BAP env discovery |
 | `packages/core/src/schemas.ts` | Zod schemas for SignalR frames & JWT claims |
-| `packages/proxy-lib/src/handler.ts` | OpenAI ↔ M365 translation, `SessionPool`, delta mode, tool-call parsing, one-call-per-turn, empty-response fail-fast |
 | `packages/proxy-lib/src/tool-path.ts` | Buffered-turn tool-path producer: fence parse, confab/artifact retries, prose-document guard, reply conversion, steering-attribution gate (`M365_STEERING=1`) |
 | `packages/proxy-lib/src/drift-guard.ts` | Observational Disengaged/dea drift sink keyed by fingerprint bucket (baseline vs steered alert) |
-| `packages/core/src/tools.ts` | Tool-definition prompt, real-tool few-shot, `parseToolCalls` (bare + fenced, strips `confidence`/`final`) |
 
 ### Reverse-engineering probe scripts (`scripts/`, read-only)
 
@@ -754,7 +754,7 @@ The shared secret authenticates a configured adapter to the local proxy. It is *
 |---|---|
 | `listbots-probe.mjs` | Dumps `minimalBots` list — shows `displayName`→`shortBotName` round-trip, existing agents |
 | `agent-model-probe.mjs` | Full `minimalBots` agent definition; hunts for a model field (there is none) |
-| `studio-dig.mjs` | Logs into the real Copilot Studio UI (Playwright + TOTP) and **captures every API call** → revealed Dataverse + PVA + ECS layers |
+| `studio-dig.mjs` | Logs into the real Copilot Studio UI with the interactive persistent profile and **captures every API call** → revealed Dataverse + PVA + ECS layers |
 | `dataverse-bot-probe.mjs` | Queries Dataverse (`<org>.crm4.dynamics.com`) directly — proved our agents aren't Dataverse bots |
 | `proxy-verify.mjs` | End-to-end proxy check (`--agent --multiturn --manytools`) — reproduces disengagement, verifies the tool loop |
 | `frame-dump-probe.mjs` | Sends one chat turn and dumps every field of every WS frame; flags token/usage-shaped keys/values. Hunts for hidden metrics. |
