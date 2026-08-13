@@ -285,3 +285,26 @@ Carry-over:
   resolvable. Keep live probes sequential and observe the thread cooldown.
 - Next action: perform the local machine attestation proof-header smoke when the
   live environment is available.
+
+### 2026-08-12 addendum (late session, PC)
+
+- **Attestation proof-header smoke: DONE on the local machine, ALL PASS.** See
+  `.scratch/client-attested-execution/issues/01-attestation-gate.md` comments
+  and `scripts/attestation-live-smoke.mjs`. The checks cover: allow, single-use
+  replay deny, result accepted through a real M365 tool loop, fabricated id
+  409, no-proof stays fail-closed on 8H. The local machine smoke is optional now.
+- **Found + fixed a pre-existing crash: the proxy died on ANY request error
+  under Bun** (a plain 404 killed the process). Nitro's internal
+  `callHook(...).catch(...)` callers return `undefined` when zero hooks are
+  registered. Under Bun even sync no-op hooks return `undefined` (no
+  `console.createTask`), so the `.catch` threw inside the error path. The
+  uncaughtException then exited the process. Fix:
+  `packages/proxy/plugins/error-hook.ts` registers async no-op hooks for
+  error/request/beforeResponse/afterResponse/close + an error logger.
+  Verification: 404s return 404, `/health` and `/v1/models` return 200, the
+  process survives repeated erroring requests. This is why live runs on the local machine
+  had been flaky. The same fix applies to any Bun-hosted instance.
+- Capture-path migration ticket reconciled: already shipped (persistent
+  profile), status flipped to resolved with evidence.
+- PC session work pushed to a sync branch on the the remote for the local machine
+  reconcile. Secret scan clean at egress.
