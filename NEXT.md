@@ -264,7 +264,6 @@ Shipped on the local machine checkout:
   `unsteered`.
 
 Laptop sanitized mirror:
-
 - Fresh-history mirror remains private/local-only with no remote and no push.
 - H8.1 code-interpreter live probe passed with the SHA-256 oracle.
 - H8.2 declarative-agent probe remains unresolved because both Power Platform
@@ -272,12 +271,14 @@ Laptop sanitized mirror:
 
 Carry-over:
 
-- The PC worktree has 16 modified files and 9 untracked plan/issue paths.
-  These pre-existing changes were intentionally not absorbed into the shipped
-  commits.
-- The PC branch has not been pushed from this session.
+- The current checkout state is authoritative in `git status -sb`,
+  `git branch -vv`, and `git worktree list`. Pre-existing migration,
+  authentication-document, and tracker edits remain intentionally outside the
+  shipped cleanup commits.
+- No remote or push action was performed for this work; verify remote state
+  with `git remote -v` before any publication step.
 - Do not start more live M365 threads until the H8.2 DNS environment is
   resolvable. Keep live probes sequential and observe the thread cooldown.
-- Next action: reconcile the pre-existing migration/auth-document changes into
-  their own tickets, then perform the local machine attestation proof-header smoke
-  when the live environment is available.
+- Next action: assign the pre-existing edits to their own tickets and commits,
+  then perform the local machine attestation proof-header smoke when the live
+  environment is available.

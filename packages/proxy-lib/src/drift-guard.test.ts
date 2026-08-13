@@ -30,13 +30,13 @@ describe("drift guard bucket stats", () => {
     expect(stats.meanDea).toBeCloseTo(1e-8, 12);
   });
 
-  it("collapses steered channels into a single steered bucket for stats lookup", () => {
+  it("keeps distinct steered fingerprint buckets separate", () => {
     sample("steered:channel=textarea", true);
-    sample("steered:channel=custom-instr");
-    const merged = driftStats("steered:channel=textarea");
+    sample("steered:channel=secondary");
+    const primary = driftStats("steered:channel=textarea");
     // driftStats is per-bucket; the alert path merges. Per-bucket stats here:
-    expect(merged.turns).toBe(1);
-    expect(driftStats("steered:channel=custom-instr").turns).toBe(1);
+    expect(primary.turns).toBe(1);
+    expect(driftStats("steered:channel=secondary").turns).toBe(1);
   });
 
   it("returns zeros for an empty bucket", () => {
@@ -94,10 +94,10 @@ describe("drift alert", () => {
     expect(driftAlert()).toBeNull();
   });
 
-  it("merges multiple steered channels into the steered window", () => {
+  it("merges multiple steered buckets into the steered window", () => {
     fill("unsteered", DRIFT_MIN_SAMPLES, false, 1e-8);
     fill("steered:channel=textarea", 3, true, 1e-8);
-    fill("steered:channel=custom-instr", 3, true, 1e-8);
+    fill("steered:channel=secondary", 3, true, 1e-8);
     const alert = driftAlert();
     expect(alert).not.toBeNull();
     expect(alert).toContain("6 turns");
