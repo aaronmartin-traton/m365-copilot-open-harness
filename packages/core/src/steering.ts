@@ -23,14 +23,13 @@ import { createLogger } from "./log.js";
 
 const log = createLogger("steering");
 
-/** The two ranked injection channels. `textarea` is PRIMARY (proven 2026-08-11). */
-export type SteeringChannel = "textarea" | "custom-instr";
+/** The proven injection channel. */
+export type SteeringChannel = "textarea";
 
 /** Honest-degrade values surfaced as the OpenAI `system_fingerprint` field. */
 export type SteeringFingerprint =
   | "unsteered"
-  | "steered:channel=textarea"
-  | "steered:channel=custom-instr";
+  | "steered:channel=textarea";
 
 export interface ChannelBreaker {
   /** Consecutive canary failures since last pass (or reset). */
@@ -68,7 +67,7 @@ function freshState(): SteeringState {
   return {
     channel: null,
     payload: null,
-    breakers: { textarea: freshBreaker(), "custom-instr": freshBreaker() },
+    breakers: { textarea: freshBreaker() },
     lastVerifiedAt: null,
     lastAttemptAt: null,
   };
@@ -84,13 +83,13 @@ function normalizeState(raw: unknown): SteeringState {
   const r = raw as Record<string, unknown>;
   const merged: SteeringState = {
     ...base,
-    channel: r.channel === "textarea" || r.channel === "custom-instr" ? r.channel : null,
+    channel: r.channel === "textarea" ? r.channel : null,
     payload: typeof r.payload === "string" && r.payload.length > 0 ? r.payload : null,
     lastVerifiedAt: typeof r.lastVerifiedAt === "number" ? r.lastVerifiedAt : null,
     lastAttemptAt: typeof r.lastAttemptAt === "number" ? r.lastAttemptAt : null,
   };
   const br = (r.breakers ?? {}) as Record<string, unknown>;
-  for (const ch of ["textarea", "custom-instr"] as const) {
+  for (const ch of ["textarea"] as const) {
     const b = br[ch] as Record<string, unknown> | undefined;
     merged.breakers[ch] = b && typeof b === "object"
       ? {
@@ -314,7 +313,7 @@ export async function ensureSteered(): Promise<SteeringFingerprint> {
     return getSteeringFingerprint(state);
   }
 
-  const channels: SteeringChannel[] = ["textarea", "custom-instr"];
+  const channels: SteeringChannel[] = ["textarea"];
   for (const channel of channels) {
     if (state.breakers[channel]?.open) {
       log.info(`steering channel ${channel} breaker open — skipped`);

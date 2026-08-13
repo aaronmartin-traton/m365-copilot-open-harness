@@ -64,9 +64,9 @@ describe("steering state machine", () => {
   });
 
   it("a pass resets the breaker failure count", () => {
-    let state = recordChannelFailure(readSteeringState(), "custom-instr", 1);
-    state = recordChannelPass(state, "custom-instr", "p", 2);
-    expect(state.breakers["custom-instr"]).toEqual({ failures: 0, open: false, openedAt: null });
+    let state = recordChannelFailure(readSteeringState(), "textarea", 1);
+    state = recordChannelPass(state, "textarea", "p", 2);
+    expect(state.breakers.textarea).toEqual({ failures: 0, open: false, openedAt: null });
   });
 
   it("normalizes a corrupt state file back to defaults", () => {
