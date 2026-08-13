@@ -256,7 +256,13 @@ Shipped on the local machine checkout:
 - Steering injection ladder and honest-degrade fingerprint.
 - Output-boundary attribution gate and drift guard.
 - Nested distribution-shadow cleanup and dead-export removal.
+- Resolved research-ticket status reconciliation.
+- Persistent browser-profile migration for live probes; no plaintext
+  password/MFA/TOTP automation remains in those scripts.
+- Feature planning artifacts committed by feature.
 - Verification: `bun run test:unit` passed 346 tests with 3 skipped.
+- Authentication migration verification: all changed probe scripts passed
+  `node --check`; silent login smoke passed with a cached token.
 
 - Steering cleanup now exposes only the proven textarea channel. The former
   `custom-instr` fallback was removed because it never wrote its payload or
@@ -271,14 +277,11 @@ Laptop sanitized mirror:
 
 Carry-over:
 
-- The current checkout state is authoritative in `git status -sb`,
-  `git branch -vv`, and `git worktree list`. Pre-existing migration,
-  authentication-document, and tracker edits remain intentionally outside the
-  shipped cleanup commits.
-- No remote or push action was performed for this work; verify remote state
-  with `git remote -v` before any publication step.
+- The PC checkout is clean after committing the resolved ticket statuses,
+  persistent-profile probe migration, and feature planning artifacts.
+- The branch has not been pushed. Verify remote state with `git remote -v`
+  before any publication step.
 - Do not start more live M365 threads until the H8.2 DNS environment is
   resolvable. Keep live probes sequential and observe the thread cooldown.
-- Next action: assign the pre-existing edits to their own tickets and commits,
-  then perform the local machine attestation proof-header smoke when the live
-  environment is available.
+- Next action: perform the local machine attestation proof-header smoke when the
+  live environment is available.
