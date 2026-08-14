@@ -338,23 +338,40 @@ classification/doc-sync work into `main`.
   7 product/protocol tickets remain in place.
 - **Verification before merge:** `bun run build` green; `bun run test:unit`
   → 341 passed / 3 skipped; `tsc --noEmit -p packages/proxy-lib` clean.
-- **Benchmark:** the first post-merge run was attempted with
-  `scripts/bench/run.mjs --label simplify-tool-path`, but Docker Desktop's
-  Linux engine was unavailable. All 10 tasks failed at container startup
-  (`ERROR=10`, `M365 messages spent: 0`). This scorecard is invalid for
-  model comparison.
+- **Benchmark:** rerun clean on 2026-08-14 with Docker's Linux engine up.
+  `scripts/bench/run.mjs --label simplify-tool-path --repeat 1` →
+  **SOLVED 6/10 (60%)**, outcomes `SOLVED=6 GAVE_UP_PROSE=4`, avg
+  tool-calls/task 1.4, **24 M365 messages, zero ERRORs**. Scorecard:
+  `scripts/bench/out/simplify-tool-path-2026-08-14T04-19-13-654Z.json`.
+  All 6 solves were real tool loops with objective verifier passes
+  (fizzbuzz, fix-bug, find-needle, count-lines, ec-bugfix, ec-plain).
+  The 4 failures are turn-1 canned refusals (`tools=0, msgs=1`) on the
+  disengage-prone `edit-config`/`ec-*` family — the exact class the pivot
+  deliberately unmasked by removing in-turn retries (§12.11 showed the old
+  retry silently recovered these; the harness now owns retry policy).
+  The earlier Docker-blocked run
+  (`simplify-tool-path-2026-08-14T02-55-02-507Z.json`, `ERROR=10`,
+  `M365 messages spent: 0`) stays on disk for audit but is NOT model
+  evidence.
 - **Worktree:** `main` is checked out. The only untracked file is the
   temporary `.scratch/_commit_msg.txt` and must be removed before the next
   commit. Use `git status -sb`, `git branch -vv`, and `git worktree list` for
   volatile Git state.
-- **Next action:** start Docker Desktop, confirm its Linux engine is ready,
-  start the local proxy, and rerun the benchmark. Use `--repeat 3` only after
-  a clean `--repeat 1` run; the benchmark consumes M365 quota.
+- **Next action:** none required for the pivot — the deferred benchmark is
+  now delivered (clean 60% single run). A `--repeat 3` variance run is
+  OPTIONAL: the bench has no cooldown, so 30 fresh back-to-back threads sit
+  at the F13 thread-rate degradation onset (~120/hr vs ~128/hr onset), and
+  there is no pre-pivot scorecard in `scripts/bench/out/` to compare it
+  against. Only run it if a comparison target is wanted, on a rested
+  account, with pacing. Local wrap-up commits (`58de0fe` and the NEXT.md
+  update) are unpushed; pushing `origin/main` needs explicit user
+  authorization.
 - **Open PRs:** none known after PR #1 merge. Confirm with `gh pr list` when
   GitHub is reachable.
 
 ## Safe-to-clear verdict for 2026-08-14 session
 
-✅ **Yes.** The merged code is verified and no session-started process remains.
-The benchmark is a deliberate follow-up blocked by Docker availability, not
-unfinished repository changes.
+✅ **Yes.** The merged code is verified (build, 341 unit tests, tsc), the
+deferred benchmark delivered a clean 60% single run with real tool loops, and
+no session-started process remains. The unpushed local commits are a
+deliberate hold for user authorization, not unfinished repository changes.
