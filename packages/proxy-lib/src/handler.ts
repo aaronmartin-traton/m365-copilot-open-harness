@@ -58,7 +58,7 @@ export async function handleChatCompletion(
   try {
     const conv = pool.resolve(body.messages, sessionKey, opts.managedKey);
     const { session } = conv;
-  const hasTools = body.tools && body.tools.length > 0 && body.tool_choice !== "none";
+    const hasTools = body.tools && body.tools.length > 0 && body.tool_choice !== "none";
   const requestImages = body.messages.flatMap((message) => getMessageImages(message));
   const model = body.model;
   const routedModel = hasTools && process.env.M365_TOOL_MODEL?.trim()

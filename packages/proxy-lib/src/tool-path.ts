@@ -16,7 +16,6 @@ import {
   type ToolDef,
   type ParsedToolCall,
 } from "@m365-copilot/core";
-import { jsonResponse } from "./response-helpers.js";
 
 const log = createLogger("tool-path");
 

@@ -516,7 +516,19 @@ intent and break multi-turn coherence).
 
 ## 11. Client-attested execution (opt-in)
 
-An **opt-in control plane** where a trusted local harness (pi, Oh My Pi, or Codex) attests one exact `bash` command to the loopback proxy **before** executing it. On success the proxy skips the 8H intent verifier for that single call — the latency win — and instead records the attestation as proof-of-authorization for the tool result. Nothing here changes M365 protocol framing (§3–§6), tool parsing (§10), or the default behavior: **every request that does not opt in keeps the 8H verifier**, byte-for-byte.
+> **Superseded from the runtime (simplify-tool-path pivot, 2026-08-13).** The
+> attestation **control plane is no longer wired into the request path.** The
+> standalone `POST /v1/attestations` endpoint (`packages/proxy/routes/v1/attestations.post.ts`),
+> the `attestation.ts` module, and the public re-exports in `packages/proxy-lib/src/index.ts`
+> are **preserved as research artifacts only** (spec: *".scratch/simplify-tool-path/spec.md"*,
+> Acceptance 1). What is **gone** from the runtime:
+> - header forwarding (`X-M365-Execution-Gate` / `X-M365-Attestation-Client` / `X-M365-Attestation-Proof`)
+>   is no longer read or forwarded by either Nitro route or `createApp()`;
+> - the 8H intent verifier was **removed**, so there is no 8H path to skip — no request opts in, and none falls back to one;
+> - the fail-closed `acceptToolResult()` gate (the 409 on an unauthenticated `role:"tool"` id) was deleted from the tool-result path in `handler.ts`.
+> See §12 for the retired intent-verifier corpora, kept as research evidence. M365 protocol framing (§3–§6), tool parsing (§10), tone routing, and Disengaged handling remain authoritative.
+
+An **opt-in control plane** where a trusted local harness (pi, Oh My Pi, or Codex) attests one exact `bash` command to the loopback proxy **before** executing it. On success the proxy skips the 8H intent verifier for that single call — the latency win — and instead records the attestation as proof-authorization for the tool result. Nothing here changes M365 protocol framing (§3–§6), tool parsing (§10), or the default behavior: **every request runs the deterministic translator** — there is no 8H verifier on the request path (retired; see the superseded-runtime note above).
 
 **Boundary.** The proxy emits tool calls; the harness executes them. The proxy cannot force the client to run a command and cannot observe a native approval prompt. The adapter hook is the execution boundary — it must apply its own policy/UI, ask the loopback proxy to consume a one-time authorization for the exact command, and execute only after `{"decision":"allow"}`. The proxy's half of the contract is **admission control on the tool-result request** (fail closed) plus a proof record; it cannot undo a client execution.
 

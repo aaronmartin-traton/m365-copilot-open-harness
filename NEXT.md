@@ -369,9 +369,33 @@ classification/doc-sync work into `main`.
 - **Open PRs:** none known after PR #1 merge. Confirm with `gh pr list` when
   GitHub is reachable.
 
+## 2026-08-14 post-benchmark code-review fix pass
+
+Two-axis review (`reviewer` agents) of `git diff 050c010...HEAD` found and
+fixed four defects introduced by the pivot; two gaps are acknowledged as
+out-of-scope (rebuilding deleted coverage).
+
+**Fixed:**
+- `packages/proxy-lib/src/tool-path.ts` — removed a dead `jsonResponse` import left after the 502-detector deletion (the diff's mandated clean cutover).
+- `packages/proxy-lib/src/handler.ts` — restored 2-space indent inside the `try` block (57-58) after the attestation block removal (no formatter in repo to catch it).
+- `docs/tool-calling.md` — corrected the "preserved as research artifacts under `attestation.ts`" claim: `force-prompts.ts` was deleted outright; the confab/hallucination classifiers live in `@m365-copilot/core` `tools.ts`, not `attestation.ts`.
+- `docs/m365-copilot-api.md` §11 — marked the attestation control plane *superseded from the runtime* and corrected the live-behavior claims (no 8H path on requests, no header forwarding / fail-closed 409 → research artifact only). AGENTS.md: protocol doc is source of truth and must track behavior.
+
+**Acknowledged gap (not fixed):**
+- `packages/proxy-lib/src/tool-path.contract.test.ts` has zero `M365_STEERING` coverage — the 4 steering-gate tests from the deleted `tool-path.test.ts` were not re-implemented. The steering code is kept and still wired (handler.ts), just unguarded. Out of scope per the pivot spec (it deleted the file as a whole); ticketed separately for a future pass. Ticket: `.scratch/simplify-tool-path/issues/02-contract-suite.md`.
+
+**Verification after fixes:** `bun run build` green; `tsc --noEmit -p packages/proxy-lib` clean; `bun run test:unit` → 341 passed / 3 skipped (unchanged).
+
+**Local commit** (docs + proxy-lib clean-up) is unpushed; pushing `origin/main` needs explicit user authorization. (SHA changes with each amend; the next session should read `git log --oneline -5` for the current tip.)
+
 ## Safe-to-clear verdict for 2026-08-14 session
 
-✅ **Yes.** The merged code is verified (build, 341 unit tests, tsc), the
-deferred benchmark delivered a clean 60% single run with real tool loops, and
-no session-started process remains. The unpushed local commits are a
-deliberate hold for user authorization, not unfinished repository changes.
+✅ **Yes.** The merged pivot code is verified (build, 341 unit tests, tsc);
+the deferred benchmark delivered a clean 60% single run with real tool loops;
+the post-benchmark code review found 4 defects, all fixed and re-verified
+(341 passed / 3 skipped); publish-prep audit is clean (push-range content +
+identity + full-tree secret scan). No session-started process remains (the
+proxy was stopped; the four `bun.exe` processes are pre-existing
+google-workspace MCP infra). The unpushed local commits (`58de0fe`, `7e49e40`,
+and the fix-pass commit) are a deliberate hold for user authorization, not
+unfinished repository changes.

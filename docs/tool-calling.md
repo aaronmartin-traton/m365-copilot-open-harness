@@ -74,10 +74,12 @@ prompt is tuned. The layers, in handler order:
 - **No behavioral retry (simplify-tool-path pivot):** the proxy does **not** re-prompt on
   confabulation, hallucination, or remote-artifact prose. A buffered M365 turn is translated
   once; prose that lacks a tool call stays prose. Execution intent and retry policy belong to
-  the consuming harness, not the translator. The deleted `looksLikeConfabulation` /
-  `looksLikeHallucinatedCompletion` classifiers, `M365_NO_CONFAB_RETRY`, and the
-  `force-prompts.ts` retry loop are preserved as research artifacts under
-  `packages/proxy-lib/src/attestation.ts` (module only, no runtime callers).
+  the consuming harness, not the translator. `looksLikeConfabulation` /
+  `looksLikeHallucinatedCompletion` / `looksLikeRemoteArtifactCompletion` and `M365_NO_CONFAB_RETRY`
+  were proxy-lib code paths before the pivot and are now removed from the runtime; the
+  classifiers themselves still live in `@m365-copilot/core` (`tools.ts`, re-exported from the
+  core index) as general M365-fence-parsing utilities. `force-prompts.ts` was deleted outright
+  (`git rm`) and is not preserved anywhere; the retry-loop behavior is gone.
 - **Tool-result labelling:** each `<tool_response>` is tagged with the command that produced
   it (`<tool_response tool="bash" command="ls -la">`) by correlating `tool_call_id` back to
   the call — so the model reads output in context (a listing vs file contents vs stdout)
