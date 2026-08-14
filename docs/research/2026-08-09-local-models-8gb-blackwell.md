@@ -6,6 +6,12 @@
 lanes against primary sources (files in `docs/research/notes/`) + full repo digest.
 This document uses Simplified Technical English (ASD-STE100).
 
+> **Hardware correction (2026-08-14).** The local machine is a the local machine.
+> Its GPU is an NVIDIA RTX PRO Blackwell with 8 GB (sm_120), not an RTX 5060.
+> The exact SKU can be RTX PRO 1000 (the ChatGPT conversation history) or
+> RTX PRO 2000 (the user's estimate); both are 8 GB GDDR7. Every "RTX 5060
+> class" statement in this document means this local machine GPU.
+
 ---
 
 ## 1. Purpose

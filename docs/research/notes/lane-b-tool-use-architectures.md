@@ -2,6 +2,11 @@
 > Snapshot as of 2026-08-09.
 
 
+> **Hardware correction (2026-08-14).** The local machine is a the local machine
+> with an RTX PRO Blackwell 8 GB (RTX PRO 1000 or 2000, sm_120), not an
+> RTX 5060. "RTX 5060 class" here means this local machine GPU.
+
+
 **Date of research:** 2026-08-09. **Scope:** evidence review for selecting open-weight models that can run multi-turn, function-calling agent loops on a small local GPU (8 GB class, e.g. RTX 5060). Companion lanes cover VRAM fit and Blackwell runtime support; this note focuses on architectures, training recipes, benchmarks, failure modes, and format sensitivity.
 
 **Method note:** leaderboard figures below were pulled directly from the official BFCL leaderboard CSV (`data_overall.csv`, leaderboard last updated 2026-04-12, models evaluated at commit `f7cf735`, linked from https://gorilla.cs.berkeley.edu/leaderboard.html) on 2026-08-09. Vendor benchmark claims are labeled **vendor claim**; Reddit/forum evidence is labeled **community-reported**. Anything dated after mid-2026 is time-sensitive and may already have moved.

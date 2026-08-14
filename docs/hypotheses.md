@@ -2409,6 +2409,10 @@ case's gold is changed (unfreeze); or the merged path no longer matches
 
 ## 17. Research graduation — local models on 8 GB Blackwell (2026-08-09) 🟡
 
+> **Hardware correction (2026-08-14).** The local machine is a the local machine with
+> an RTX PRO Blackwell 8 GB (RTX PRO 1000 or 2000, sm_120), not an RTX 5060.
+> All "RTX 5060 class" statements in this research refer to that local machine GPU.
+
 **Findings.** Six-lane research against primary sources, consolidated and
 adversarially reviewed (judge verdict NEEDS-REVISION, all findings applied).
 Core conclusions:

@@ -2,6 +2,11 @@
 > Snapshot as of 2026-08-09.
 
 
+> **Hardware correction (2026-08-14).** The local machine is a the local machine
+> with an RTX PRO Blackwell 8 GB (RTX PRO 1000 or 2000, sm_120), not an
+> RTX 5060. "RTX 5060 8 GB" here means this local machine GPU.
+
+
 - **Research date:** 2026-08-09. All "current" claims are as of this date.
 - **Problem:** The 8H fail-closed gate currently runs Bonsai-27B-Q1 (PrismML, 1-bit Qwen3.6-27B derivative, 3.54 GB GGUF) under llama.cpp on the local machine RTX 5060 8 GB: **measured median 24.7 s / p95 35.9 s per verdict** (held-out run, n=32, ticket 03). Latency, not safety, is the stated remaining constraint (ADR-0002, NEXT.md). The frozen contract is temp 0, single-token EXECUTE/TEXT/UNCERTAIN, ≤8K context; fail-closed (only literal EXECUTE executes).
 - **Why it is slow (repo-measured):** Bonsai ignores the single-token contract and emits `reasoning_content` of **1.2K–8.7K chars (~400–2,900 tokens; median ≈2,400 chars ≈800 tokens)** per verdict (calibration + held-out artifacts). At its ~35 tok/s decode (derived in §1.4), ~800 reasoning tokens ≈ 23 s — thinking tokens, not prefill, dominate. The frozen corpus itself is short; planner inputs are typically 0.5–4K tokens.

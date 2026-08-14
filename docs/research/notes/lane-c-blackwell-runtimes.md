@@ -1,6 +1,10 @@
 # Lane C — Serving/runtime landscape for consumer Blackwell (GeForce RTX 50, sm_120, CUDA 12.8+)
 > Snapshot as of 2026-08-09.
 
+> **Hardware correction (2026-08-14).** The local machine is a the local machine
+> with an RTX PRO Blackwell 8 GB (RTX PRO 1000 or 2000, sm_120), not an
+> RTX 5060. "RTX 5060 class" here means this local machine GPU.
+
 
 **Research date: 2026-08-09.** Hardware scope: GeForce RTX 5050/5060/5070-class 8 GB cards and the wider RTX 50 family (sm_120, compute capability 12.0). CUDA 12.8 is the first toolkit with native Blackwell support (cc 10.0 / 12.0); driver R570+ required for Blackwell workloads (https://forums.developer.nvidia.com/t/software-migration-guide-for-nvidia-blackwell-rtx-gpus-a-guide-to-cuda-12-8-pytorch-tensorrt-and-llama-cpp/321330). Facts below are time-sensitive; re-verify before acting on anything older than ~2 quarters.
 
