@@ -310,9 +310,6 @@ async function buildResponse(
   options: {
     signal?: AbortSignal;
     sessionKey?: string;
-    executionGate?: string;
-    attestationClient?: string;
-    attestationProof?: string;
   },
 ): Promise<BuiltResponse> {
   const id = `resp_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -411,9 +408,6 @@ export async function handleResponse(
   options: {
     signal?: AbortSignal;
     sessionKey?: string;
-    executionGate?: string;
-    attestationClient?: string;
-    attestationProof?: string;
   } = {},
 ): Promise<Response> {
   const pending = buildResponse(body, pool, options);

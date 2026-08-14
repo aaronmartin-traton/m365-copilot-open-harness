@@ -1,7 +1,16 @@
 # ADR-0002 — Execution-Intent Verifier (fail-closed)
 
 **Date:** 2026-08-08
-**Status:** Accepted (implemented, default-on)
+**Status:** Superseded (2026-08-13 simplify-tool-path pivot)
+
+> **Superseded by architecture pivot.** The execution-intent verifier gate is
+> **removed from the runtime path** — the proxy is now a pure translator
+> (`tool-path.ts` no longer imports or calls `intent-verifier.ts`). The
+> `intent-verifier.ts` module (below) and its frozen 8H corpus are preserved
+> as **research artifacts** under `packages/proxy-lib/src/`, no longer
+> exercised by production code. Execution-intent / authorization policy now
+> belongs to the consuming harness, not the translator. See
+> `.scratch/simplify-tool-path/spec.md` for the boundary decision.
 
 ## Decision
 

@@ -132,7 +132,7 @@ export function buildModelsPayload() {
 const CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-M365-Session-Key, X-M365-Execution-Gate, X-M365-Attestation-Client",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-M365-Session-Key",
 };
 
 function withCors(res: Response): Response {
@@ -194,8 +194,6 @@ export function createApp(sessionOptions: ModelSessionOptions = {}): FetchApp {
       return withCors(await handleChatCompletion(body, pool, {
         signal: req.signal,
         sessionKey: req.headers.get("x-m365-session-key") ?? undefined,
-        executionGate: req.headers.get("x-m365-execution-gate") ?? undefined,
-        attestationClient: req.headers.get("x-m365-attestation-client") ?? undefined,
       }));
     }
 
@@ -212,8 +210,6 @@ export function createApp(sessionOptions: ModelSessionOptions = {}): FetchApp {
       return withCors(await handleResponse(body, pool, {
         signal: req.signal,
         sessionKey: req.headers.get("x-m365-session-key") ?? undefined,
-        executionGate: req.headers.get("x-m365-execution-gate") ?? undefined,
-        attestationClient: req.headers.get("x-m365-attestation-client") ?? undefined,
       }));
     }
 

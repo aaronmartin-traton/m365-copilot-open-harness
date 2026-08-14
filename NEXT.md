@@ -319,3 +319,66 @@ Carry-over:
   profile), status flipped to resolved with evidence.
 - PC session work pushed to a sync branch on the the remote for the local machine
   reconcile. Secret scan clean at egress.
+
+## 2026-08-13 session (simplify-tool-path)
+
+- **Branch:** `simplify-tool-path` (commit `71bc21a`), **NOT pushed** (DCG —
+  push deferred to user). `git status -sb` → clean on `simplify-tool-path`,
+  ahead of `main` by 11 files.
+- **Shipped:** reduced `produceToolPath()` to a pure translator; deleted the
+  in-turn recovery loop + verifier/attestation gate + confab retry +
+  read-only fallback + fail-closed 502; added
+  `tool-path.contract.test.ts` (10-test golden table). Clean cutover reached
+  the sibling Nitro routes (`packages/proxy`) — fixed a TS2353 the review
+  surfaced. Deleted orphaned `force-prompts.ts` (zero importers; spec L50-51).
+- **Verification:** `bun run build` green; `tsc --noEmit -p packages/proxy-lib`
+  clean; `bun run test:unit` → 341 passed / 3 skipped. Post-commit re-run
+  identical.
+- **Baseline divergence:** the simplify branch removes the
+  `executionGate`/`attestationClient`/`attestationProof` request opts and the
+  in-turn 8H verifier gate wiring in `handler.ts`/`responses.ts`/`index.ts`.
+  `main` still carries these. The standalone `attestation.ts` +
+  `handleAttestationRequest` endpoint + `intent-verifier.ts` are preserved on
+  the branch as research; they are NOT on the runtime path.
+- **Next action:** claim ticket #03 `wontfix-survey` — the 35-file scratch
+  classification pass + doc-sync sweep (README/ARCHITECTURE_ROADMAP/
+  COMPONENT_REFERENCE still reference the deleted `force-prompts.ts`;
+  `docs/hypotheses.md §9`, `docs/tool-calling.md`, `ADR-0002` still describe
+  the deleted retry/fail-closed/verifier behavior as live).
+- **Uncommitted notes:** none — all work above is committed on the branch.
+- **Open PRs:** none.
+
+## Safe-to-clear verdict for 2026-08-13 session
+
+✅ **Yes** — worktree clean, committed on `simplify-tool-path` (unpushed by
+design), no running processes, no half-done edits. Blockers for clearing the
+*entire feature* (merge to main + live bench re-verify) are gated on the user,
+not on session state.
+
+---
+
+## 2026-08-13 continue — ticket #03 wonfix-survey (DONE)
+
+Claimed and completed the 37-file scratch classification sweep:
+
+- **21 research tickets relocated** to `.scratch/research/issues/<feature>/`
+  (capability-expansion×6, chatgpt-web-provider, fallback-lane-telemetry/02,
+  lightweight-model-eval, m365-live-probes×9, programmatic-injection/01,
+  verifier-latency-bakeoff/01+03).
+- **9 contradicting tickets marked wontfix** with standard reason line
+  (client-attested-execution×2, execution-intent-verifier×4,
+  verifier-latency-bakeoff/02+04, capability-expansion/03).
+- **7 product tickets left in place** (capture-path-migration/01,
+  de-overengineering×2, fallback-lane-telemetry/01, programmatic-injection/02+03,
+  review-triage/01). The steering-gate tickets (#02/#03) survive the pivot —
+  `steeringFingerprint` is still on the runtime path as protocol adaptation.
+- **Doc-sync complete** (8 files): README, ARCHITECTURE_ROADMAP, COMPONENT_REFERENCE,
+  tool-calling.md, ADR-0002, hypotheses.md §9/§14, CONTINUATION_PROMPT.md.
+
+**Verification:** `bun run build` green; `bun run test:unit` → 341 passed / 3
+skipped; `tsc --noEmit -p packages/proxy-lib` clean (exit 0). Doc-sync touches
+only markdown — no runtime change, no regression risk.
+
+**Uncommitted:** the #03 classification + doc-sync edits are in the worktree,
+not yet committed. DCG — **user must review and commit** (or amend into the
+simplify-tool-path branch before push). No DCG commands auto-run.

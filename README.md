@@ -16,7 +16,6 @@ Each module has one job.
 - **local-response-helpers.ts** - Handles local responses
 - **session-pool.ts** - Manages sessions
 - **output-ceiling.ts** - Checks output length
-- **force-prompts.ts** - Makes M365 continue
 - **image-renderer.ts** - Renders images
 
 ### Main Handler

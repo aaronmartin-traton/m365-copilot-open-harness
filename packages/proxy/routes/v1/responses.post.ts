@@ -29,8 +29,5 @@ export default defineEventHandler(async (event) => {
   return handleResponse(body, pool, {
     signal: abortController.signal,
     sessionKey: getHeader(event, "x-m365-session-key") ?? undefined,
-    executionGate: getHeader(event, "x-m365-execution-gate") ?? undefined,
-    attestationClient: getHeader(event, "x-m365-attestation-client") ?? undefined,
-    attestationProof: getHeader(event, "x-m365-attestation-proof") ?? undefined,
   });
 });

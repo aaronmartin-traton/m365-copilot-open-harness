@@ -34,23 +34,20 @@ These modules are now separate from `handler.ts`.
 - `outputFinishReason()` checks response length.
 - `OUTPUT_CHAR_CEILING` is the maximum length.
 
-**force-prompts.ts** - Force prompts
-- Force prompts make M365 continue.
-- `CONFAB_FORCE_PROMPT` handles confabulation.
-- `HALLUCINATION_FORCE_PROMPT` handles hallucinations.
-- `REMOTE_ARTIFACT_FORCE_PROMPT` handles remote files.
-
 **image-renderer.ts** - Image rendering
 - `renderImagesMarkdown()` renders images.
 - It fetches images from M365.
 - It returns Markdown text.
 
 **tool-path.ts** - Tool result production
-- `produceToolPath()` makes the final tool result.
+- `produceToolPath()` turns the buffered M365 response into the final result.
 - It parses tool calls from the buffered response.
-- It retries on confabulation, hallucinations, and remote artifacts.
-- It applies the prose-document guard.
-- It handles reply tool calls and one-call-per-turn.
+- It applies the prose-document guard, reply→text conversion, and
+  one-call-per-turn.
+- It gates fenced tool calls on the steering-attribution fingerprint
+  (`M365_STEERING`).
+- It is a pure translator: no behavioral correction, no local-model intent
+  verifier, no attestation gate. The consuming harness owns retry/policy.
 - The handler injects `runTurn`, `markSent`, and `registerToolCalls`.
 
 **response-renderer.ts** - Response rendering
@@ -81,7 +78,7 @@ These modules are now separate from `handler.ts`.
 - It calls the M365 API.
 - It handles streaming.
 - It is orchestration only: request setup, message compilation, the buffered retry loop, and response rendering.
-- Architect verdict (2026-08-07): cohesive orchestration; extraction phase closed. Characterization coverage: tool-path.ts (17 tests) and response-renderer.ts (14 tests). Mutable counts live in `NEXT.md`.
+- Architect verdict (2026-08-07): cohesive orchestration; extraction phase closed. Characterization coverage: tool-path.ts (23 tests: 11 translation + 12 contract) and response-renderer.ts (17 tests). Mutable counts live in `NEXT.md`.
 
 ## Module Dependencies
 
@@ -93,7 +90,6 @@ handler.ts
   ├── response-helpers.ts
   ├── local-response-helpers.ts
   ├── output-ceiling.ts
-  ├── force-prompts.ts
   ├── image-renderer.ts
   ├── tool-path.ts
   ├── response-renderer.ts

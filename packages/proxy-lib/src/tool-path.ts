@@ -1,17 +1,14 @@
 /**
  * Tool-path result producer: turns the buffered M365 response into the final
- * tool-call / text result, applying the retry-on-confabulation, read-only
- * fallback, prose-document guard, reply-call handling, and one-call-per-turn
- * policies. Extracted from the produce() closure in handler.ts; the upstream
- * retry loop (runBuffered) is injected so the orchestration stays in the
- * handler while the parsing/decision policy lives here.
+ * tool-call / text result — parse fenced tool calls, apply the prose-document
+ * guard, handle reply→text, enforce one-call-per-turn, and gate on the
+ * steering-attribution fingerprint. Extracted from the produce() closure in
+ * handler.ts; the upstream retry loop (runBuffered) is injected so the
+ * orchestration stays in the handler.
  */
 
 import {
   parseToolCalls,
-  looksLikeConfabulation,
-  looksLikeHallucinatedCompletion,
-  looksLikeRemoteArtifactCompletion,
   isProseDocument,
   trunc,
   createLogger,
@@ -20,14 +17,6 @@ import {
   type ParsedToolCall,
 } from "@m365-copilot/core";
 import { jsonResponse } from "./response-helpers.js";
-import { readOnlyFallbackToolCall } from "./local-response-helpers.js";
-import {
-  CONFAB_FORCE_PROMPT,
-  HALLUCINATION_FORCE_PROMPT,
-  REMOTE_ARTIFACT_FORCE_PROMPT,
-} from "./force-prompts.js";
-import type { IntentVerifier } from "./intent-verifier.js";
-import type { AttestationClient, AttestationGate } from "./attestation.js";
 
 const log = createLogger("tool-path");
 
@@ -57,16 +46,6 @@ export interface ToolPathDeps {
    * to raw text. Omit => legacy routing, byte-for-byte.
    */
   steeringFingerprint?: () => string | undefined;
-  /**
-   * Fall-closed intent verifier (8H). When present, the final tools return is
-   * gated on the verifier's EXECUTE; any non-EXECUTE (TEXT/UNCERTAIN/invalid/
-   * error/timeout) returns the raw text instead of executing. Absent => the
-   * historical unverified behavior, byte-for-byte.
-   */
-  intentVerifier?: IntentVerifier;
-  /** Explicit trusted-client execution path for one exact bash command. */
-  attestationGate?: AttestationGate;
-  attestationClient?: AttestationClient;
 }
 
 export type ToolPathResult =
@@ -94,61 +73,6 @@ export async function produceToolPath(
   log.debug("Raw response (tool mode):", trunc(fullText, 1000));
   let parsed = parseToolCalls(fullText, tools);
   log.info(`Parse result: hasToolCalls=${parsed.hasToolCalls}, count=${parsed.toolCalls.length}`);
-  if (!parsed.hasToolCalls) {
-    const fallback = readOnlyFallbackToolCall({ messages, tools }, fullText);
-    if (fallback) {
-      log.info(`Read-only fallback tool call: ${fallback.function.name}`);
-      parsed = { hasToolCalls: true, toolCalls: [fallback], textContent: null };
-    }
-  }
-
-  // Salvage stochastic turn-1 confabulation: M365's chat model sometimes claims it
-  // "can't access the files / commands return no output" and asks the user to paste
-  // them, WITHOUT calling a tool — even though the environment is real (the bench +
-  // pi both reproduce this). Re-prompt forcefully in the SAME conversation (one
-  // thread, cheap). Disable with M365_NO_CONFAB_RETRY; tune count with M365_CONFAB_RETRIES.
-  const maxConfabRetries = process.env.M365_NO_CONFAB_RETRY
-    ? 0
-    : Number(process.env.M365_CONFAB_RETRIES ?? 1);
-  // The model never actually acted if no assistant turn in the history carried a
-  // tool call. Used to gate the hallucinated-completion retry (a model that did
-  // real work called at least one tool), keeping false positives near zero.
-  const everActed = (messages ?? []).some(
-    (m) => m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0,
-  );
-  for (let attempt = 0; attempt < maxConfabRetries && !parsed.hasToolCalls; attempt++) {
-    const confab = looksLikeConfabulation(parsed.textContent);
-    const remoteArtifact = looksLikeRemoteArtifactCompletion(parsed.textContent);
-    const halluc = !everActed && looksLikeHallucinatedCompletion(parsed.textContent);
-    if (!confab && !remoteArtifact && !halluc) break;
-    const retryKind = remoteArtifact ? "Remote artifact completion" : confab ? "Confabulation" : "Hallucinated completion";
-    log.info(`${retryKind} detected (no tool call) — forcing retry ${attempt + 1}/${maxConfabRetries}`);
-    const prompt = remoteArtifact ? REMOTE_ARTIFACT_FORCE_PROMPT : confab ? CONFAB_FORCE_PROMPT : HALLUCINATION_FORCE_PROMPT;
-    const retry = await runTurn(prompt);
-    if ("error" in retry) return { kind: "error", resp: retry.error };
-    markSent(messages.length);
-    fullText = retry.fullText;
-    parsed = parseToolCalls(fullText, tools);
-    log.info(`After forcing retry: hasToolCalls=${parsed.hasToolCalls}, count=${parsed.toolCalls.length}`);
-  }
-
-  // Never pass a remote M365 artifact off as a successful local edit. A retry
-  // may merely transform a Teams URL into `sandbox:/mnt/data/...`; after the
-  // configured attempts are exhausted, fail explicitly so the harness/user can
-  // switch models instead of applying a nonexistent local file.
-  if (!parsed.hasToolCalls && (looksLikeRemoteArtifactCompletion(parsed.textContent) || (!everActed && looksLikeHallucinatedCompletion(parsed.textContent)))) {
-    log.info("Final response still claims a file mutation without a local tool call — failing closed");
-    return {
-      kind: "error",
-      resp: jsonResponse(502, {
-        error: {
-          message: "M365 claimed a file update or returned a remote Teams or /mnt/data artifact instead of calling the local editing tools. No local file was changed. Retry with claude-sonnet-think-deeper, which is the recommended route for local file edits.",
-          type: "file_mutation_without_local_tool",
-        },
-      }),
-    };
-  }
-
   // Document guard: the shell-routing parser turns every ```bash block into a
   // tool call, so a model that ANSWERS with a markdown document full of code
   // fences (e.g. "here's a simplified README") would get its own answer executed
@@ -219,27 +143,6 @@ export async function produceToolPath(
   }
 
   if (parsed.hasToolCalls && parsed.toolCalls.length > 0) {
-    // A configured client hook may replace the local classifier for one exact
-    // emitted bash command. Unsupported tool shapes retain the 8H verifier.
-    const attested = !!deps.attestationGate &&
-      !!deps.attestationClient &&
-      parsed.toolCalls.length === 1 &&
-      deps.attestationGate.register(deps.attestationClient, parsed.toolCalls[0]);
-    if (attested) {
-      log.info("Client attestation candidate registered");
-    } else if (deps.intentVerifier) {
-      // Fail-closed intent verifier (8H): the parse's tool-shaped result is NOT
-      // executed directly. It is passed to the verifier and execution proceeds
-      // only on verifier EXECUTE. Any other outcome -> raw text (matches 8H TEXT
-      // semantics: the raw M365 text is the response).
-      const v = await deps.intentVerifier.check(fullText);
-      log.info(`Intent verifier: decision=${v.decision}`);
-      if (v.decision !== "EXECUTE") {
-        log.info(`Intent verifier denied execution (${v.decision}), returning raw text instead of ${parsed.toolCalls.length} tool call(s)`);
-        return { kind: "text", text: fullText };
-      }
-      log.info(`Intent verifier authorized execution of ${parsed.toolCalls.length} tool call(s)`);
-    }
     registerToolCalls(parsed.toolCalls);
     return { kind: "tools", toolCalls: parsed.toolCalls };
   }

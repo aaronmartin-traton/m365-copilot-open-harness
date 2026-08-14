@@ -11,11 +11,11 @@ We analyzed `handler.ts`. We found responsibilities to extract. We made extracti
 3. Response Helpers — response construction (`response-helpers.ts`)
 4. Local Response Helpers — local response handling (`local-response-helpers.ts`)
 5. SessionPool — session lifecycle (`session-pool.ts`)
+5. SessionPool — session lifecycle (`session-pool.ts`)
 6. Output Ceiling — output length check (`output-ceiling.ts`)
-7. Force Prompts — forced-retry prompts (`force-prompts.ts`)
-8. Image Renderer — image rendering (`image-renderer.ts`)
-9. Tool Path — tool-call parsing, recovery, safety, reply handling, one-call-per-turn (`tool-path.ts`)
-10. Response Renderer — JSON + early-flushed SSE rendering (`response-renderer.ts`)
+7. Image Renderer — image rendering (`image-renderer.ts`)
+8. Tool Path — tool-call parsing, safety, reply handling, one-call-per-turn (`tool-path.ts`)
+9. Response Renderer — JSON + early-flushed SSE rendering (`response-renderer.ts`)
 
 **Extraction phase is CLOSED.** The remaining handler is cohesive orchestration
 (request setup, message compilation, the buffered retry loop, response rendering).

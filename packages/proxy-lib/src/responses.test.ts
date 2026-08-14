@@ -1,5 +1,3 @@
-import { createHmac } from "node:crypto";
-import { getAttestationGate, resetAttestationGate } from "./attestation.js";
 import { describe, expect, it, vi } from "vitest";
 
 const scripted = {
@@ -139,30 +137,3 @@ describe("Responses envelopes and streaming", () => {
   });
 });
 
-describe("Responses attestation wiring", () => {
-  it("keeps the attested proxy id in function_call.call_id", async () => {
-    process.env.M365_CLIENT_ATTESTATION = "1";
-    process.env.M365_ATTESTATION_SECRET = "responses-attestation-secret";
-    resetAttestationGate();
-    const pool = new SessionPool();
-    const proof = createHmac("sha256", "responses-attestation-secret").update("attestation-v1\ncodex", "utf8").digest("hex");
-    try {
-      scripted.text = "```bash\necho attested\n```";
-      const response = await handleResponse(base("task", {
-        tools: [{ type: "function", name: "bash", parameters: {
-          type: "object",
-          properties: { command: { type: "string" } },
-          required: ["command"],
-        } }],
-      }), pool, { executionGate: "attestation-v1", attestationClient: "codex", attestationProof: proof });
-      const body = await response.json() as { output: Array<{ type: string; call_id?: string }> };
-      expect(body.output[0].type).toBe("function_call");
-      expect(body.output[0].call_id).toMatch(/^call_/);
-      expect(getAttestationGate()!.acceptToolResult(body.output[0].call_id!, "codex")).toBe(false);
-    } finally {
-      delete process.env.M365_CLIENT_ATTESTATION;
-      delete process.env.M365_ATTESTATION_SECRET;
-      resetAttestationGate();
-    }
-  });
-});

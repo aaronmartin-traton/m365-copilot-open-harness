@@ -71,13 +71,13 @@ prompt is tuned. The layers, in handler order:
   "here's a simplified README") would get its own answer executed as shell. A response that
   looks like a document (≥2 fences AND ≥120 chars surrounding prose, OR ≥4 fences) is returned
   as **text**, not executed. A single action is never reclassified. (hypotheses §9 F15.)
-- **Confabulation retry** (`looksLikeConfabulation`): if a tool request comes back with no
-  tool call and give-up prose ("can't access the files", "commands return no output", "the
-  file appears empty", "paste the files"), the proxy re-prompts forcefully **in the same
-  conversation** to force a real first action. `M365_NO_CONFAB_RETRY` / `M365_CONFAB_RETRIES`.
-- **Hallucinated-completion retry** (`looksLikeHallucinatedCompletion`): if the model CLAIMS
-  a file mutation ("I've replaced the README") with **no tool call all conversation**, force a
-  real write. Gated on "never acted," so it won't misfire on a genuine post-write summary.
+- **No behavioral retry (simplify-tool-path pivot):** the proxy does **not** re-prompt on
+  confabulation, hallucination, or remote-artifact prose. A buffered M365 turn is translated
+  once; prose that lacks a tool call stays prose. Execution intent and retry policy belong to
+  the consuming harness, not the translator. The deleted `looksLikeConfabulation` /
+  `looksLikeHallucinatedCompletion` classifiers, `M365_NO_CONFAB_RETRY`, and the
+  `force-prompts.ts` retry loop are preserved as research artifacts under
+  `packages/proxy-lib/src/attestation.ts` (module only, no runtime callers).
 - **Tool-result labelling:** each `<tool_response>` is tagged with the command that produced
   it (`<tool_response tool="bash" command="ls -la">`) by correlating `tool_call_id` back to
   the call — so the model reads output in context (a listing vs file contents vs stdout)

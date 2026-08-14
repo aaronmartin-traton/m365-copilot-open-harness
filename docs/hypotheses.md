@@ -651,6 +651,10 @@ on reliability — 2/2 with the new framing is encouraging but small; run ~10× 
    forcefully **in the same conversation** (one thread, cheap) up to `M365_CONFAB_RETRIES`
    (default 1; `M365_NO_CONFAB_RETRY` to disable). Unit-tested; not yet observed firing+saving
    live (the runs that complied didn't need it). Insurance for the stochastic give-ups.
+   > **Removed (2026-08-13 simplify-tool-path pivot):** the confab-retry + `force-prompts.ts`
+   > were deleted from the runtime path; the proxy is now a pure translator. Preserved as
+   > research in `packages/proxy-lib/src/attestation.ts`. See
+   > `.scratch/simplify-tool-path/spec.md`.
 3. **Auto-reauth** (F13 productized, `auth-recovery.ts`): background fresh-login when empties
    span ≥N distinct conversations — clears thread-rate throttle without blocking requests.
 
@@ -2265,6 +2269,12 @@ case. n here is only 2 — strong signal, not yet ship-grade.
 **Managed prune/resume proof completed (2026-08-06, n=1 successful direct action).** A disposable OMP-managed conversation was identified in the isolated v2 session store, deleted through the authenticated headed Edge browser adapter, and confirmed absent after `RefreshNavPane`. The matching isolated session-store entry was then removed and verified absent. The running Bun proxy was not stopped. The protected HTTP route returned `404` because that process was started without `M365_PRUNE_TOKEN`; this run therefore validates the browser deletion boundary and local invalidation, not the live HTTP authorization path.
 
 ## 14. Intent-verifier (8H gate) live validation — ticket 01 (August 9 2026) 🟡 PROVISIONAL n=1
+
+> **Superseded (2026-08-13 simplify-tool-path pivot):** the 8H intent-verifier gate is
+> **removed from the runtime path**. `intent-verifier.ts` + its held-out corpus are
+> preserved as research artifacts under `packages/proxy-lib/src/` (no production callers).
+> The findings below remain valid evidence for any future return to intent verification,
+> but they are **not** shipped behavior. See `docs/adr/ADR-0002-EXECUTION-INTENT-VERIFIER.md`.
 
 **Claim.** The fail-closed 8H intent-verifier gate works live on the local machine with the
 frozen model: verifier-down fails closed (raw text, no execution) and restart recovers
