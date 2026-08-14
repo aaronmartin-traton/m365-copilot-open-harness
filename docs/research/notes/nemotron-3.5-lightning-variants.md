@@ -1,5 +1,5 @@
 # Nemotron 3.5 Lightning — variant research (2026-08-14)
-
+> Snapshot as of 2026-08-14.
 > Research note: HF search, community verification, and ChatGPT consensus
 > for the the local machine / RTX PRO Blackwell 8 GB + 32 GB RAM local machine.
 

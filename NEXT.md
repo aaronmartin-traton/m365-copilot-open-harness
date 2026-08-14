@@ -399,3 +399,28 @@ proxy was stopped; the four `bun.exe` processes are pre-existing
 google-workspace MCP infra). The unpushed local commits (`58de0fe`, `7e49e40`,
 and the fix-pass commit) are a deliberate hold for user authorization, not
 unfinished repository changes.
+
+## 2026-08-14 session carry-over (Nemotron 3.5 Lightning research)
+
+**What was done:**
+- Corrected hardware specs across 6 research docs + hypotheses §17:
+  local machine is the local machine (RTX PRO Blackwell 8 GB), not RTX 5060.
+- Surveyed HuggingFace for Nemotron 3.5 Lightning variants: no smaller
+  native sibling exists. Key find: **REAP-20B expert-pruned variant**
+  (sleepyeldrazi, 128→77 experts, 19.87B total / 3B active, **11.5 GB
+  IQ4_NL GGUF**). Full research note at
+  `docs/research/notes/nemotron-3.5-lightning-variants.md`.
+- Verified community reports (Reddit, NVIDIA forum, X): DSpark +15.6%/
+  53% acceptance, ~65 tok/s on M5 Pro, 80/100 tool-eval vs Qwen3.6-35B's
+  100/100, good agent execution but weak coding.
+- ChatGPT consensus: REAP-20B ranked #1 for the fallback lane; full
+  Lightning secondary.
+- Linked the candidate into `.scratch/fallback-lane-telemetry/spec.md`.
+
+**Carry-over:**
+- Committed on `main`, pushed to `lan sync/nemotron-research-2026-08-14`.
+  Secret scan clean. Not pushed to `origin/main`.
+- Next step when local machine is available: download the REAP-20B IQ4_NL GGUF
+  from `sleepyeldrazi/Nemotron-3.5-Lightning-30B-A3B-REAP-20B-LoRA-IQ4NL`
+  and run against the Qwen3-Coder-30B-A3B baseline in the two-stage bake-off.
+- No session-started processes remain (browser tab closed).
