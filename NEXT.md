@@ -1,5 +1,6 @@
 # NEXT.md — M365 Copilot Proxy
-> Snapshot as of 2026-08-11.
+> Snapshot as of 2026-08-14. The latest dated session entry below supersedes
+> earlier carry-over plans where they conflict.
 
 **Start a new session here:** read
 `docs/agents/working-methodology.md` (startup sequence + operating rules +
@@ -320,65 +321,40 @@ Carry-over:
 - PC session work pushed to a sync branch on the the remote for the local machine
   reconcile. Secret scan clean at egress.
 
-## 2026-08-13 session (simplify-tool-path)
+## 2026-08-14 session — simplify-tool-path merged
 
-- **Branch:** `simplify-tool-path` (commit `71bc21a`), **NOT pushed** (DCG —
-  push deferred to user). `git status -sb` → clean on `simplify-tool-path`,
-  ahead of `main` by 11 files.
-- **Shipped:** reduced `produceToolPath()` to a pure translator; deleted the
-  in-turn recovery loop + verifier/attestation gate + confab retry +
-  read-only fallback + fail-closed 502; added
-  `tool-path.contract.test.ts` (10-test golden table). Clean cutover reached
-  the sibling Nitro routes (`packages/proxy`) — fixed a TS2353 the review
-  surfaced. Deleted orphaned `force-prompts.ts` (zero importers; spec L50-51).
-- **Verification:** `bun run build` green; `tsc --noEmit -p packages/proxy-lib`
-  clean; `bun run test:unit` → 341 passed / 3 skipped. Post-commit re-run
-  identical.
-- **Baseline divergence:** the simplify branch removes the
-  `executionGate`/`attestationClient`/`attestationProof` request opts and the
-  in-turn 8H verifier gate wiring in `handler.ts`/`responses.ts`/`index.ts`.
-  `main` still carries these. The standalone `attestation.ts` +
-  `handleAttestationRequest` endpoint + `intent-verifier.ts` are preserved on
-  the branch as research; they are NOT on the runtime path.
-- **Next action:** claim ticket #03 `wontfix-survey` — the 35-file scratch
-  classification pass + doc-sync sweep (README/ARCHITECTURE_ROADMAP/
-  COMPONENT_REFERENCE still reference the deleted `force-prompts.ts`;
-  `docs/hypotheses.md §9`, `docs/tool-calling.md`, `ADR-0002` still describe
-  the deleted retry/fail-closed/verifier behavior as live).
-- **Uncommitted notes:** none — all work above is committed on the branch.
-- **Open PRs:** none.
+PR #1 merged the `simplify-tool-path` runtime pivot and Ticket #03
+classification/doc-sync work into `main`.
 
-## Safe-to-clear verdict for 2026-08-13 session
+- **Shipped:** `produceToolPath()` is a deterministic M365 text → OpenAI
+  translator. In-turn confabulation/hallucination/remote-artifact retries,
+  the local 8H intent-verifier gate, client-attestation gate, read-only
+  fallback inference, semantic fail-closed 502, and orphaned
+  `force-prompts.ts` are removed from the runtime path.
+- **Preserved:** fenced tool parsing, prose-document protection, reply
+  conversion, one-call-per-turn, and steering attribution.
+- **Ticket #03:** 21 research tickets moved under
+  `.scratch/research/issues/`; 9 pivot-conflicting tickets marked `wontfix`;
+  7 product/protocol tickets remain in place.
+- **Verification before merge:** `bun run build` green; `bun run test:unit`
+  → 341 passed / 3 skipped; `tsc --noEmit -p packages/proxy-lib` clean.
+- **Benchmark:** the first post-merge run was attempted with
+  `scripts/bench/run.mjs --label simplify-tool-path`, but Docker Desktop's
+  Linux engine was unavailable. All 10 tasks failed at container startup
+  (`ERROR=10`, `M365 messages spent: 0`). This scorecard is invalid for
+  model comparison.
+- **Worktree:** `main` is checked out. The only untracked file is the
+  temporary `.scratch/_commit_msg.txt` and must be removed before the next
+  commit. Use `git status -sb`, `git branch -vv`, and `git worktree list` for
+  volatile Git state.
+- **Next action:** start Docker Desktop, confirm its Linux engine is ready,
+  start the local proxy, and rerun the benchmark. Use `--repeat 3` only after
+  a clean `--repeat 1` run; the benchmark consumes M365 quota.
+- **Open PRs:** none known after PR #1 merge. Confirm with `gh pr list` when
+  GitHub is reachable.
 
-✅ **Yes** — worktree clean, committed on `simplify-tool-path` (unpushed by
-design), no running processes, no half-done edits. Blockers for clearing the
-*entire feature* (merge to main + live bench re-verify) are gated on the user,
-not on session state.
+## Safe-to-clear verdict for 2026-08-14 session
 
----
-
-## 2026-08-13 continue — ticket #03 wonfix-survey (DONE)
-
-Claimed and completed the 37-file scratch classification sweep:
-
-- **21 research tickets relocated** to `.scratch/research/issues/<feature>/`
-  (capability-expansion×6, chatgpt-web-provider, fallback-lane-telemetry/02,
-  lightweight-model-eval, m365-live-probes×9, programmatic-injection/01,
-  verifier-latency-bakeoff/01+03).
-- **9 contradicting tickets marked wontfix** with standard reason line
-  (client-attested-execution×2, execution-intent-verifier×4,
-  verifier-latency-bakeoff/02+04, capability-expansion/03).
-- **7 product tickets left in place** (capture-path-migration/01,
-  de-overengineering×2, fallback-lane-telemetry/01, programmatic-injection/02+03,
-  review-triage/01). The steering-gate tickets (#02/#03) survive the pivot —
-  `steeringFingerprint` is still on the runtime path as protocol adaptation.
-- **Doc-sync complete** (8 files): README, ARCHITECTURE_ROADMAP, COMPONENT_REFERENCE,
-  tool-calling.md, ADR-0002, hypotheses.md §9/§14, CONTINUATION_PROMPT.md.
-
-**Verification:** `bun run build` green; `bun run test:unit` → 341 passed / 3
-skipped; `tsc --noEmit -p packages/proxy-lib` clean (exit 0). Doc-sync touches
-only markdown — no runtime change, no regression risk.
-
-**Uncommitted:** the #03 classification + doc-sync edits are in the worktree,
-not yet committed. DCG — **user must review and commit** (or amend into the
-simplify-tool-path branch before push). No DCG commands auto-run.
+✅ **Yes.** The merged code is verified and no session-started process remains.
+The benchmark is a deliberate follow-up blocked by Docker availability, not
+unfinished repository changes.
