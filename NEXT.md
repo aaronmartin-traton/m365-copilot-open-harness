@@ -424,3 +424,6 @@ unfinished repository changes.
   from `sleepyeldrazi/Nemotron-3.5-Lightning-30B-A3B-REAP-20B-LoRA-IQ4NL`
   and run against the Qwen3-Coder-30B-A3B baseline in the two-stage bake-off.
 - No session-started processes remain (browser tab closed).
+
+## 2026-08-19 — Toolchain migration
+- Node deps: `bun install` refresh on the existing bun.lock (no package-lock.json present). Verify with `bun run test` if the suite is run.
