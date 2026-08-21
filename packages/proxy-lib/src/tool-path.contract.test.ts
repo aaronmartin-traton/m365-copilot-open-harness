@@ -23,7 +23,7 @@
  *   /mnt/data/foo.patch      → text
  *   malformed fence syntax   → text / parser-defined non-tool result
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { produceToolPath, type ToolPathDeps, type ToolPathResult } from "./tool-path.js";
 import type { ToolDef } from "@m365-copilot/core";
 
@@ -158,5 +158,107 @@ describe("produceToolPath contract — translate, do not infer", () => {
     const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "text");
     expect(runTurn).toHaveBeenCalledOnce(); // no corrective turn
     expect(r.text).toBeTruthy();
+  });
+
+  it("unterminated fence (no closing marks) does not become a tool call", async () => {
+    const runTurn = fakeTurn("```bash\nls -la");
+    const r = await produceToolPath(INITIAL_PROMPT, depsLike(runTurn));
+    expect(r.kind).toBe("text");
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+});
+
+describe("produceToolPath contract — steering-attribution gate (M365_STEERING)", () => {
+  const FENCED = "```bash\nls -la\n```";
+
+  beforeEach(() => {
+    delete process.env.M365_STEERING;
+    delete process.env.M365_ALLOW_MULTI_TOOL;
+  });
+  afterEach(() => {
+    delete process.env.M365_STEERING;
+    delete process.env.M365_ALLOW_MULTI_TOOL;
+  });
+
+  it("ladder active + unsteered fingerprint degrades the fence to raw text", async () => {
+    process.env.M365_STEERING = "1";
+    const runTurn = fakeTurn(FENCED);
+    const deps = depsLike(runTurn, { steeringFingerprint: () => "unsteered" });
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "text");
+    expect(r.text).toBe(FENCED);
+    expect(deps.registerToolCalls).not.toHaveBeenCalled();
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("ladder active + missing fingerprint degrades the fence to raw text (fail-closed)", async () => {
+    process.env.M365_STEERING = "1";
+    const runTurn = fakeTurn(FENCED);
+    // No steeringFingerprint thunk at all — the handler could not attribute.
+    const deps = depsLike(runTurn);
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "text");
+    expect(r.text).toBe(FENCED);
+    expect(deps.registerToolCalls).not.toHaveBeenCalled();
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("ladder active + steered fingerprint routes the fence to tools", async () => {
+    process.env.M365_STEERING = "1";
+    const runTurn = fakeTurn(FENCED);
+    const deps = depsLike(runTurn, { steeringFingerprint: () => "steered:channel=textarea" });
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "tools");
+    expect(r.toolCalls).toHaveLength(1);
+    expect(r.toolCalls[0].function.name).toBe("bash");
+    expect(deps.registerToolCalls).toHaveBeenCalledOnce();
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("M365_STEERING unset preserves legacy routing even when fingerprint says unsteered", async () => {
+    const runTurn = fakeTurn(FENCED);
+    const deps = depsLike(runTurn, { steeringFingerprint: () => "unsteered" });
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "tools");
+    expect(r.toolCalls).toHaveLength(1);
+    expect(r.toolCalls[0].function.name).toBe("bash");
+    expect(deps.registerToolCalls).toHaveBeenCalledOnce();
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("steering gate never fires on plain text (no false degradation)", async () => {
+    process.env.M365_STEERING = "1";
+    const prose = "The fix lands in handler.ts.";
+    const runTurn = fakeTurn(prose);
+    const deps = depsLike(runTurn); // no fingerprint available
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "text");
+    expect(r.text).toBe(prose);
+    expect(deps.registerToolCalls).not.toHaveBeenCalled();
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+});
+
+describe("produceToolPath contract — batching and mixed output", () => {
+  afterEach(() => {
+    delete process.env.M365_ALLOW_MULTI_TOOL;
+  });
+
+  it("M365_ALLOW_MULTI_TOOL=1 preserves the full batch (opt-out of one-call-per-turn)", async () => {
+    process.env.M365_ALLOW_MULTI_TOOL = "1";
+    const runTurn = fakeTurn("```bash\necho 1\n```\n```bash\necho 2\n```");
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
+    expect(r.toolCalls).toHaveLength(2);
+    expect(JSON.parse(r.toolCalls[0].function.arguments)).toEqual({ command: "echo 1" });
+    expect(JSON.parse(r.toolCalls[1].function.arguments)).toEqual({ command: "echo 2" });
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("reply fence alongside a real tool call drops the reply and routes the real call", async () => {
+    const replyTool: ToolDef = {
+      type: "function",
+      function: { name: "reply", description: "plain answer", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
+    };
+    const runTurn = fakeTurn("```reply\nall done\n```\n```read_file\npath: src/index.ts\n```");
+    const deps = depsLike(runTurn, { tools: [replyTool, readTool] });
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "tools");
+    expect(r.toolCalls).toHaveLength(1);
+    expect(r.toolCalls[0].function.name).toBe("read_file");
+    expect(runTurn).toHaveBeenCalledOnce();
   });
 });
