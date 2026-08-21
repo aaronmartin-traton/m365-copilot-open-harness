@@ -427,3 +427,38 @@ unfinished repository changes.
 
 ## 2026-08-19 — Toolchain migration
 - Node deps: `bun install` refresh on the existing bun.lock (no package-lock.json present). Verify with `bun run test` if the suite is run.
+
+## 2026-08-21 autonomous session — contract suite + research + hygiene
+
+- **Contract-suite gap closed** (`b2c5295`): the `M365_STEERING`
+  zero-coverage gap from the 2026-08-14 review is resolved in
+  `packages/proxy-lib/src/tool-path.contract.test.ts` — 4 restored gate
+  tests + multi-tool batch preservation, mixed reply+real-tool, and a
+  genuine unterminated-fence fixture. Suite now 20 tests, all green.
+  Supersedes the "acknowledged gap" note in the 2026-08-14 section above.
+- **Full suite:** build green; `bun run test:unit` → **349 passed /
+  3 skipped** (baseline was 341/3; delta = exactly the 8 new tests).
+- **Research:** Nemotron note §7/§7.1 addendum (Qwen3.8-27B released and
+  is a DeltaNet-hybrid, unsloth GGUF confirmed; official Muse Glimmer
+  GGUF + DFlash drafter exist; REAP-20B unchanged alpha). Fallback-lane
+  candidate table revised to four candidates; REAP download stays ON HOLD
+  until the bake-off lane actually opens.
+- **Repo hygiene:** local branches deleted (fully merged into the sync
+  branch): `adopt-proxy-improvements`, `adopt-upstream-2026-08`,
+  `feat/fenced-shell-routing` (origin copy untouched). Kept with reasons:
+  `chore/session-wrapup-2026-08-07`, `review/*` LAN branches, local
+  `main` — unverifiable merge status post-history-rewrite.
+- **LAN sync:** `sync/nemotron-research-2026-08-14` pushed to `lan`
+  (fast-forward through `3cbd653`), secret-scan clean. NOT pushed to
+  `origin` — still requires explicit user authorization.
+- **PC env fact:** use `bun x`, not `bunx` (no bunx shim on this box).
+- **Telemetry status:** no `throttle-telemetry.ndjson` on the local machine; the
+  fallback-lane decision gate has zero data. Needs real proxy usage.
+- Run artifacts (charter, progress, deferred, icebox, report) are in the
+  git-ignored `.autonomous/` directory on this machine only.
+
+**Next actions:** (1) user authorization for origin push of the sync
+branch; (2) local machine reconcile per the runbook above; (3) real proxy usage
+so throttle telemetry accumulates; (4) optional fresh reviewer pass on
+`eb86ca9^..HEAD` (the 2026-08-21 subagent pass timed out mid-review;
+critical claims were verified directly instead).
