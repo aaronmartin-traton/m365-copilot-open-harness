@@ -175,6 +175,42 @@ GGUF-pruned variant.
 | Baseline | Qwen3-Coder-30B-A3B | Existing 32.5 t/s measurement |
 
 Screening rules unchanged: DEV corpus first, identity-guard the echoed
-model id, one local server at a time. Qwen3.8-27B is dense — expect ~2×
-the KV cost of REAP-20B at equal context; budget accordingly on the
-8 GB + 32 GB local machine.
+model id, one local server at a time.
+
+### 7.1 Availability + architecture corrections (verified on HF, 2026-08-21)
+
+**Qwen3.8-27B — `unsloth/Qwen3.8-27B-GGUF` confirmed** (apache-2.0,
+Dynamic v3.0 imatrix quants, ~5.8M downloads). Official card facts that
+revise this note's earlier assumptions:
+
+- **NOT a plain dense transformer.** Hybrid layout: 16 × (3 × Gated
+  DeltaNet → FFN → 1 × Gated Attention → FFN), 64 layers total. Only the
+  16 gated-attention blocks carry growing KV (4 KV heads, head_dim 256);
+  DeltaNet blocks carry fixed-size recurrent state. Approx. KV ≈ 64
+  KB/token bf16 — ~10× REAP-20B's 6 KB/token but far below a naive
+  full-attention dense 27B. The earlier "~2× REAP KV" caveat here was
+  wrong in both directions; the hybrid is the truth. Long-context budget
+  on the 8 GB + 32 GB local machine is still attention-layer-bound: ~5 GB KV at
+  80K context before quantization (`-ctk q8_0 -ctv q4_0` roughly halves
+  it).
+- MTP trained in-pretrain → llama.cpp `--spec-type draft-mtp` works
+  (draft acceptance ~64% per the OVERBRING measurements).
+- Native vision-language (image + video). `--no-mmproj` skips it for a
+  text-only agent lane.
+- Official sampling: thinking mode `temp 1.0, top_p 0.95, top_k 20`;
+  instruct mode `temp 0.7, top_p 0.80, presence_penalty 1.5`.
+- Unsloth ships "Developer Role Support" + tool-calling parsing fixes —
+  relevant to the fenced shell-routing contract.
+
+**Muse Glimmer — official GGUF now exists:** `meta-models/Muse-Glimmer-30B-GGUF`
+(k-quants, org-verified, updated 2026-08-17), plus ExecuTorch PTE builds
+and quantized DFlash drafter variants in the same org collection
+(`Muse-Glimmer-30B-assistant` is a 3B companion). The §5 rank-6 entry
+pointed at an IQ3 community quant with CPU-offload penalty; the official
+k-quant + drafter stack supersedes that assessment.
+
+**REAP-20B — unchanged, still alpha.** Card re-verified: 11.5 GB IQ4_NL
+merged GGUF smoke-tested only; recovery LoRA rank 8 "rough-edges cleanup";
+requires llama.cpp ≥ b10326 (`nemotron_h_moe`); KV ~6 KB/token confirmed;
+1M context supported, prefill-time-bound on local machines. No new commits or
+benchmarks since the 2026-08-12 snapshot.
