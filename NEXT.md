@@ -462,3 +462,25 @@ branch; (2) local machine reconcile per the runbook above; (3) real proxy usage
 so throttle telemetry accumulates; (4) optional fresh reviewer pass on
 `eb86ca9^..HEAD` (the 2026-08-21 subagent pass timed out mid-review;
 critical claims were verified directly instead).
+
+## 2026-08-21 (later) — upstream drift audit + absorption plan
+
+- Upstream `cramt/m365-copilot-proxy` measured: **93 commits ahead** of
+  merge-base `19c35a1`. Fetched to local ref `upstream-scratch/main`.
+- 3-scout audit verdict: the August adoption pass already absorbed nearly
+  everything (auth interactive sign-in, race-timer, M365_LOG_STDOUT,
+  backoff, never-delete-agents, Windows fences, Power Platform DNS fix —
+  all SUPERSEDED). Worth taking: ~9 commits (developer-role normalization
+  TAKE; streaming x2, hallucination patterns, code-interpreter opt-out,
+  image-gen trio ADAPT). Details in
+  `.scratch/upstream-absorb/issues/01-declared-ownership-fork.md`.
+- Architecture decision ("declared-ownership fork", from a 5-frame/30-idea
+  ideation): .gitattributes ownership list + docs/upstream-manifest.yaml
+  ledger + scripts/upstream-absorb.mjs gate + .gitattributes merge=ours on
+  owned paths. Ticket 01 has the full work items. Rejected: submodule/
+  vendored-upstream, build-time AST rewrite, upstream history rewrite,
+  union-FS overlays.
+- Origin push of sync branch DONE this session (user authorized);
+  origin/main still at 7e37d1b (11 behind our tip).
+
+**Next actions:** execute ticket `.scratch/upstream-absorb/issues/01-declared-ownership-fork.md`; local machine reconcile; throttle-telemetry usage decision unchanged.
