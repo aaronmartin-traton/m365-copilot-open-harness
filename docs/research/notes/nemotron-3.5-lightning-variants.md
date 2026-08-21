@@ -134,3 +134,47 @@ practical.
 **Next step:** Download the REAP-20B IQ4_NL GGUF and test on the local machine
 with llama.cpp expert offload (`--cpu-moe`). Compare against the
 Qwen3-Coder-30B-A3B baseline (32.5 t/s measured on 8 GB).
+
+## 7. Addendum — 2026-08-21 landscape check
+
+> Online research only; nothing downloaded, LM Studio untouched. The
+> 2026-08-14 ranking above is stale in two slots.
+
+**Qwen3.8-27B is out (weights 2026-08-14, dense 27B).** The "Watch" branch
+in §5 anticipated it; it shipped three days before this note's snapshot.
+Real-world agentic evidence (OVERBRING Labs, 2026-08-17): three bugs fixed
+autonomously across three codebases in ~10 min wall-clock on 2×16 GB
+Blackwell; ~33 tok/s tg on UD-Q4_K_XL (17.9 GB); no doom loops at `xhigh`
+effort; 262K native context. Community consensus: strongest local coding
+model available; wall-clock-to-correct beats faster MoEs. This displaces
+Qwen3-Coder-30B-A3B and Ornith 35B as the quality ceiling for any lane
+with ≥24 GB VRAM+RAM headroom.
+
+**Muse Glimmer 30B is out (2026-08-10, Apache 2.0, official).** First
+open-weight model purpose-built for local agents: precise function calling,
+failure recovery, multimodal, controllable effort. Ships a DFlash
+speculative drafter (3.1× on RTX 5090, 1.8× M5 Max). K-Quant-17GB fits a
+24 GB envelope with KV + vision encoder + drafter resident. Official
+llama.cpp/MLX/Ollama/LM Studio support landing. §5 ranked it 6th at IQ3
+with a CPU-offload penalty — that penalty assumed no drafter; with DFlash
+the decode-speed picture changes and it should be re-screened rather than
+dismissed.
+
+**Nemotron ecosystem moved too:** nota-ai published an NVFP4
+Global-Pruned-15 serving endpoint (FriendliAI listing) — still no GGUF, so
+the §3.2 "not practical" verdict stands. REAP-20B remains the only
+GGUF-pruned variant.
+
+**Revised candidate set for the fallback-lane bake-off (if opened):**
+
+| Slot | Candidate | Why |
+|---|---|---|
+| Quality ceiling | Qwen3.8-27B UD-Q4_K_XL (17.9 GB) | Best local coding/agentic quality |
+| Agent-native | Muse Glimmer 30B K-Quant-17GB + DFlash | Purpose-built tool calling + speed |
+| Memory-lean MoE | Nemotron REAP-20B IQ4_NL (11.5 GB) | 3B active decode speed, cheapest KV |
+| Baseline | Qwen3-Coder-30B-A3B | Existing 32.5 t/s measurement |
+
+Screening rules unchanged: DEV corpus first, identity-guard the echoed
+model id, one local server at a time. Qwen3.8-27B is dense — expect ~2×
+the KV cost of REAP-20B at equal context; budget accordingly on the
+8 GB + 32 GB local machine.
