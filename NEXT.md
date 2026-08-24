@@ -596,3 +596,27 @@ ICEBOX deletions.
 **Next actions:** (1) user opens bake-off → run ticket 01 work item 1;
 (2) implement repair pass behind flag; (3) local machine leftover worktree folder
 deletion when OneDrive releases it.
+
+## 2026-08-24 (wrap) — session state at clear
+
+- Tip `70e687b` on all refs: origin/main, origin/sync/…2014,
+  lan/sync/…2014, local branch + local main. Tree clean.
+- Operative direction: small tool-caller repair pass (ticket
+  `.scratch/small-toolcaller/issues/01-repair-pass.md`, open). Research:
+  `local machine-small-toolcaller-2026-08.md` + `small-toolcaller-deep-dive-2026-08.md`.
+  LFM2.5-8B-A1B = primary zero-download control (documented FC; lfm1.0
+  license check for non-private use). Watt-Tool-8B top download pick
+  (official BFCL entry via gorilla PR #847). Avoid MXFP4 quants on this
+  Blackwell GPU (llama.cpp #19662).
+- Laptop: reconciled, cleaned, collab guest online via omp join in tab
+  "local machine" (w1F:p2 here / wH-side pc pane wH:p4 relays results). Leftover
+  dir `…\LocalDev\m365-copilot-proxy-image-upload` awaits manual delete
+  when OneDrive unlocks.
+- Throttle gate: open pending real-use data (9 events were stress-test
+  artifacts). lan/main frozen pre-rewrite (archive/main preserves lineage);
+  force-push denied by policy.
+- Harvest run this wrap; drift clean.
+
+**Next actions:** (1) user opens bake-off → ticket 01 work item 1;
+(2) implement repair pass behind M365_TOOL_REPAIR flag; (3) document the
+proven cross-machine herdr/collab topology in docs/agents/session-workflow.md §3.
