@@ -503,3 +503,30 @@ critical claims were verified directly instead).
 
 **Next actions unchanged:** local machine reconcile; throttle-telemetry usage
 decision; future waves start with `bun scripts/upstream-absorb.mjs`.
+
+## 2026-08-21 (night) — LAPTOP RECONCILE DONE (via collab agent on WHQPC)
+
+- Laptop adopted rewritten history: checked out
+  `sync/nemotron-research-2026-08-14` at origin (LAN) tip `8de7466`.
+  Verified: build green, tests 349 passed / 3 skipped (= PC baseline).
+- Laptop-only AGENTS.md section ("## Git workflow") grafted onto the new
+  branch working copy; skip-worktree re-set. Backup:
+  `~/m365-reconcile-backup/AGENTS.local machine-asof-2026-08-21.md`.
+- Old local machine `main` untouched at `0f39a4e` (pre-rewrite archive until
+  cleanup approved). Journal mod stashed (`pre-reconcile journal`), plus an
+  AGENTS-section stash; both disposable after a soak period.
+- Content check: old main's docs/hypotheses.md + .scratch/ are strict
+  subsets of the new branch — nothing lost. Doc re-scrub satisfied by
+  adoption (new branch carries the post-rewrite scrubbed copies).
+- Coordination ran over Herdr collab (guest WHQPC, lane freepool
+  deepseek-v4-flash); ssh outage mid-run forced an omp resume + /join
+  replay — recovered cleanly.
+- Telemetry note: local machine `~/.config/opencode-m365/throttle-telemetry.ndjson`
+  holds 9 events — enough to open the fallback-lane decision gate if any
+  are real throttle episodes (user call, see .scratch/fallback-lane-telemetry/spec.md).
+
+**Unlocked:** `.autonomous/ICEBOX.md` branch-cleanup candidates
+(`chore/session-wrapup-2026-08-07`, `review/lan-bakeoff-disposition`,
+`review/local machine-preparation`) are now deletable pending user approval.
+**Still open:** origin/main fast-forward decision; throttle-gate review;
+ICEBOX deletions.
