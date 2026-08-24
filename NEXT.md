@@ -574,3 +574,25 @@ ICEBOX deletions.
 - origin/main fast-forwarded 7e37d1b..84c2d32 (secret-scan clean), user
   authorized. Local main repointed to 84c2d32 tracking origin/main - no
   stale refs left on the local machine. LAN main untouched (the egress check stands).
+
+## 2026-08-24 — mission pivot: small tool-caller within 8 GB (docs realigned)
+
+- Hardware ground truth (nvidia-smi via local machine agent): RTX PRO 1000
+  Blackwell Laptop GPU, **8151 MiB**. The "24 GB" in the model-refresh note
+  was wrong; header corrected.
+- New operative research: `docs/research/notes/local machine-small-toolcaller-2026-08.md`
+  — small function-calling specialist to repair Copilot's tool-call
+  failures, co-resident on the 8 GB GPU. Top pick Watt-Tool-8B (~6 GB,
+  Apache); zero-download controls already on device (Nemotron3-Nano-4B,
+  LFM2.5-8B-A1B). Integration plan: env-gated repair pass after parse,
+  reusing intent-verifier plumbing patterns.
+- Realigned: nemotron note superseded-banner + VOID next-step;
+  session-workflow/working-methodology/pc-implementer verifier rows updated
+  to "retired from runtime"; fallback-lane spec points at the new shortlist.
+  New ticket: `.scratch/small-toolcaller/issues/01-repair-pass.md`.
+- Bake-off DEFERRED until user opens it. Telemetry gate stays open (all 9
+  events were Aug 9-10 stress-test artifacts).
+
+**Next actions:** (1) user opens bake-off → run ticket 01 work item 1;
+(2) implement repair pass behind flag; (3) local machine leftover worktree folder
+deletion when OneDrive releases it.

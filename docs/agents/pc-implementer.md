@@ -73,8 +73,10 @@ Do these steps in order at the start of a session.
 - Committed JSON files carry a UTF-8 BOM.
 - Git Bash `grep` and `sed` fail on `/c/`-style paths.
 - `HOME` is empty in Git Bash. Use `USERPROFILE=C:\Users\<username>`.
-- Port 1234 is LM Studio on the local machine. It serves qwen3.5-4b and friends, not
-  the verifier. The verifier is llama-server with Bonsai-27B on the local machine.
+- Port 1234 is LM Studio on the local machine (serves qwen3.5-4b and friends). The
+  Bonsai-27B verifier is retired from runtime; the local machine's :1234 LM Studio
+  hosts the small tool-caller candidates instead — see
+  `docs/research/notes/local machine-small-toolcaller-2026-08.md`.
 - The local machine connects into locally sshd. The link is
   `<local machine-ip>:62386` to `<pc-ip>:22`.
 - The PC has no `msal-cache.json` and no recorded login. The telemetry

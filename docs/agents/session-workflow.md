@@ -9,7 +9,7 @@ established 2026-08-09.
 | Machine | Role | Owns |
 |---|---|---|
 | **PC** (this box, `/path/to/m365-copilot-proxy`) | Implementation, tests, adversarial review, docs | The working repo, the the remote remote, the panes |
-| **Laptop** (`/path/to/local machine/m365-copilot-proxy`) | The **only** live-M365 machine | MSAL auth cache, llama-server verifier (Bonsai GGUF), M365 live probes |
+| **Laptop** (`/path/to/local machine/m365-copilot-proxy`, WHQPC) | The **only** live-M365 machine | MSAL auth cache, M365 live probes, local tool-caller models (LM Studio / llama-server). GPU: RTX PRO 1000 Blackwell Laptop, **8151 MiB** |
 
 **Hard rules:**
 
@@ -23,8 +23,12 @@ established 2026-08-09.
   cache is `oid`-keyed; a fresh login does not clear account throttling.
 - The local machine's M365 auth cache:
   `~/.config/opencode-m365/msal-cache.json`.
-- The verifier on the local machine: llama-server (build b10321), Bonsai-27B-Q1_0.gguf,
-  `--alias bonsai-27b-q1 --seed 42 -ngl 99 -c 8192`, port 1234.
+- The 8H intent-verifier gate (Bonsai-27B llama-server) was RETIRED from
+  the runtime in the simplify-tool-path pivot — `intent-verifier.ts` and
+  `attestation.ts` remain only as research artifacts. The local machine's local
+  models now serve the planned small tool-caller repair pass instead:
+  see `docs/research/notes/local machine-small-toolcaller-2026-08.md` and
+  `.scratch/small-toolcaller/issues/01-repair-pass.md`.
 
 ## 2. Sync & branching — the the remote
 

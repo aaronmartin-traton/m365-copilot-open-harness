@@ -2,6 +2,12 @@
 > Snapshot as of 2026-08-14.
 > Research note: HF search, community verification, and ChatGPT consensus
 > for the the local machine / RTX PRO Blackwell 8 GB + 32 GB RAM local machine.
+> **SUPERSEDED 2026-08-24 (hardware fact + mission).** nvidia-smi confirms
+> the local machine GPU is an RTX PRO 1000 Blackwell Laptop with **8151 MiB**
+> total. Every §7 candidate (11.5–20 GB) exceeds that without CPU offload,
+> and the project goal moved from "big fallback-lane model" to "small
+> reliable tool-caller alongside Copilot". The download next-step in §6 is
+> VOID. Operative shortlist: `local machine-small-toolcaller-2026-08.md`.
 
 ---
 
@@ -131,9 +137,11 @@ tools, error recovery) matches this role better than the coding-focused
 models (Ornith, Qwen). The REAP-20B variant makes the memory fit
 practical.
 
-**Next step:** Download the REAP-20B IQ4_NL GGUF and test on the local machine
+**Next step:** ~~Download the REAP-20B IQ4_NL GGUF and test on the local machine
 with llama.cpp expert offload (`--cpu-moe`). Compare against the
-Qwen3-Coder-30B-A3B baseline (32.5 t/s measured on 8 GB).
+Qwen3-Coder-30B-A3B baseline (32.5 t/s measured on 8 GB).~~
+VOID 2026-08-24: REAP-20B is 11.5 GB — it does not fit the 8151 MiB GPU
+without CPU offload, and the mission changed. See the banner above.
 
 ## 7. Addendum — 2026-08-21 landscape check
 

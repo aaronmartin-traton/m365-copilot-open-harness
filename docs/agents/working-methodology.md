@@ -81,7 +81,7 @@ This is the active work stream. The contract is frozen. Do not bend it.
 | Machine | Role | Owns |
 |---|---|---|
 | **PC** | Implementation, tests, adversarial review, docs | Working repo, the remote remote, panes |
-| **Laptop** | The **only** live-M365 machine | MSAL auth cache, llama-server verifier, live probes |
+| **Laptop** | The **only** live-M365 machine | MSAL auth cache, local tool-caller models, live probes. GPU: RTX PRO 1000 Blackwell Laptop, **8151 MiB** |
 
 **Hard rules:**
 
@@ -90,8 +90,10 @@ This is the active work stream. The contract is frozen. Do not bend it.
 - Live M365 verification happens **only** on the local machine. The PC is
   auth-blocked; it can authenticate via the documented interactive login
   when a human is present (`docs/agents/m365-auth-workflow.md`).
-- The local machine verifier: llama-server (build b10321), Bonsai-27B-Q1_0 GGUF,
-  `--alias bonsai-27b-q1 --seed 42 -ngl 99 -c 8192`, port 1234.
+- The old Bonsai-27B verifier is RETIRED from the runtime (simplify-tool-path
+  pivot). The local machine's LM Studio / llama-server now earmarks small
+  tool-caller models for the repair-pass plan:
+  `docs/research/notes/local machine-small-toolcaller-2026-08.md`.
 
 ### Sync and review refs
 
