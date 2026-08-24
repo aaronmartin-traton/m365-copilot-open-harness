@@ -545,3 +545,18 @@ ICEBOX deletions.
   metacharacters and orders ** vs * via sentinel (deep-path patterns like
   `scripts/bench/**` matched only one level before). Unit-checked against 7
   path cases; gate exit 0.
+
+## 2026-08-21 (wrap) — ICEBOX resolved; image-upload verdict
+
+- Parked branches preserved then deleted: pushed
+  `chore/session-wrapup-2026-08-07`, `review/lan-bakeoff-disposition`,
+  `review/local machine-preparation` to LAN under their own refs (they hold real
+  8H-gate/bakeoff/local machine-prep evidence, none ancestor of archive/main),
+  then deleted locally. Local branch list is clean; LAN is the archive.
+  PC local `main` remains the only stale ref (resolves at origin/main ff).
+- Laptop `image-upload` branch verdict (Main-inspected, agent stalled):
+  b2fae56 confab F12.12 catch = SUPERSEDED by tools.ts:295-298 +
+  tools.test.ts:298; ce4b14b interactive M365 tool bridge = obsoleted by
+  the no-native-tool-calling decision. Recommendation: deletable next time
+  the local machine repo is touched; left in place pending user approval.
+- FreshReviewer finding (glob regex escaping/ordering) fixed in 382ae40.
