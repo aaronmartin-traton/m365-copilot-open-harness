@@ -484,3 +484,22 @@ critical claims were verified directly instead).
   origin/main still at 7e37d1b (11 behind our tip).
 
 **Next actions:** execute ticket `.scratch/upstream-absorb/issues/01-declared-ownership-fork.md`; local machine reconcile; throttle-telemetry usage decision unchanged.
+
+## 2026-08-21 (evening) — ticket 01 executed: declared-ownership fork live
+
+- Shipped: `.gitattributes` (ownership policy), `.gitattributes` (merge=ours
+  on owned paths), `scripts/upstream-absorb.mjs` (fetch+classify+gate,
+  positive/negative tested), `docs/upstream-manifest.json` (all 93 upstream
+  commits dispositioned: 16 superseded / 30 skipped / 1 rejected
+  [`9c48bd3` CI-on-chat-path, F23 conflict] / 46 bulk-reviewed).
+- **Zero cherry-picks needed**: every scout TAKE/ADAPT candidate verified
+  already-present (developer role, streaming early-flush/incremental,
+  hallucination patterns, image orientation/scheduler/quota). Ticket 01 has
+  the corrected table. Scout lesson: verify abbreviated SHAs with
+  `git cat-file -t` — 3 of 7 were tree objects.
+- Validation: build green; suite 349 passed / 3 skipped (= baseline);
+  gate exit 0.
+- Upstream remote now configured: `upstream` → cramt/m365-copilot-proxy.
+
+**Next actions unchanged:** local machine reconcile; throttle-telemetry usage
+decision; future waves start with `bun scripts/upstream-absorb.mjs`.

@@ -1,0 +1,30 @@
+# Declared-ownership fork — see .gitattributes for the policy.
+# Paths below always resolve merge conflicts to OUR side.
+# Requires: git config merge.ours.driver true   (scripts/upstream-absorb.mjs auto-registers)
+
+packages/proxy-lib/src/tool-path.ts merge=ours
+packages/proxy-lib/src/tool-path.test.ts merge=ours
+packages/proxy-lib/src/tool-path.contract.test.ts merge=ours
+packages/proxy-lib/src/handler.ts merge=ours
+packages/proxy-lib/src/handler.test.ts merge=ours
+packages/proxy-lib/src/handler-session.test.ts merge=ours
+packages/proxy-lib/src/intent-verifier.ts merge=ours
+packages/proxy-lib/src/intent-verifier.test.ts merge=ours
+packages/proxy-lib/src/attestation.ts merge=ours
+packages/proxy-lib/src/attestation.test.ts merge=ours
+packages/core/src/fenced.ts merge=ours
+packages/core/src/fenced.test.ts merge=ours
+packages/core/src/tools.ts merge=ours
+packages/core/src/tools.test.ts merge=ours
+packages/core/src/agent.ts merge=ours
+packages/core/src/session.ts merge=ours
+packages/core/src/session.test.ts merge=ours
+packages/core/src/steering.ts merge=ours
+packages/core/src/steering.test.ts merge=ours
+packages/core/src/throttle-telemetry.ts merge=ours
+packages/core/src/throttle-telemetry.test.ts merge=ours
+packages/core/src/auth-recovery.ts merge=ours
+packages/core/src/auth-recovery.test.ts merge=ours
+docs/** merge=ours
+.scratch/** merge=ours
+scripts/bench/** merge=ours

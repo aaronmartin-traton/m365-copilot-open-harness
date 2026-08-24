@@ -1,0 +1,640 @@
+{
+  "upstreamRemote": "https://github.com/cramt/m365-copilot-proxy.git",
+  "policyDoc": ".gitattributes",
+  "bootstrapAudit": "2026-08-21",
+  "bootstrapRange": {
+    "from": "19c35a14def58c7c5645b5febf354d7d947ee444",
+    "note": "from fork point to upstream/main at bootstrap"
+  },
+  "statusVocabulary": [
+    "taken",
+    "rejected",
+    "superseded",
+    "skipped",
+    "bulk-reviewed",
+    "pending"
+  ],
+  "entries": [
+    {
+      "sha": "2e0e40959415b90a6238b003a8b0afc76e3e39b2",
+      "subject": "feat(tools): one-call-per-turn, output hardening, real-tool few-shot + docs",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "90fa832c7a33b9a9f9529270767d0aceea67f9a9",
+      "subject": "docs: sync README + AGENTS.md with versioning, reasoning-tone, and new env vars",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "8672352e7ab25c52511ac79169f91b5798d8e997",
+      "subject": "fix(agent): self-heal from the deleted-agent trap on empty replies",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "75129b3a1d4358ff70e1ac17fcdc993afa69bc83",
+      "subject": "feat(observability): expose conversation quota + reverse-engineering scaffold",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "2350a2ef5b60f9b71fe45974b67ab57d506a6cf9",
+      "subject": "feat(re): add variants-bisect probe + guard the live test suite",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "05384924372b0ab4044272d9e5935d3538285444",
+      "subject": "feat(observability): expose M365 disengagement scores; drop dead-weight few-shot",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "103789694311cdf97344ee31b24960c3ea396e0a",
+      "subject": "docs(re): rewrite hypotheses.md in science-mode",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "09565ecd45550b4130f858adac76801d0deaa965",
+      "subject": "feat(proxy): context window, output-ceiling finish_reason, turn cancellation",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "9d4e6e6c50a83bbbfe60a198f89a47b422b0bc13",
+      "subject": "feat(re): I/O-asymmetry + cancel-frame dig, probes, and findings",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "f3f2de8dc25dc2a0ce465f6b5ef10ffc850205eb",
+      "subject": "feat(scripts): add `pnpm run pi` to launch pi against the local proxy",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "5de7f12bc99b34f3b0f63f47cb0ab01746ee2856",
+      "subject": "docs(re): §8 capability-expansion hypotheses from web-research dig",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "5ebc636f7b1e051dcbb45cf7f6be17b89e1587fe",
+      "subject": "feat(proxy): real Claude/GPT-5.5 tones, agent only for tool requests, Disengaged fail-fast",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "ca23632d2ed9a744bf7c2c52e9e688c506f76c89",
+      "subject": "feat(re): confirm code-interpreter + Claude-tone live; probes + §8.9 findings",
+      "status": "skipped",
+      "reason": "RE probes + hypotheses findings; not runtime code we track."
+    },
+    {
+      "sha": "9c48bd316363873194e6c97b3730818a9663d4eb",
+      "subject": "feat(proxy): wire code interpreter on the plain-chat path; MCP tunnel foothold",
+      "status": "rejected",
+      "reason": "Wires code interpreter on the plain-chat path; conflicts with our hosted-shell interception design (enabling CI flips the session state that disables interception - hypotheses F23 corrigendum). Owned-path behavior; do not take.",
+      "evidence": ".gitattributes owned policy; AGENTS.md gotchas"
+    },
+    {
+      "sha": "29cc1f4f21b3bc8921b4b42960c3d18fd36907c3",
+      "subject": "docs(api): document Claude/GPT-5.5 tones, agent-overrides-tone, code interpreter",
+      "status": "skipped",
+      "reason": "Docs (api doc of tones)."
+    },
+    {
+      "sha": "5245cef08dda5f0681fd33f1b59935ea0168d9c3",
+      "subject": "feat(re): MCP/native-tools investigation — mapped to the lightweight-bot wall",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "3cea14acf9cdf2d20ca646958968c82a05d707d4",
+      "subject": "docs(re): §8.11 — both native-tool paths closed (licensing + sandbox airgap)",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "38910659c9439e3828b707104eaf903314a88283",
+      "subject": "docs(re): record decision — native-tool/MCP path out of scope (zero-cost premise)",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "9f47e13cf4d465abb889b58cebd3096d889366b9",
+      "subject": "feat(bench): m365-bench — quantifiable agentic-coding benchmark",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "24b3a93bf055bdfb0e9dfa3780aae7c5a5218461",
+      "subject": "feat(re): token-regen experiment — cache is disposable, throttle is identity-keyed",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "bade193b403febfbc35b0ad5ed5c215db8e37aa0",
+      "subject": "docs(agents): make hypothesis-driven science the default working mode",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "b318f46d28165831c2c00b9131b016741719188d",
+      "subject": "test(bench): mock proxy to validate the harness's tool-execution path",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "250378dbcae44d664221cdce9014f002273150b1",
+      "subject": "feat(bench): --tool-set flag; record baseline — tool compliance ~0, config levers ruled out",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "f656e4b80fdd4d5a353a62c94e74d4962315372a",
+      "subject": "docs: document account degradation + add runnable experiment catalog",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "d445ebffa172ea40dfefc0cfa59df55f1b86ccab",
+      "subject": "feat(tools): fenced + shell-routing tool calling, confab-retry, auto-reauth",
+      "status": "superseded",
+      "reason": "Origin of fenced shell-routing tool calling; our fenced.ts + tool-path.ts implement and extend it.",
+      "evidence": "audit: AuditAuth; files packages/core/src/fenced.ts, proxy-lib/src/tool-path.ts"
+    },
+    {
+      "sha": "0f997890dfc5489301e1129e2405dde5e3d3caa5",
+      "subject": "test(bench): prompt-variant sweep + context-seed knobs",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "04e49486c7ac5fd32fc8e1fa7fcbe2bad8e78a94",
+      "subject": "docs: shell-routing breakthrough, throttle/reauth findings, pi validation",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "c3c22876168dbfcf23c635893b4d18f8ab1b368e",
+      "subject": "refactor(auth,agent): always non-interactive login + never delete agents",
+      "status": "superseded",
+      "reason": "Non-interactive login gating (M365_NO_INTERACTIVE) and never-delete-agents both present (auth.ts, agent.ts).",
+      "evidence": "audit: AuditAuth"
+    },
+    {
+      "sha": "c78d48fa4221990b2c68c87b3e167661d8e87b89",
+      "subject": "fix(handler): don't execute a model's own document as shell (isProseDocument)",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "9d255ae335f2a666e75ea7338830632b2a2bcf10",
+      "subject": "fix(tools): label tool results with their command; widen confab detection",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "36b2fe6b7b1ad48fba4a0658b54c903676bec0d8",
+      "subject": "fix(handler): force a real tool call on hallucinated completion",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "834f6d7c63def88bf14b911e7fae2f044e0c1e11",
+      "subject": "docs: bring tool-calling + hypotheses current (fenced, guards, reliability)",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "2795008c2273e8be977b6ed66d8fec0e000ac603",
+      "subject": "feat(fenced): 10 selectable tool-calling framing strategies + A/B sweep harness",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "2d4388a71d31add859d9d9f971af9aacd40215ba",
+      "subject": "docs: operating principles — sequential runs, encouraged tangents, N-wide prompt sweeps",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "36dfa25a5e97ec8912b05a119dfd982bc371a992",
+      "subject": "docs: generalize principle 2 to 'chase all hunches' (avoid rate-limit bias)",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "d00bb669daa7787ebec3bb609e3f7369e90b43ec",
+      "subject": "docs(api): note fakeable-task hallucination + harness-prompt compliance traps in §10",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "1dc4f634c6715ed8e7bbd6704ef3c3f6e5659b49",
+      "subject": "docs: add prompt-engineering reference + 'graduate conclusive findings' rule",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "3411b60b34b0ac62cd3377ab2a2ec34852f02678",
+      "subject": "test(bench): make sweep2 cooldowns configurable (COOLDOWN/BLOCK_COOLDOWN)",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "fc9249898cddcb2524cb2fb14ab941c9f1dfad26",
+      "subject": "fix(core): detect fakeable-task hallucination (bare 'Created X.py' + 'executed it')",
+      "status": "superseded",
+      "reason": "Fakeable-task hallucination patterns verified verbatim at core/tools.ts:354-362 incl. tests.",
+      "evidence": "Main read 2026-08-21"
+    },
+    {
+      "sha": "dbd94b73cf376efb47972e18012e9a1e5f0bf10f",
+      "subject": "test(bench): unattended throttle-aware overnight framing A/B orchestrator",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "9e32f40f52a31a5dc8d436b03ad7140d2e792d50",
+      "subject": "docs: overnight-log live state + wake-up runbook for the framing sweep",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "f60320386b05b221609dc1fcfcb4e5bf917fe1ad",
+      "subject": "docs(overnight): wake-1 — disengaged classification of round-1 ERRORs",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "91c482c7b600856e4b1531abf935e744d167ee1b",
+      "subject": "test(bench): orchestrator classifies Disengaged vs throttle; only throttle backs off",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "2f0b73f74000cdeda4f12893ae42f3d636ece1d8",
+      "subject": "docs(overnight): wake-2 — Disengaged-not-throttle finding + orchestrator fix",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "053be57b91f0107cf44e54d1be6899413ed80539",
+      "subject": "docs(overnight): wake-3 — preliminary cross-tab (persona worst, fewshot best, find-needle filter-fragile)",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "a07f9fe9d50cb226892e272eed6ecce34dc13f4b",
+      "subject": "test(bench): rotate task order per round (disentangle task-content from round-position)",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "e525b08fdade3c300532af11e6298704cbf2266a",
+      "subject": "docs(overnight): wake-4 — task-position confound found+fixed; find-needle fragility is content not position",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "bac0a04ba4cdbd5e2131f7841f0c7317a5c2d4ce",
+      "subject": "docs: graduate F17 (benign config-edit always Disengages) + F18 (aggressive framings backfire)",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "977f30eb615d3f17c557f606b4bd313be5429f86",
+      "subject": "docs: graduate F19 (fakeable hallucination closed by framing; confab-retry validated live)",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "e98ab47f5984da066322a4d6cb0ebd431ce8f22e",
+      "subject": "probe(F17): agent path Disengages on 'replace literal X->Y in a file', not task content",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "916d10342007fe3854449e6d47d55535fcd2507a",
+      "subject": "test(bench): real-pi reliability harness (headless pi vs proxy, fix-bug x N)",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "33c0e4e1455106d366981c0f458c3c54dc5af073",
+      "subject": "feat(goal): F20 real-pi 10/10 fix-bug end-to-end; F17 confirmed bites real pi 3/3",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "1fb604eba5add7588c9098cae1a326ebd72227c1",
+      "subject": "docs: F21 (substitution-Disengage = framing-weight, no clean auto-fix) + end-of-night summary",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "2308871db3f4b76457572487cb91518e1f9c6c0f",
+      "subject": "test(goal): F20 generality — real pi solves a multi-file bug 3/4 (1 hallucinated-OK tail)",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "10f24de87319ea66863bf4107ae2511cbca22671",
+      "subject": "probe(F17): GUI capture proves the AGENT is the Disengage trigger, not optionsSets",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "f647e8848b78878c220fa4f84e273793a081894d",
+      "subject": "probe(F17): in-GUI-context emulation proves it's the agent payload, not our connection",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "cfd34f436e39313192df864075fc505a3670bbf3",
+      "subject": "F22: ROOT CAUSE of substitution-Disengage = naming the OLD value to replace",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "cda44f0aee579c93df0ef4005862dc86e6513a33",
+      "subject": "F22 CORRECTED: substitution-Disengage = Prompt-Shields jailbreak detection (additive shape threshold)",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "a837a41836a6a6c098434136df6271b31b8858a5",
+      "subject": "feat(fenced): 'softened' framing variant — kills the Prompt-Shields jailbreak-shape signal",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "6a7e53f2c0013eb355b94977d0ecee87bd64a6db",
+      "subject": "F22 tangent: dea_violation is NOT the disengage gauge (falsified); softened ~96% effective",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "f4412cfb5ded0f17b456f9df84fe66dfb934e7df",
+      "subject": "feat(handler): Disengage→softened-retry (keep baseline default); + temporal-drift finding",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "8202791fc0e276bcb79499185d73c9d399b4a264",
+      "subject": "feat(handler): Claude-for-tools via agent-less shell-routing (F23) — overturns MCP-only",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "e65952436a71227384540c942f7ebe254a6eb78f",
+      "subject": "docs(F23): head-to-head — GPT+agent 80% vs Claude agent-less ~57% (not default-ready yet)",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "d4e4ea2c52f2184616652cb24435056d7660c5f8",
+      "subject": "feat(proxy): streaming early-flush + heartbeat + stream_options.include_usage",
+      "status": "superseded",
+      "reason": "Early-flush SSE + :keepalive heartbeats + stream_options.include_usage verified at handler.ts:319-353 and response-renderer.ts:65-82.",
+      "evidence": "Main grep verification 2026-08-21"
+    },
+    {
+      "sha": "d72bfeaf0b58f63adc15b11d6053642891f48e81",
+      "subject": "F23 update: Claude 8/8 fix-bug (ties GPT 8/8 same window); Opus dead, reasoning works",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "413f1d08f0e8dcdc6187e7f8fd8cd37e299373d1",
+      "subject": "fix(core): commit isProseDocument Claude-fence fix (was uncommitted) + gitignore gui-capture-out",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "583b0c13fd77f5ecf328dc75cfe63d672cd7f29f",
+      "subject": "fix(routing): tone-derived agent decision, claude-* tone fallback, explicit default",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "9486543743ca47c52cfca2e9e8e288148cc4af6a",
+      "subject": "fix(schema): accept OpenAI `developer` role, normalize to `system`",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "a88043dc377b6525036d099a182415fd0a78e834",
+      "subject": "refactor(core): remove dead copilotChat fork and unused agent/schema code",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "636007fe7978dafb64fd934abe4e1a7e64fd72ff",
+      "subject": "feat(proxy): true incremental streaming for tool-less responses",
+      "status": "superseded",
+      "reason": "True incremental streaming (onDelta passthrough, remainder-only final render) verified in response-renderer.ts.",
+      "evidence": "Main grep verification 2026-08-21"
+    },
+    {
+      "sha": "653c952fc0dd456ef6fcabc9ccaafd17f7e5260d",
+      "subject": "feat(auth): replace auto-reauth with degradation backoff + harden login fingerprint",
+      "status": "superseded",
+      "reason": "Degradation backoff replacing auto-reauth is ours: auth-recovery.ts with M365_NO_BACKOFF.",
+      "evidence": "audit: AuditAuth (auth-recovery.ts)"
+    },
+    {
+      "sha": "af3911906462c3f3cd7284b18e139590ae7a8ed2",
+      "subject": "native tool-calling RE + fenced framing variants + tool-call test harness",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "40406592ffe23f14b3427d0ea6943956dfc931f3",
+      "subject": "docs(F12.11): framing A/B pilot — baseline still disengages, bench SOLVED masks it via F22 retry; default-model confab is the bigger gap",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "cb2c47c94f399cbedfce6b31254bbc92b7d63873",
+      "subject": "feat: default to gpt-5.5-think-deeper in docs, catch mid-convo confab, advertise 1M context/output",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "b2fae5681a7e3048a8662b8a6c235f79b2cac891",
+      "subject": "feat(confab): catch 'file-editing tools not available' give-up + log F12.12 framing disengage-rate A/B",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "37b381e046c60c67265661f8cd56d54266b75107",
+      "subject": "docs: explain how to actually obtain the TOTP base32 seed (#4)",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "92682ad05f82ec73f6e0ab57a9de4a9997a2a3a6",
+      "subject": "docs(12.13): tool-less requests execute in M365's sandbox and return a real transcript",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "7eb4b74eee9be1224145e0ecf725eda5193df063",
+      "subject": "chore: MIT license",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "34c32a4d22cdb3686a1b2ed7d61519eb602cb43b",
+      "subject": "fix(12.13): route leaked container.* fences to the harness shell, flag the prose form",
+      "status": "superseded",
+      "reason": "container.* fence routing present in our fenced.ts/tool-path pipeline.",
+      "evidence": "audit: AuditToolPath domain sweep"
+    },
+    {
+      "sha": "0047cc160ce3a01c2c403205002acdaef127b6df",
+      "subject": "docs(13): user-driven SSO — loopback redirect falsified, nativeclient corroborated",
+      "status": "skipped",
+      "reason": "Docs (hypotheses notebook §13)."
+    },
+    {
+      "sha": "a4da8038d7c2a22ac5cab9ca444c909d78edd6f8",
+      "subject": "feat: M365_LOG_STDOUT mirrors debug lines to the proxy's stdout",
+      "status": "superseded",
+      "reason": "M365_LOG_STDOUT stdout mirror present in log.ts.",
+      "evidence": "audit: AuditAuth; Main grep 2026-08-21"
+    },
+    {
+      "sha": "0f3d0cf58090aaa92dcd99eabd7e89e114455933",
+      "subject": "docs(14): image gen works, and we discard it at three separate layers",
+      "status": "skipped",
+      "reason": "Docs (hypotheses §14 narrative). Subject is documentation."
+    },
+    {
+      "sha": "5ea6d2a00834018cfd5bfdc779bad3bff532e485",
+      "subject": "feat(core): image generation via generateImage() — live-verified end to end",
+      "status": "superseded",
+      "reason": "Image generation present end-to-end: core/images.ts (flux optionsSets, UploadFile) + proxy-lib/images-generation.ts (orientation map, scheduler gate, quota mapping).",
+      "evidence": "Main grep verification 2026-08-21"
+    },
+    {
+      "sha": "9e880b7377652ebdba54f9fc77feeae501d10ce9",
+      "subject": "feat(image): full GUI option surface, implicit draw on chat path, quota handling",
+      "status": "superseded",
+      "reason": "Image GUI option surface + error handling covered by images-generation.ts FAILURE_STATUS/size mapping.",
+      "evidence": "Main grep verification 2026-08-21"
+    },
+    {
+      "sha": "3dbb35f1f961dfcd7f2a7ca494f56008d18fe0ec",
+      "subject": "feat: add GPT-5.6 and guard remote artifacts",
+      "status": "superseded",
+      "reason": "Remote-artifact guard + tone handling present in tools/fenced pipeline.",
+      "evidence": "audit: AuditToolPath domain sweep"
+    },
+    {
+      "sha": "8a64f9cc9dac67587f2816f68ead8ed64a745ae4",
+      "subject": "Merge PR #5: GPT-5.6 tone + remote-artifact guard",
+      "status": "superseded",
+      "reason": "Merge commit of PR #5 whose content is separately dispositioned.",
+      "evidence": "audit: AuditToolPath domain sweep"
+    },
+    {
+      "sha": "34cb916401a4fb6783bc57e08540b48227b0f8c9",
+      "subject": "fix(tools): anchor remote-artifact detection, document three-state tone validation",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "bf687ae5435f1cd3d459429537617baeb97d85f9",
+      "subject": "feat(auth): user-driven interactive sign-in for tenants with no TOTP seed",
+      "status": "superseded",
+      "reason": "User-driven interactive sign-in adopted: interactiveApprovalEnabled()/interactiveAllowed() in auth.ts:111-121.",
+      "evidence": "audit: AuditAuth; Main grep 2026-08-21"
+    },
+    {
+      "sha": "805c1b7ad7ccd3117926e4e08fe36842ea766d2f",
+      "subject": "fix(auth): clear the login race timer, and verify interactive sign-in live",
+      "status": "superseded",
+      "reason": "Login race-timer clear present: clearTimeout(timer) in auth.ts waitForAuthCode.",
+      "evidence": "audit: AuditAuth; Main grep 2026-08-21"
+    },
+    {
+      "sha": "6346b75488e703d82636e6ca47e6ed9a2db94604",
+      "subject": "docs: how to trim opencode under the Disengaged threshold, and where it has to happen",
+      "status": "skipped",
+      "reason": "Docs/CI/probe commit by subject; nothing runtime-facing to adopt."
+    },
+    {
+      "sha": "673911bac304187966b9f3d8c3bb1fe0e8552aeb",
+      "subject": "fix(fenced): route Windows shell fences, and tell the model which OS it is on",
+      "status": "superseded",
+      "reason": "Windows shell fence routing + hostPlatformNote present in fenced.ts.",
+      "evidence": "audit: AuditRest (file evidence)"
+    },
+    {
+      "sha": "3ea3983fd3630e1b252aa94e828bcbb7e2082961",
+      "subject": "Merge pull request #11 from chrischall/docs/opencode-harness-findings",
+      "status": "bulk-reviewed",
+      "reason": "2026-08-21 three-scout domain sweep (auth / tool-path / rest) reviewed every commit in this range at summary level and found the early-August adoption pass had absorbed the value. Not individually re-verified - run `git show <sha>` before relying on any specific behavior.",
+      "evidence": ".scratch/upstream-absorb/issues/01-declared-ownership-fork.md audit section"
+    },
+    {
+      "sha": "d7c6d8080bf2bb769c1949c2dfbe60bb7ca929c3",
+      "subject": "fix(agent): derive the Power Platform host from both DNS labels",
+      "status": "superseded",
+      "reason": "Power Platform host derived from both DNS labels: two-candidate probe present in agent.ts.",
+      "evidence": "audit: AuditRest (file evidence)"
+    }
+  ]
+}
