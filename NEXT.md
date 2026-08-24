@@ -560,3 +560,17 @@ ICEBOX deletions.
   the no-native-tool-calling decision. Recommendation: deletable next time
   the local machine repo is touched; left in place pending user approval.
 - FreshReviewer finding (glob regex escaping/ordering) fixed in 382ae40.
+
+## 2026-08-21 (end) — image-upload preserved & deleted; GitHub fast-forwarded
+
+- Laptop `image-upload` deleted per user call ("feature wanted sometime"):
+  tip ce4b14b pushed to LAN, then its live WORKTREE turned out to hold
+  uncommitted work - captured as commit 7e41065 (4 files, +93, incl. two
+  UNTRACKED images.ts files) and pushed before teardown. Central ref:
+  `lan/image-upload` @ 7e41065. Restore: git fetch lan image-upload.
+- Future-capability note: interactive M365 tool bridge lives only on
+  `image-upload`; revisit when native/interactive calling reopens (needs
+  Copilot Studio license decision - see AGENTS.md dead-end note).
+- origin/main fast-forwarded 7e37d1b..84c2d32 (secret-scan clean), user
+  authorized. Local main repointed to 84c2d32 tracking origin/main - no
+  stale refs left on the local machine. LAN main untouched (the egress check stands).
