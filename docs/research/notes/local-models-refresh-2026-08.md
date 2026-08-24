@@ -1,7 +1,10 @@
 # Laptop Model Refresh — Primary-Source Research (2026-08-24)
-
 > Research snapshot as of 2026-08-24.
-> Hardware: NVIDIA RTX PRO Blackwell (local machine SKU), 24 GB GDDR7.
+> HARDWARE CORRECTION 2026-08-24 (user-stated): the local machine GPU has **8 GB
+> VRAM total**, not 24 GB. The 16-19 GB candidates below DO NOT FIT that
+> envelope; this note is retained for landscape reference only. The
+> operative requirement is a small tool-calling specialist within 8 GB -
+> see `local machine-small-toolcaller-2026-08.md`.
 > Runtime: llama.cpp / llama-server.
 > Method: Official model cards, HF org pages, vendor blogs, llama.cpp releases only. No aggregator sites used as primary evidence.
 
