@@ -530,3 +530,18 @@ decision; future waves start with `bun scripts/upstream-absorb.mjs`.
 `review/local machine-preparation`) are now deletable pending user approval.
 **Still open:** origin/main fast-forward decision; throttle-gate review;
 ICEBOX deletions.
+
+## 2026-08-21 (late night) — clone cleaned; absorb-gate regex fix
+
+- Laptop local copy minimized under collab coordination: deleted pre-rewrite
+  `main` (centrally archived as LAN `archive/main` = `351fcaa`, verified
+  before deletion) and `backup/pre-m365-only-2026-08-12`; dropped the 3
+  reconcile-era stashes (contents backed up / grafted); fetch --prune both
+  remotes; `git gc --prune=now`. Kept: `image-upload` branch (UNMERGED,
+  2 commits: interactive M365 tool bridge + confab F12.12 catch - dead-end
+  experiment candidates, deletion deferred to user), and 2 ancient stashes.
+- FreshReviewer pass on `eb86ca9^..HEAD`: correct overall; one latent bug
+  FIXED - upstream-absorb.mjs glob→regex translation now escapes
+  metacharacters and orders ** vs * via sentinel (deep-path patterns like
+  `scripts/bench/**` matched only one level before). Unit-checked against 7
+  path cases; gate exit 0.

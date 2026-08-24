@@ -66,7 +66,15 @@ const ownedGlobs = existsSync(ATTRS)
       .filter((l) => l.includes("merge=ours"))
       .map((l) => l.trim().split(/\s+/)[0])
       .filter(Boolean)
-      .map((g) => g.replace(/\*\*/g, ".*").replace(/\*/g, "[^/]*"))
+      // Escape regex metacharacters first (literal dots etc.), then translate
+      // gitattributes globs via a sentinel so ** → .* survives the * pass.
+      .map((g) =>
+        g
+          .replace(/[.+^${}()|[\]\\?]/g, "\\$&")
+          .replace(/\*\*/g, "\u0000")
+          .replace(/\*/g, "[^/]*")
+          .replace(/\u0000/g, ".*"),
+      )
   : [];
 
 const touchesOwned = (paths) =>
