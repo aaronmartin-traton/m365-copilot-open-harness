@@ -4,6 +4,7 @@ import { RequestScheduler, SchedulerBusyError } from "./scheduler.js";
 const deferred = <T>() => {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((r) => { resolve = r; });
+
   return { promise, resolve };
 };
 
@@ -12,16 +13,21 @@ describe("RequestScheduler", () => {
     const scheduler = new RequestScheduler({ maxConcurrency: 1, newThreadsPerMinute: 60000, newThreadBurst: 10 });
     const first = deferred<string>();
     const order: string[] = [];
+
     const a = scheduler.schedule({ newConversation: false }, async () => {
       order.push("a-start");
       const value = await first.promise;
       order.push("a-end");
+
       return value;
     });
+
     const b = scheduler.schedule({ newConversation: false }, async () => {
       order.push("b");
+
       return "b";
     });
+
     expect(order).toEqual(["a-start"]);
     first.resolve("a");
     await expect(a).resolves.toBe("a");
@@ -80,11 +86,14 @@ describe("RequestScheduler", () => {
 
   it("defers fresh work after burst exhaustion but lets continuations bypass it", async () => {
     vi.useFakeTimers();
+
     try {
       let now = 0;
+
       const scheduler = new RequestScheduler({
         maxConcurrency: 1, maxQueueLength: 4, newThreadsPerMinute: 60, newThreadBurst: 1, now: () => now,
       });
+
       const gate = deferred<void>();
       const active = scheduler.schedule({ newConversation: true }, async () => { await gate.promise; });
       const fresh = scheduler.schedule({ newConversation: true }, async () => "fresh");

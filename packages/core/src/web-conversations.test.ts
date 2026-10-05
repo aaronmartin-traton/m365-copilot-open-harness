@@ -10,6 +10,7 @@ function fakeBrowser(responses: Array<{ status: number; body: unknown }>, finalU
   const bodies: unknown[] = [];
   let listener: ((request: unknown) => void) | undefined;
   let closed = false;
+
   const page = {
     on: (_event: string, callback: (request: unknown) => void) => { listener = callback; },
     off: () => { listener = undefined; },
@@ -27,15 +28,19 @@ function fakeBrowser(responses: Array<{ status: number; body: unknown }>, finalU
       requests.push(arg.body);
       bodies.push(arg.body);
       const response = responses.shift();
+
       if (!response) throw new Error("unexpected browser fetch");
+
       return response;
     },
   };
+
   const context = {
     pages: () => [page],
     newPage: async () => page,
     close: async () => { closed = true; },
   };
+
   return { context, requests, bodies, get closed() { return closed; } };
 }
 
@@ -46,10 +51,12 @@ describe("M365WebConversationClient", () => {
       { status: 200, body: {} },
       { status: 200, body: { store: { conversationPageHistoryList: { chats: [] } } } },
     ]);
+
     const client = new M365WebConversationClient({
       profileDir: "profile",
       launchPersistentContext: async () => fake.context as never,
     });
+
     await client.deleteConversation({ conversationId: "target" });
     expect(fake.requests).toHaveLength(3);
     expect(fake.requests[1]).toMatchObject({ action: "DeleteConversation", conversationId: "target", state: {
@@ -81,6 +88,7 @@ describe("M365WebConversationClient", () => {
       { status: 200, body: { store: { conversationPageHistoryList: { chats: [{ conversationId: "target" }] } } } },
       { status: 403, body: {} },
     ]);
+
     const client = new M365WebConversationClient({ launchPersistentContext: async () => fake.context as never });
     await expect(client.deleteConversation({ conversationId: "target" })).rejects.toEqual(expect.objectContaining({
       code: "delete_failed",

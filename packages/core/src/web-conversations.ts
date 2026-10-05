@@ -8,11 +8,14 @@ import { createLogger } from "./log.js";
 type LaunchPersistentContextOptions = Parameters<typeof chromium.launchPersistentContext>[1];
 
 const log = createLogger("web-conversations");
+
 const CHAT_URL = "https://m365.cloud.microsoft/chat/";
+
 const ALLOWED_CONTEXT_HEADERS = [
   "x-client-eligibility", "x-host-context", "x-route-id", "x-session-id",
   "referer", "accept", "user-agent",
 ] as const;
+
 type AllowedContextHeader = typeof ALLOWED_CONTEXT_HEADERS[number];
 
 type NavigationStore = {
@@ -40,6 +43,7 @@ export class M365WebSessionUnavailableError extends Error {
     this.name = "M365WebSessionUnavailableError";
   }
 }
+
 export interface M365WebConversationClientOptions {
   launchPersistentContext?: (userDataDir: string, options?: LaunchPersistentContextOptions) => Promise<BrowserContext>;
   profileDir?: string;
@@ -66,12 +70,14 @@ const JsonObject = z.record(z.string(), z.unknown());
 
 function navigationStore(body: unknown): NavigationStore {
   const rootResult = JsonObject.safeParse(body);
+
   if (!rootResult.success) return {};
   const root = rootResult.data;
   const candidateResult = JsonObject.safeParse(root.store ?? root.navigationStore);
   const source = candidateResult.success ? candidateResult.data : root;
   const historyResult = JsonObject.safeParse(source.conversationPageHistoryList);
   const chatsResult = historyResult.success ? z.array(JsonObject).safeParse(historyResult.data.chats) : null;
+
   return {
     conversationPageHistoryList: historyResult.success
       ? { chats: chatsResult?.success ? chatsResult.data : [] }
@@ -86,6 +92,7 @@ function conversationId(chat: Record<string, unknown>): string | undefined {
   for (const key of ["conversationId", "conversationID", "id"]) {
     if (typeof chat[key] === "string") return chat[key];
   }
+
   return undefined;
 }
 
@@ -100,6 +107,7 @@ export class M365WebConversationClient implements M365WebConversationClientLike 
     this.launchPersistentContext = options.launchPersistentContext ?? (async (userDataDir, launchOptions) => {
       // Load Playwright only when a due deletion actually needs a browser.
       const { chromium } = await import("playwright");
+
       return chromium.launchPersistentContext(userDataDir, {
         headless: options.headless ?? process.env.M365_WEB_HEADLESS !== "0",
         ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
@@ -111,6 +119,7 @@ export class M365WebConversationClient implements M365WebConversationClientLike 
 
   async deleteConversation({ conversationId: id }: { conversationId: string }): Promise<void> {
     let context: BrowserContext | undefined;
+
     try {
       context = await this.launchPersistentContext(this.profileDir, {});
       const page = context.pages()[0] ?? await context.newPage();
@@ -119,6 +128,7 @@ export class M365WebConversationClient implements M365WebConversationClientLike 
       const beforeStore = navigationStore(before.body);
       const beforeChats = beforeStore.conversationPageHistoryList?.chats ?? [];
       log.info(`RefreshNavPane chats=${beforeChats.length} target=${redactedId(id)} present=${hasConversation(beforeStore, id)}`);
+
       if (!hasConversation(beforeStore, id)) {
         throw new M365WebConversationError("target_missing", `Managed conversation was not present in M365 navigation (${beforeChats.length} chats)`);
       }
@@ -129,20 +139,25 @@ export class M365WebConversationClient implements M365WebConversationClientLike 
         tasksHub: beforeStore.tasksHub ?? null,
         tasksFlyout: beforeStore.tasksFlyout ?? null,
       };
+
       const deleted = await this.post(page, headers, {
         action: "DeleteConversation",
         conversationId: id,
         state,
       });
+
       log.info(`DeleteConversation status=${deleted.status} conversation=${redactedId(id)}`);
+
       if (deleted.status !== 200) {
         throw new M365WebConversationError("delete_failed", `DeleteConversation returned HTTP ${deleted.status}`);
       }
 
       const after = await this.post(page, headers, { action: "RefreshNavPane" });
+
       if (after.status !== 200) {
         throw new M365WebConversationError("navigation_failed", `RefreshNavPane returned HTTP ${after.status}`);
       }
+
       if (hasConversation(navigationStore(after.body), id)) {
         throw new M365WebConversationError("target_still_present", "M365 navigation still contains deleted conversation");
       }
@@ -153,23 +168,32 @@ export class M365WebConversationClient implements M365WebConversationClientLike 
 
   private async openAndCaptureHeaders(page: Page): Promise<Record<string, string>> {
     const captured = new Map<AllowedContextHeader, string>();
+
     const onRequest = (request: Request) => {
       if (request.method() !== "POST" || !new URL(request.url()).pathname.endsWith("/chat")) return;
       const requestHeaders = request.headers();
+
       for (const name of ALLOWED_CONTEXT_HEADERS) {
         const value = requestHeaders[name];
+
         if (value) captured.set(name, value);
       }
     };
+
     page.on("request", onRequest);
+
     try {
       await page.goto(CHAT_URL, { waitUntil: "domcontentloaded" });
+
       if (captured.size === 0) await page.waitForTimeout(5_000);
     } finally {
       page.off("request", onRequest);
     }
+
     if (isSignInHost(page.url())) throw new M365WebSessionUnavailableError();
+
     if (captured.size === 0) throw new M365WebSessionUnavailableError("M365 web navigation did not expose UI context");
+
     return Object.fromEntries(captured);
   }
 
@@ -181,8 +205,11 @@ export class M365WebConversationClient implements M365WebConversationClientLike 
         body: JSON.stringify(input.body),
         credentials: "include",
       });
+
       let parsed: unknown = null;
+
       try { parsed = await response.json(); } catch {}
+
       return { status: response.status, body: parsed };
     }, { headers, body });
   }

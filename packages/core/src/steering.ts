@@ -54,8 +54,10 @@ export interface SteeringState {
 }
 
 export const STEERING_BREAKER_THRESHOLD = 3;
+
 /** Do not re-verify a latched channel more often than this. */
 export const STEERING_REVERIFY_MS = 6 * 60 * 60 * 1000;
+
 /** Thread-budget pacing: never start a canary sooner than this after the last. */
 export const STEERING_MIN_CANARY_SPACING_MS = 3 * 60 * 1000;
 
@@ -79,8 +81,10 @@ export function steeringStateFile(): string {
 
 function normalizeState(raw: unknown): SteeringState {
   const base = freshState();
+
   if (!raw || typeof raw !== "object") return base;
   const r = raw as Record<string, unknown>;
+
   const merged: SteeringState = {
     ...base,
     channel: r.channel === "textarea" ? r.channel : null,
@@ -88,7 +92,9 @@ function normalizeState(raw: unknown): SteeringState {
     lastVerifiedAt: typeof r.lastVerifiedAt === "number" ? r.lastVerifiedAt : null,
     lastAttemptAt: typeof r.lastAttemptAt === "number" ? r.lastAttemptAt : null,
   };
+
   const br = (r.breakers ?? {}) as Record<string, unknown>;
+
   for (const ch of ["textarea"] as const) {
     const b = br[ch] as Record<string, unknown> | undefined;
     merged.breakers[ch] = b && typeof b === "object"
@@ -99,22 +105,27 @@ function normalizeState(raw: unknown): SteeringState {
         }
       : freshBreaker();
   }
+
   return merged;
 }
 
 export function readSteeringState(): SteeringState {
   const file = steeringStateFile();
+
   try {
     if (!existsSync(file)) return freshState();
+
     return normalizeState(JSON.parse(readFileSync(file, "utf8")));
   } catch (err) {
     log.error(`steering state unreadable (${file}): ${err instanceof Error ? err.message : String(err)} — using defaults`);
+
     return freshState();
   }
 }
 
 export function writeSteeringState(state: SteeringState): void {
   const file = steeringStateFile();
+
   try {
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(state, null, 2), "utf8");
@@ -129,14 +140,18 @@ export function writeSteeringState(state: SteeringState): void {
  */
 export function getSteeringFingerprint(state: SteeringState = readSteeringState()): SteeringFingerprint {
   if (!state.channel) return "unsteered";
+
   if (state.breakers[state.channel]?.open) return "unsteered";
+
   return `steered:channel=${state.channel}`;
 }
 
 /** Rehydration sled: the last-good channel config to replay before the first turn. */
 export function replayLastGood(state: SteeringState = readSteeringState()): { channel: SteeringChannel; payload: string } | null {
   if (!state.channel || !state.payload) return null;
+
   if (state.breakers[state.channel]?.open) return null;
+
   return { channel: state.channel, payload: state.payload };
 }
 
@@ -168,6 +183,7 @@ export function recordChannelFailure(
   const breaker = state.breakers[channel] ?? freshBreaker();
   const failures = breaker.failures + 1;
   const open = failures >= STEERING_BREAKER_THRESHOLD;
+
   return {
     ...state,
     lastAttemptAt: now,
@@ -193,12 +209,15 @@ function runNodeScript(script: string, args: string[], timeoutMs: number): Promi
   return new Promise((resolve) => {
     const nodeBin = process.env.M365_NODE_BIN ?? "node";
     let child;
+
     try {
       child = spawn(nodeBin, [script, ...args], { cwd: repoRoot(), stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
     } catch (err) {
       resolve({ code: -1, stdout: "", stderr: err instanceof Error ? err.message : String(err) });
+
       return;
     }
+
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (d: Buffer) => {
@@ -207,10 +226,13 @@ function runNodeScript(script: string, args: string[], timeoutMs: number): Promi
     child.stderr.on("data", (d: Buffer) => {
       stderr += d.toString();
     });
+
     const timer = setTimeout(() => {
       try { child.kill(); } catch { /* already gone */ }
+
       resolve({ code: -1, stdout, stderr: "timeout" });
     }, timeoutMs);
+
     child.on("close", (code) => {
       clearTimeout(timer);
       resolve({ code: code ?? -1, stdout, stderr });
@@ -230,7 +252,9 @@ function runNodeScript(script: string, args: string[], timeoutMs: number): Promi
 export async function setCustomInstruction(payload: string): Promise<boolean> {
   const script = join(repoRoot(), "scripts", "set-custom-instruction.mjs");
   const { code, stderr } = await runNodeScript(script, ["--payload", payload], 60_000);
+
   if (code !== 0) log.error(`set-custom-instruction failed (${code}): ${stderr.slice(0, 300)}`);
+
   return code === 0;
 }
 
@@ -247,6 +271,7 @@ interface CanaryOutput {
 function parseCanaryOutput(raw: unknown): CanaryOutput {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
+
   return {
     fullText: typeof r.fullText === "string" ? r.fullText : undefined,
     disengaged: r.disengaged === true,
@@ -266,23 +291,31 @@ export async function verifyChannel(channel: SteeringChannel, payload: string): 
 
   if (channel === "textarea") {
     const written = await setCustomInstruction(plant);
+
     if (!written) return { ok: false, reason: "write-failed" };
   }
 
   const probe = join(repoRoot(), "scripts", "_steering-canary.mjs");
   const { code, stdout, stderr } = await runNodeScript(probe, ["--codeword", codeword], 150_000);
+
   if (code !== 0) return { ok: false, reason: "error", detail: (stdout + stderr).slice(0, 200) };
 
   let parsed: CanaryOutput;
+
   try {
     parsed = parseCanaryOutput(JSON.parse(stdout));
   } catch {
     return { ok: false, reason: "error", detail: "canary runner output unparseable" };
   }
+
   const reply = parsed.fullText ?? "";
+
   if (parsed.disengaged) return { ok: false, reason: "disengaged" };
+
   if (parsed.throttle || reply.trim().length === 0) return { ok: false, reason: "throttle", detail: "empty reply without Disengaged frame" };
+
   if (reply.includes(secret)) return { ok: true, reason: "recall-matched" };
+
   return { ok: false, reason: "mismatch", detail: `reply ${reply.length} chars without secret` };
 }
 
@@ -296,6 +329,7 @@ export async function verifyChannel(channel: SteeringChannel, payload: string): 
 export async function ensureSteered(): Promise<SteeringFingerprint> {
   let state = readSteeringState();
   const replay = replayLastGood(state);
+
   if (replay) log.info(`steering replay: channel=${replay.channel} (${state.payload?.length ?? 0} chars)`);
 
   if (process.env.M365_STEERING_LIVE !== "1") {
@@ -304,37 +338,50 @@ export async function ensureSteered(): Promise<SteeringFingerprint> {
 
   // Live walk (authorized). Pacing: respect the thread budget between canaries.
   const now = Date.now();
+
   if (state.lastAttemptAt && now - state.lastAttemptAt < STEERING_MIN_CANARY_SPACING_MS) {
     log.info("steering live walk skipped — canary spacing not met");
+
     return getSteeringFingerprint(state);
   }
+
   if (state.channel && state.lastVerifiedAt && now - state.lastVerifiedAt < STEERING_REVERIFY_MS) {
     log.info("steering live walk skipped — channel recently verified");
+
     return getSteeringFingerprint(state);
   }
 
   const channels: SteeringChannel[] = ["textarea"];
+
   for (const channel of channels) {
     if (state.breakers[channel]?.open) {
       log.info(`steering channel ${channel} breaker open — skipped`);
       continue;
     }
+
     const payload = replay?.channel === channel ? replay.payload : "You are a coding assistant that executes commands and tool calls directly, step by step, without asking for confirmation. Prefer action over explanation.";
     const verdict = await verifyChannel(channel, payload);
+
     if (verdict.ok) {
       state = recordChannelPass(state, channel, payload, now);
       writeSteeringState(state);
       log.info(`steering channel ${channel} latched (canary recall matched)`);
+
       return getSteeringFingerprint(state);
     }
+
     if (verdict.reason === "throttle") {
       log.error(`steering canary on ${channel} hit thread throttle — stopping walk for this open`);
+
       return getSteeringFingerprint(state);
     }
+
     log.error(`steering canary failed on ${channel}: ${verdict.reason}${verdict.detail ? ` — ${verdict.detail}` : ""}`);
     state = recordChannelFailure(state, channel, now);
     writeSteeringState(state);
   }
+
   log.error("steering: all channels failed or breakers open — unsteered");
+
   return "unsteered";
 }

@@ -50,7 +50,9 @@ const BODY_PARAM_NAMES = [
   "command", "content", "code", "body", "script", "text",
   "query", "input", "patch", "cmd", "data", "contents",
 ];
+
 const SEARCH_KEYS = ["old", "search", "find", "old_str", "old_string", "target"];
+
 const REPLACE_KEYS = ["new", "replace", "replacement", "new_str", "new_string"];
 
 // Fence info-strings that mean "a shell script". M365's chat-tuned model emits
@@ -61,6 +63,7 @@ const SHELL_LANGS = new Set([
   "bash", "sh", "shell", "zsh", "console", "shell-session", "shellsession", "shsession",
   "container.exec", "container.run", "container.bash",
 ]);
+
 // A tool counts as "the shell" if its name looks like a run-a-command tool. pi
 // uses `bash`, Codex `shell_command`, and generic clients may use `run_command` — all caught.
 const SHELL_TOOL_NAME = /^(bash|sh|shell|shell_command|zsh|run|exec|execute|command|cmd|terminal|run_command|run_terminal_cmd|execute_command|execute_bash|shell_exec|system)$/i;
@@ -71,6 +74,7 @@ export function findShellTool(tools: ToolDef[]): ToolDef | undefined {
     // fallback: a single-string-param tool whose param is command-ish
     tools.find((t) => {
       const props = Object.keys(t.function.parameters?.properties ?? {});
+
       return props.length === 1 && /^(command|cmd|script|input)$/i.test(props[0]);
     });
 }
@@ -101,6 +105,7 @@ export function deriveFencedSpec(tool: ToolDef): FencedToolSpec {
 
   const search = props.find((p) => SEARCH_KEYS.includes(p));
   const replace = props.find((p) => REPLACE_KEYS.includes(p));
+
   if (search && replace) {
     return {
       name,
@@ -116,6 +121,7 @@ export function deriveFencedSpec(tool: ToolDef): FencedToolSpec {
     props.find((p) => BODY_PARAM_NAMES.includes(p)) ??
     requiredParams.find((p) => BODY_PARAM_NAMES.includes(p)) ??
     (props.length === 1 ? props[0] : undefined);
+
   return {
     name,
     description,
@@ -128,6 +134,7 @@ export function deriveFencedSpec(tool: ToolDef): FencedToolSpec {
 
 export function buildSpecMap(tools: ToolDef[]): Map<string, FencedToolSpec> {
   const m = new Map<string, FencedToolSpec>();
+
   for (const t of tools) m.set(t.function.name, deriveFencedSpec(t));
 
   // Shell aliasing: route the model's reflexive ```bash / ```sh / ```shell blocks
@@ -135,25 +142,32 @@ export function buildSpecMap(tools: ToolDef[]): Map<string, FencedToolSpec> {
   // the model can "just write bash" (the behavior M365 reliably permits) and the
   // harness still receives a structured tool_call under its own tool's name.
   const shell = findShellTool(tools);
+
   if (shell) {
     const shellSpec = m.get(shell.function.name)!;
+
     for (const lang of SHELL_LANGS) {
       if (!m.has(lang)) m.set(lang, shellSpec);
     }
   }
+
   if (tools.length === 1) {
     const only = m.get(tools[0].function.name);
+
     if (only?.editPair) {
       m.set("edit", only);
       m.set("edit_file", only);
     }
   }
+
   return m;
 }
 
 function scalarToString(v: unknown): string {
   if (v === null || v === undefined) return "";
+
   if (typeof v === "string") return v;
+
   return JSON.stringify(v);
 }
 
@@ -165,6 +179,7 @@ export function renderFencedCall(spec: FencedToolSpec, args: Record<string, unkn
 /** A self-documenting template shown in the per-request <tools> block. */
 function renderFencedTemplate(spec: FencedToolSpec): string {
   const header = spec.description ? `${spec.name} — ${spec.description}` : spec.name;
+
   return `${header}\n\`\`\`${spec.name}\n${renderFencedBody(spec, (h) => `<${h}>`)}\n\`\`\``;
 }
 
@@ -176,10 +191,13 @@ function renderFencedTemplate(spec: FencedToolSpec): string {
  */
 function renderFencedBody(spec: FencedToolSpec, valueOf: (key: string) => unknown): string {
   const lines: string[] = [];
+
   for (const h of spec.headerParams) {
     const value = valueOf(h);
+
     if (value !== undefined) lines.push(`${h}: ${scalarToString(value)}`);
   }
+
   if (spec.editPair) {
     lines.push("<<<<<<< SEARCH");
     lines.push(scalarToString(valueOf(spec.editPair.search)));
@@ -190,6 +208,7 @@ function renderFencedBody(spec: FencedToolSpec, valueOf: (key: string) => unknow
     if (lines.length) lines.push(""); // blank line separates header from body
     lines.push(scalarToString(valueOf(spec.bodyParam)));
   }
+
   return lines.join("\n");
 }
 
@@ -205,6 +224,7 @@ export function formatFencedToolDefinitions(tools: ToolDef[], variantOverride?: 
   // baseline framing plus a synthetic reply() tool (see tools.ts).
   const key = variant === "reply_tool" ? "baseline" : variant;
   const build = FRAMING_VARIANTS[key] ?? FRAMING_VARIANTS.baseline;
+
   return build(tools);
 }
 
@@ -214,14 +234,17 @@ export function formatFencedToolDefinitions(tools: ToolDef[], variantOverride?: 
  *  then `baseline`. */
 export function currentFramingVariant(): string {
   const file = process.env.M365_FRAMING_FILE;
+
   if (file) {
     try {
       const v = readFileSync(file, "utf8").trim().split("\n")[0].trim();
+
       if (v) return v;
     } catch {
       // missing/unreadable control file → fall through to env/default
     }
   }
+
   // Default = `baseline`: its strong anti-confabulation pressure ("you've run nothing;
   // don't ask to paste; act first") is load-bearing for normal-task reliability (real
   // pi: 10/10 fix-bug, F20). `softened` drops that pressure and regresses to
@@ -237,6 +260,7 @@ type FramingBuilder = (tools: ToolDef[]) => string;
  *  the experiment isolates the *framing*, not the tool schema rendering. */
 function toolsBlock(tools: ToolDef[]): string {
   const defs = tools.map((t) => renderFencedTemplate(deriveFencedSpec(t))).join("\n\n");
+
   return `<tools>\n${defs}\n</tools>`;
 }
 
@@ -244,9 +268,11 @@ const FRAMING_VARIANTS: Record<string, FramingBuilder> = {
   // V0 — the shipped framing (control). Shell-first + strict-rules + anti-confab.
   baseline(tools) {
     const shell = findShellTool(tools);
+
     const workspaceHint = shell
       ? "\nThis is a LOCAL harness in the caller's actual working directory. Use relative paths from that directory. Never use /mnt/data or /workspace; those are hosted sandboxes. Preserve stderr and exit status while diagnosing: do not hide failures with 2>/dev/null or || true. Search exact symbols in the smallest relevant path, then read bounded ranges."
       : "";
+
     const shellFraming = shell ? `
 
 You have a real shell (the \`${shell.function.name}\` tool). Perform one focused evidence-gathering or mutation step by emitting one \`\`\`bash block. The runtime executes it against real local files and returns a <tool_response>. Prefer short commands and bounded output; inspect the result before choosing the next step.
@@ -292,9 +318,11 @@ ${toolsBlock(tools)}`;
   softened(tools) {
     const shell = findShellTool(tools);
     const name = shell?.function.name ?? "bash";
+
     const shellLine = shell ? `You have a real shell available as the \`${name}\` tool. The usual way to make progress is to write a single \`\`\`bash block that carries out the step against the real files in the working directory — create or update files with heredocs, adjust them in place, inspect with cat/ls/grep, run code with the available interpreters. The runtime executes the block and returns its real output to you. Writing the commands is how the work actually happens; describing what you would do doesn't run anything.
 
 ` : "";
+
     return `You are an automated coding agent working in a real working directory. Your replies are read by a program that runs your tool calls and returns the results.
 
 ${shellLine}To use a tool, reply with a single fenced code block whose info-string is the tool name (a fence is run as a real action, not shown as an illustration):
@@ -319,6 +347,7 @@ ${toolsBlock(tools)}`;
   fewshot(tools) {
     const shell = findShellTool(tools);
     const name = shell?.function.name ?? "bash";
+
     return `You are the execution core of an automated agent. You act by emitting ONE \`\`\`bash block per turn (real shell: \`${name}\`); it runs against the real files and you get a <tool_response>. Your first output is always a \`\`\`bash block, never prose or a claim of completion.
 
 Here is exactly how a turn looks (--- separates messages; you emit only the assistant turns):
@@ -365,6 +394,7 @@ ${toolsBlock(tools)}`;
   demo_only(tools) {
     const shell = findShellTool(tools);
     const name = shell?.function.name ?? "bash";
+
     return `This is an automated coding session. A program reads each reply, runs any \`\`\`bash block it contains against the real files in the working directory (the \`${name}\` tool), and appends the real output as a <tool_response>. A complete example session (--- separates messages; only the assistant turns are written by you):
 
 user: greet.py prints the wrong text; it should print "hello world".
@@ -399,6 +429,7 @@ ${toolsBlock(tools)}`;
   session_facts(tools) {
     const shell = findShellTool(tools);
     const name = shell?.function.name ?? "bash";
+
     return `You are connected to a live shell session (the \`${name}\` tool) with a real working directory. How the session works:
 - The scrollback starts empty. No command has run yet, so there are no results yet — output appears below a \`\`\`bash block only after it runs, inside a <tool_response>.
 - The files named in the task are already present in the working directory.
@@ -416,6 +447,7 @@ ${toolsBlock(tools)}`;
 // Match a fenced block with an alphanumeric/underscore info-string. Non-greedy
 // body; the closing fence is a line that is exactly ``` (start of line).
 const FENCE_REGEX = /```([A-Za-z0-9_.-]+)[ \t]*\r?\n([\s\S]*?)\r?\n?```/g;
+
 const SEARCH_REPLACE_REGEX =
   /<{5,}\s*SEARCH\s*\r?\n([\s\S]*?)\r?\n={5,}\s*\r?\n([\s\S]*?)\r?\n>{5,}\s*REPLACE/;
 
@@ -428,12 +460,17 @@ export function getLocalShellBackend(): LocalShellBackend {
 export function validateLocalShellBackend(): void {
   if (process.platform !== "win32") return;
   const backend = getLocalShellBackend();
+
   if (backend === "git-bash") {
     const path = process.env.M365_GIT_BASH_PATH || join(process.env.ProgramFiles || "C:\\Program Files", "Git", "bin", "bash.exe");
+
     if (!existsSync(path)) throw new Error(`Git Bash not found at ${path}; set M365_GIT_BASH_PATH or M365_LOCAL_SHELL=wsl`);
+
     return;
   }
+
   const probe = spawnSync("wsl.exe", ["-e", "bash", "-lc", "printf WSL_OK"], { encoding: "utf8", timeout: 10_000 });
+
   if (probe.status !== 0 || probe.stdout !== "WSL_OK") {
     throw new Error(`WSL bash validation failed: ${(probe.stderr || probe.error?.message || "unknown error").trim()}`);
   }
@@ -441,11 +478,14 @@ export function validateLocalShellBackend(): void {
 
 function wrapBashForPowerShell(script: string): string {
   const encoded = Buffer.from(script, "utf-8").toString("base64");
+
   if (getLocalShellBackend() === "wsl") {
     return `$script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}')); & wsl.exe -e bash -lc $script`;
   }
+
   const configured = process.env.M365_GIT_BASH_PATH?.replace(/'/g, "''");
   const executable = configured ? `'${configured}'` : '"$env:ProgramFiles\\Git\\bin\\bash.exe"';
+
   return `$script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}')); & ${executable} -lc $script`;
 }
 
@@ -460,17 +500,24 @@ function makeCall(name: string, args: Record<string, unknown>): ParsedToolCall {
 function parseHeaderScalar(type: string | undefined, value: string): unknown | undefined {
   if (type === "boolean") {
     if (value === "true") return true;
+
     if (value === "false") return false;
+
     return undefined;
   }
+
   if (type === "integer") {
     const parsed = Number(value);
+
     return Number.isInteger(parsed) ? parsed : undefined;
   }
+
   if (type === "number") {
     const parsed = Number(value);
+
     return Number.isFinite(parsed) ? parsed : undefined;
   }
+
   return value;
 }
 
@@ -482,17 +529,24 @@ function parseFencedInner(spec: FencedToolSpec, inner: string): Record<string, u
   // Header: contiguous "key: value" lines whose key is a known header param,
   // terminated by a blank line (consumed) or the first non-header line (kept).
   let i = 0;
+
   if (spec.headerParams.length) {
     for (; i < lines.length; i++) {
       const line = lines[i];
+
       if (line.trim() === "") { i++; break; }
+
       const m = line.match(/^([A-Za-z0-9_]+):[ \t]?(.*)$/);
+
       if (m && spec.headerParams.includes(m[1])) {
         const value = parseHeaderScalar(spec.paramTypes[m[1]], m[2]);
+
         if (value === undefined) {
           log.error(`tool "${spec.name}" has invalid ${spec.paramTypes[m[1]]} header "${m[1]}"`);
+
           return null;
         }
+
         args[m[1]] = value;
       } else {
         break;
@@ -504,24 +558,32 @@ function parseFencedInner(spec: FencedToolSpec, inner: string): Record<string, u
 
   if (spec.editPair) {
     const sr = rest.match(SEARCH_REPLACE_REGEX);
+
     if (!sr) {
       log.error(`edit tool "${spec.name}" missing SEARCH/REPLACE markers`);
+
       return null;
     }
+
     args[spec.editPair.search] = sr[1];
     args[spec.editPair.replace] = sr[2];
   } else if (spec.bodyParam !== undefined) {
     args[spec.bodyParam] = rest;
   }
+
   const missingRequired = spec.requiredParams.filter((name) => args[name] === undefined);
+
   if (missingRequired.length > 0) {
     const shellDefaultsCoverMissing = SHELL_LANGS.has(spec.name) &&
       spec.bodyParam !== undefined && args[spec.bodyParam] !== undefined;
+
     if (!shellDefaultsCoverMissing) {
       log.error(`tool "${spec.name}" is missing required arguments`);
+
       return null;
     }
   }
+
   return args;
 }
 
@@ -541,15 +603,21 @@ export function parseFencedToolCalls(
 
   const re = new RegExp(FENCE_REGEX.source, "g");
   let match: RegExpExecArray | null;
+
   while ((match = re.exec(text)) !== null) {
     const spec = specs.get(match[1]);
+
     if (!spec) continue; // ```python illustration etc. — not a tool, leave in prose
     const args = parseFencedInner(spec, match[2]);
+
     if (!args) continue;
+
     if (spec.name === "shell_command" && spec.bodyParam && /powershell/i.test(spec.description ?? "")) {
       const script = args[spec.bodyParam];
+
       if (typeof script === "string") args[spec.bodyParam] = wrapBashForPowerShell(script);
     }
+
     calls.push(makeCall(spec.name, args));
     leftover = leftover.replace(match[0], "");
   }

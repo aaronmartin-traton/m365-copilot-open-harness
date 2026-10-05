@@ -30,10 +30,12 @@ describe("extractAuthCode", () => {
 /** Minimal playwright-Page-shaped fake: records handlers, emits request URLs. */
 function fakeEventSource() {
   const handlers = new Set<(request: { url(): string }) => void>();
+
   return {
     source: {
       on: (_event: "request", handler: (request: { url(): string }) => void) => {
         handlers.add(handler);
+
         return () => {
           handlers.delete(handler);
         };

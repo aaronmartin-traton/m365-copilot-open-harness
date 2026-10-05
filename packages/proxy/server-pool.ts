@@ -1,9 +1,14 @@
 import type { M365WebConversationClientLike } from "@m365-copilot/core";
-import { SessionPool } from "@m365-copilot/proxy-lib";
+import { SessionPool, activeBackend } from "@m365-copilot/proxy-lib";
+
 let webClient: M365WebConversationClientLike | null = null;
+
 let automaticReaperDisabled = process.env.M365_WEB_PRUNE_PROVEN !== "1";
+
 let reaperPromise: Promise<{ pruned: number; failed: number }> | null = null;
+
 let lastRunAt: number | null = null;
+
 let lastResult = { pruned: 0, failed: 0 };
 
 const remotePruner = async (ids: { sessionId: string; conversationId: string }): Promise<void> => {
@@ -13,6 +18,7 @@ const remotePruner = async (ids: { sessionId: string; conversationId: string }):
     const { M365WebConversationClient } = await import("@m365-copilot/core");
     webClient = new M365WebConversationClient();
   }
+
   try {
     await webClient.deleteConversation({ conversationId: ids.conversationId });
   } catch (error) {
@@ -22,7 +28,10 @@ const remotePruner = async (ids: { sessionId: string; conversationId: string }):
 };
 
 /** Process-wide pool; every request and maintenance operation shares its scheduler. */
-export const pool = new SessionPool({}, { remotePruner });
+export const pool = new SessionPool(
+  {},
+  { remotePruner, createSession: activeBackend().createSession },
+);
 
 export async function runReaper(): Promise<{ pruned: number; failed: number }> {
   if (reaperPromise) return reaperPromise;
@@ -31,8 +40,10 @@ export async function runReaper(): Promise<{ pruned: number; failed: number }> {
     lastResult = automaticReaperDisabled
       ? { pruned: 0, failed: 0 }
       : await pool.reapIdle();
+
     return lastResult;
   })().finally(() => { reaperPromise = null; });
+
   return reaperPromise;
 }
 
@@ -46,4 +57,5 @@ export function reaperHealth() {
 }
 
 const reaperTimer = setInterval(() => { void runReaper(); }, 60_000);
+
 reaperTimer.unref?.();

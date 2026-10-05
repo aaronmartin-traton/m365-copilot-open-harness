@@ -17,6 +17,7 @@ const bash: ToolDef = {
     parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
   },
 };
+
 const readFile: ToolDef = {
   type: "function",
   function: {
@@ -25,6 +26,7 @@ const readFile: ToolDef = {
     parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
   },
 };
+
 const writeFile: ToolDef = {
   type: "function",
   function: {
@@ -37,6 +39,7 @@ const writeFile: ToolDef = {
     },
   },
 };
+
 const editFile: ToolDef = {
   type: "function",
   function: {
@@ -51,7 +54,9 @@ const editFile: ToolDef = {
 };
 
 const ALL = [bash, readFile, writeFile, editFile];
+
 const specs = buildSpecMap(ALL);
+
 const singleEditSpecs = buildSpecMap([editFile]);
 
 describe("single edit aliases", () => {
@@ -115,6 +120,7 @@ describe("renderFencedCall", () => {
 describe("parseFencedToolCalls", () => {
   function argsOf(text: string, n = 0) {
     const { calls } = parseFencedToolCalls(text, specs);
+
     return { calls, args: calls[n] ? JSON.parse(calls[n].function.arguments) : null };
   }
 
@@ -133,6 +139,7 @@ describe("parseFencedToolCalls", () => {
         parameters: { type: "object", required: ["command"] },
       },
     };
+
     const { calls } = parseFencedToolCalls("```bash\nprintf ok\n```", buildSpecMap([incompleteShell]));
     expect(calls).toHaveLength(1);
     expect(JSON.parse(calls[0].function.arguments)).toEqual({ command: "printf ok" });
@@ -146,6 +153,7 @@ describe("parseFencedToolCalls", () => {
         parameters: { type: "object", required: ["command", "cwd", "env", "timeout", "pty", "async", "workspace"] },
       },
     };
+
     const { calls } = parseFencedToolCalls("```bash\nprintf ok\n```", buildSpecMap([normalizedShell]));
     expect(calls).toHaveLength(1);
     expect(JSON.parse(calls[0].function.arguments)).toEqual({ command: "printf ok" });
@@ -164,6 +172,7 @@ describe("parseFencedToolCalls", () => {
       old: "debug = False",
       new: "debug = True",
     });
+
     const { args } = argsOf(rendered);
     expect(args).toEqual({ path: "app.py", old: "debug = False", new: "debug = True" });
   });
@@ -215,6 +224,7 @@ describe("parseFencedToolCalls", () => {
         },
       },
     };
+
     const execSpecs = buildSpecMap([exec]);
     const parsed = parseFencedToolCalls("```exec\ninteractive: false\n\npwd\n```", execSpecs).calls;
     expect(parsed).toHaveLength(1);
@@ -227,6 +237,7 @@ describe("parseFencedToolCalls", () => {
       type: "function",
       function: { name: "read-file", parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] } },
     };
+
     const calls = parseFencedToolCalls("```read-file\nfile.txt\n```", buildSpecMap([hyphenated])).calls;
     expect(calls).toHaveLength(1);
     expect(calls[0].function.name).toBe("read-file");

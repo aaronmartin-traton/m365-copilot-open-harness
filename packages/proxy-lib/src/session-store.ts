@@ -49,6 +49,7 @@ export class SessionStateStore {
     for (const entry of this.entries()) {
       if (entry[1].conversationId === conversationId) return entry;
     }
+
     return undefined;
   }
 
@@ -60,18 +61,21 @@ export class SessionStateStore {
 
   lookupResponseId(responseId: string): string | undefined {
     const key = this.data.responseIds[responseId];
+
     return key && this.data.sessions[key] ? key : undefined;
   }
 
   deleteConversation(key: string): void {
     let changed = key in this.data.sessions;
     delete this.data.sessions[key];
+
     for (const [responseId, mappedKey] of Object.entries(this.data.responseIds)) {
       if (mappedKey === key) {
         delete this.data.responseIds[responseId];
         changed = true;
       }
     }
+
     if (changed) this.save();
   }
 
@@ -81,8 +85,10 @@ export class SessionStateStore {
 
   private load(): StoreData {
     if (!existsSync(this.path)) return { version: 2, sessions: {}, responseIds: {} };
+
     try {
       const parsed = JSON.parse(readFileSync(this.path, "utf8")) as Partial<StoreData> | LegacyStoreData;
+
       if (parsed?.version === 2 && parsed.sessions && typeof parsed.sessions === "object" &&
           parsed.responseIds && typeof parsed.responseIds === "object") {
         return {
@@ -91,8 +97,10 @@ export class SessionStateStore {
           responseIds: parsed.responseIds as Record<string, string>,
         };
       }
+
       if (parsed?.version === 1 && parsed.sessions && typeof parsed.sessions === "object") {
         const sessions: Record<string, PersistedSessionState> = {};
+
         for (const [key, state] of Object.entries(parsed.sessions)) {
           if (!state || typeof state !== "object") continue;
           sessions[key] = {
@@ -101,11 +109,13 @@ export class SessionStateStore {
             nextPruneAttemptAt: null,
           };
         }
+
         return { version: 2, sessions, responseIds: {} };
       }
     } catch {
       // Corrupt state is disposable. Never block proxy startup.
     }
+
     return { version: 2, sessions: {}, responseIds: {} };
   }
 

@@ -10,7 +10,8 @@ import {
   CompletionFrame,
   CloseFrame,
 } from "./schemas.js";
-import { decodeJwt, getToneForModel, type CopilotStream, type CapturedImage } from "./copilot.js";
+import { decodeJwt, getToneForModel, m365StopReason, m365UsageFields, type CopilotStream } from "./copilot.js";
+import type { ProviderImage } from "./provider.js";
 import {
   parseActionConfirmation,
   buildResumeInvokeAction,
@@ -22,6 +23,7 @@ import { prepareImageAttachments, type ImageInput } from "./images.js";
 import { ensureSteered, type SteeringFingerprint } from "./steering.js";
 
 const RS = "\x1E";
+
 const log = createLogger("session");
 
 // The exact frame the real m365.cloud.microsoft "Stop generating" button sends
@@ -44,6 +46,7 @@ const CODE_INTERPRETER_OPTIONS_SETS = [
   "code_interpreter_interactive_charts",
   "code_interpreter_matplotlib_patching",
 ];
+
 const IMAGE_GEN_OPTIONS_SETS = [
   "cwc_flux_image",
   "cwc_flux_v3",
@@ -62,9 +65,12 @@ const IMAGE_GEN_OPTIONS_SETS = [
 // per-request NDJSON file under ~/.config/opencode-m365/frames/. Cheap to run
 // in production; gives us forensic data when M365 starts emitting new fields.
 const DUMP_FRAMES = !!process.env.M365_DUMP_FRAMES;
+
 const DUMP_DIR = join(homedir(), ".config", "opencode-m365", "frames");
+
 function dumpFrame(requestId: string, parsed: unknown, direction: "recv" | "send") {
   if (!DUMP_FRAMES) return;
+
   try {
     mkdirSync(DUMP_DIR, { recursive: true });
     appendFileSync(
@@ -141,7 +147,9 @@ export function foldStreamText(
   next: string,
 ): { answer: string; emit: string | null } {
   if (next.length <= answer.length) return { answer, emit: null };
+
   if (next.startsWith(answer)) return { answer: next, emit: next.slice(answer.length) };
+
   return { answer: next, emit: null };
 }
 
@@ -240,6 +248,7 @@ export class CopilotSession {
     // M365_STEERING_LIVE unset this is a state-file read only (rehydration).
     if (!this.steeringInitialized) {
       this.steeringInitialized = true;
+
       try {
         this.steeringFingerprint = await ensureSteered();
       } catch (err) {
@@ -247,6 +256,7 @@ export class CopilotSession {
         this.steeringFingerprint = "unsteered";
       }
     }
+
     const steeringFingerprint = this.steeringFingerprint;
 
     const requestId = crypto.randomUUID();
@@ -265,6 +275,7 @@ export class CopilotSession {
       agent: "web",
       scenario: "OfficeWebIncludedCopilot",
     });
+
     if (process.env.M365_TEMPORARY_CHAT === "1") params.set("disableMemory", "1");
 
     const wsUrl = `wss://substrate.office.com/m365Copilot/Chathub/${claims.oid}@${claims.tid}?${params}`;
@@ -287,7 +298,7 @@ export class CopilotSession {
       // Highest per-component score across all messages this turn. The most
       // recent score isn't necessarily the most informative — the worst one is.
       const maxScores: Record<string, number> = {};
-      const imagesByToken = new Map<string, CapturedImage>();
+      const imagesByToken = new Map<string, ProviderImage>();
       let turnCountServer: number | null = null;
       let turnState: string | null = null;
       // Native-action round-trip state (H-NATIVE-6). `baseArgs` is the sent chat
@@ -307,6 +318,7 @@ export class CopilotSession {
       const queue: string[] = [];
       let streamDone = false;
       let streamError: Error | null = null;
+
       let waiting: {
         resolve: (result: IteratorResult<string>) => void;
         reject: (err: Error) => void;
@@ -321,17 +333,21 @@ export class CopilotSession {
           queue.push(text);
         }
       };
+
       const onDone = () => {
         streamDone = true;
+
         if (waiting) {
           const w = waiting;
           waiting = null;
           w.resolve({ value: undefined as any, done: true });
         }
       };
+
       const onError = (err: Error) => {
         streamError = err;
         streamDone = true;
+
         if (waiting) {
           const w = waiting;
           waiting = null;
@@ -343,24 +359,31 @@ export class CopilotSession {
       // newly-appended suffix (see foldStreamText for the prefix-safe rules).
       const advance = (next: string) => {
         const r = foldStreamText(answer, next);
+
         if (r.answer !== answer) {
           answer = r.answer;
           receivedContent = true;
         }
+
         if (r.emit) onDelta(r.emit);
       };
+
       const captureImages = (message: unknown) => {
         if (!message || typeof message !== "object" || !("contentGenerationProgressList" in message)) return;
         const list = message.contentGenerationProgressList;
+
         if (!Array.isArray(list)) return;
+
         for (const entry of list) {
           if (!entry || typeof entry !== "object" || !("ImageReferenceUrls" in entry)) continue;
           const urls = entry.ImageReferenceUrls;
+
           if (!Array.isArray(urls) || urls.length === 0 || typeof urls[0] !== "string") continue;
           const record = entry as Record<string, unknown>;
           const key = typeof record.fileToken === "string" ? record.fileToken : urls[0];
           const status = typeof record.status === "number" ? record.status : 0;
           const previous = imagesByToken.get(key);
+
           if (previous && (previous.status ?? 0) >= status) continue;
           imagesByToken.set(key, {
             referenceUrls: urls.filter((url): url is string => typeof url === "string"),
@@ -382,6 +405,20 @@ export class CopilotSession {
         },
         get hasContent() {
           return receivedContent;
+        },
+        get stopReason() {
+          return m365StopReason(messageType, receivedContent, throttleInfo);
+        },
+        get usage() {
+          return m365UsageFields({
+            throttle: throttleInfo,
+            contentOrigin,
+            messageType,
+            scores: Object.keys(maxScores).length ? { ...maxScores } : null,
+            turnCount: turnCountServer,
+            tone: getToneForModel(model),
+            steeringFingerprint,
+          });
         },
         get throttle() {
           return throttleInfo;
@@ -419,10 +456,13 @@ export class CopilotSession {
               if (queue.length > 0) {
                 return Promise.resolve({ value: queue.shift()!, done: false });
               }
+
               if (streamError) return Promise.reject(streamError);
+
               if (streamDone) {
                 return Promise.resolve({ value: undefined as any, done: true });
               }
+
               return new Promise((res, rej) => {
                 waiting = { resolve: res, reject: rej };
               });
@@ -451,8 +491,10 @@ export class CopilotSession {
         hiddenText?: string;
       }): boolean => {
         if (!interceptHostedShell || interceptedLocalTool) return false;
+
         if (message.messageType !== "Progress" || message.contentType !== "Code") return false;
         const command = message.hiddenText?.match(/^bash\s+-lc\s+([\s\S]+)$/)?.[1];
+
         if (!command) return false;
 
         interceptedLocalTool = true;
@@ -460,14 +502,17 @@ export class CopilotSession {
         log.info(`Intercepted hosted shell intent for local execution: ${trunc(command, 200)}`);
         advance(fencedCall);
         stopped = true;
+
         try {
           ws.send(STOP_FRAME);
           setTimeout(() => { try { ws.close(); } catch {} }, 500);
         } catch {
           try { ws.close(); } catch {}
         }
+
         return true;
       };
+
       // Cancellation: when the caller's signal aborts (HTTP client disconnected),
       // cancel the in-flight M365 turn the same way the real UI does — send the
       // Stop frame, then let the server's type:3 ack close the socket (with a
@@ -476,6 +521,7 @@ export class CopilotSession {
       const onAbort = () => {
         if (stopped) return;
         stopped = true;
+
         try {
           if (ws.readyState === WebSocket.OPEN && handshakeDone) {
             log.info("Aborted — sending Stop frame to cancel the turn");
@@ -489,10 +535,12 @@ export class CopilotSession {
           try { ws.close(); } catch {}
         }
       };
+
       if (signal) {
         if (signal.aborted) onAbort();
         else signal.addEventListener("abort", onAbort, { once: true });
       }
+
       const clearAbort = () => signal?.removeEventListener("abort", onAbort);
 
       ws.on("open", () => {
@@ -507,6 +555,7 @@ export class CopilotSession {
 
         for (const frame of frames) {
           let parsed: unknown;
+
           try {
             parsed = JSON.parse(frame);
           } catch {
@@ -514,18 +563,23 @@ export class CopilotSession {
               handshakeDone = true;
               sendChat();
             }
+
             continue;
           }
+
           dumpFrame(requestId, parsed, "recv");
 
           if (!handshakeDone) {
             handshakeDone = true;
             const hs = SignalRHandshakeResponse.safeParse(parsed);
+
             if (hs.success && hs.data.error) {
               ws.close();
               reject(new Error(`Handshake error: ${hs.data.error}`));
+
               return;
             }
+
             sendChat();
             continue;
           }
@@ -537,6 +591,7 @@ export class CopilotSession {
       ws.on("error", (err: Error) => {
         const msg = err.message || "connection failed";
         log.error("WS error:", msg);
+
         if (!handshakeDone) {
           reject(new Error(`WebSocket error: ${msg}`));
         } else {
@@ -678,7 +733,9 @@ export class CopilotSession {
               renderReferencesBehindEOS: true,
               disconnectBehavior: "continue",
         };
+
         baseArgs = args;
+
         const chatMsg = {
           arguments: [args],
           invocationId: "0",
@@ -718,18 +775,24 @@ export class CopilotSession {
       const maybeResumeAction = (m: unknown): boolean => {
         if (!nativeActions || actionResumed || !baseArgs) return false;
         const conf = parseActionConfirmation(m as any);
+
         if (!conf) return false;
         sawAction = true;
+
         if (!shouldAutoConfirm(conf, { autoConfirmAll: nativeActions.autoConfirmAll })) {
           log.info(`Native action ${conf.actionId} is consequential; autoConfirmAll off — not resuming`);
+
           return false;
         }
+
         actionResumed = true;
         const resumeArgs = { ...baseArgs, message: buildResumeInvokeAction(conf) };
         const frame = { arguments: [resumeArgs], invocationId: "0", target: "chat", type: 4 };
         dumpFrame(requestId, frame, "send");
         log.info(`Native action: auto-confirming actionId=${conf.actionId} via ResumeInvokeAction`);
+
         try { ws.send(JSON.stringify(frame) + RS); } catch (e) { log.error("resume send failed:", (e as Error).message); }
+
         return true;
       };
 
@@ -738,24 +801,31 @@ export class CopilotSession {
 
         if (base.type === 6) {
           ws.send(JSON.stringify({ type: 6 }) + RS);
+
           return;
         }
 
         if (base.type === 7) {
           const frame = CloseFrame.safeParse(raw);
+
           if (frame.success && frame.data.error) {
             onError(new Error(`Server close: ${frame.data.error}`));
           }
+
           ws.close();
+
           return;
         }
 
         if (base.type === 3) {
           const frame = CompletionFrame.safeParse(raw);
+
           if (frame.success && frame.data.error) {
             onError(new Error(`Completion error: ${frame.data.error}`));
           }
+
           ws.close();
+
           return;
         }
 
@@ -763,59 +833,81 @@ export class CopilotSession {
           // Stream item — the FINAL state of the conversation, with authoritative
           // throttle/turnCount/scores. Mine it before closing.
           const item = (raw as { item?: { messages?: any[]; throttling?: any; turnState?: string } }).item;
+
           if (item) {
             if (item.turnState) turnState = item.turnState;
+
             if (item.throttling) {
               throttleInfo = { current: item.throttling.numUserMessagesInConversation, max: item.throttling.maxNumUserMessagesInConversation };
             }
+
             let resumedHere = false;
+
             for (const m of item.messages ?? []) {
               if (m.author !== "bot") continue;
               captureImages(m);
+
               if (m.contentOrigin) contentOrigin = m.contentOrigin;
+
               if (m.messageType) messageType = m.messageType;
+
               if (m.messageId) messageId = m.messageId;
+
               if (typeof m.turnCount === "number") turnCountServer = m.turnCount;
+
               if (Array.isArray(m.scores)) {
                 for (const s of m.scores) {
                   if (typeof s?.component !== "string" || typeof s?.score !== "number") continue;
+
                   if (!(s.component in maxScores) || s.score > maxScores[s.component]) {
                     maxScores[s.component] = s.score;
                   }
                 }
               }
+
               if (maybeResumeAction(m)) resumedHere = true;
             }
+
             // If the model just triggered a custom action, this "final" item isn't
             // final — we sent a ResumeInvokeAction and must keep the socket open to
             // receive the action's result (H-NATIVE-6).
             if (resumedHere) return;
           }
+
           ws.close();
+
           return;
         }
 
         if (base.type === 1 && base.target === "update" && Array.isArray(base.arguments)) {
           if (interceptedLocalTool) return;
+
           for (const arg of base.arguments) {
             const delta = DeltaUpdate.safeParse(arg);
+
             if (delta.success) {
               advance(answer + delta.data.writeAtCursor);
               continue;
             }
 
             const msgUpdate = MessageUpdate.safeParse(arg);
+
             if (msgUpdate.success) {
               for (const m of msgUpdate.data.messages) {
                 if (maybeInterceptHostedCommand(m)) continue;
+
                 // Capture diagnostic meta from every bot message — including the
                 // control-typed ones — so callers can tell apart `DeepLeo` from
                 // `3PDeclarativeAgent` and surface `Disengaged` cleanly.
                 if (m.author === "bot") {
                   captureImages(m);
+
                   if (m.contentOrigin) contentOrigin = m.contentOrigin;
+
                   if (m.messageType) messageType = m.messageType;
+
                   if (m.messageId) messageId = m.messageId;
+
                   if (m.scores) {
                     for (const s of m.scores) {
                       if (!(s.component in maxScores) || s.score > maxScores[s.component]) {
@@ -823,21 +915,26 @@ export class CopilotSession {
                       }
                     }
                   }
+
                   if (typeof m.turnCount === "number") turnCountServer = m.turnCount;
+
                   if (m.turnState) turnState = m.turnState;
                   // A confirmation TRIGGER for a native action arrives here as a
                   // messageType'd bot frame (which the plain-chat path drops). Detect
                   // it and auto-approve on the same socket (H-NATIVE-6).
                   maybeResumeAction(m);
                 }
+
                 if (m.author === "bot" && m.text && !m.messageType) {
                   advance(m.text);
                 }
               }
+
               continue;
             }
 
             const throttle = ThrottlingUpdate.safeParse(arg);
+
             if (throttle.success) {
               const t = throttle.data.throttling;
               throttleInfo = { current: t.numUserMessagesInConversation, max: t.maxNumUserMessagesInConversation };

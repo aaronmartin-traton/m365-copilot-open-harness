@@ -103,6 +103,7 @@ export async function handleImageGeneration(
 
   try {
     const data: Array<{ url: string } | { b64_json: string }> = [];
+
     for (let i = 0; i < count; i++) {
       const images = await schedule(() =>
         generate(body.prompt, {
@@ -113,37 +114,47 @@ export async function handleImageGeneration(
           urlsOnly: responseFormat === "url",
         }),
       );
+
       if (images.length === 0) {
         return json(FAILURE_STATUS.no_image.status, {
           error: { message: "No image was generated for the given prompt.", type: FAILURE_STATUS.no_image.type },
         });
       }
+
       for (const image of images) {
         if (responseFormat === "b64_json") {
           if (!image.base64) {
             log.error("Generated image is missing base64 payload");
+
             return json(500, { error: { message: "Image data is incomplete", type: "server_error" } });
           }
+
           data.push({ b64_json: image.base64 });
         } else {
           if (!image.url) {
             log.error("Generated image is missing url");
+
             return json(500, { error: { message: "Image data is incomplete", type: "server_error" } });
           }
+
           data.push({ url: image.url });
         }
       }
     }
+
     return json(200, { created: Math.floor(Date.now() / 1000), data });
   } catch (err) {
     if (opts.signal?.aborted) {
       return json(499, { error: { message: "Request aborted", type: "request_aborted" } });
     }
+
     if (err instanceof ImageGenerationError) {
       const mapped = FAILURE_STATUS[err.reason];
       log.info(`Image generation failed (${err.reason}): ${err.message}`);
+
       return json(mapped.status, { error: { message: err.message, type: mapped.type } });
     }
+
     // SchedulerBusyError from the pool gate: signal the client to back off.
     if (err instanceof SchedulerBusyError) {
       return new Response(
@@ -151,7 +162,9 @@ export async function handleImageGeneration(
         { status: 503, headers: { "Content-Type": "application/json", "Retry-After": String(err.retryAfterSeconds) } },
       );
     }
+
     log.error(`Image generation error: ${err instanceof Error ? err.message : String(err)}`);
+
     return json(502, { error: { message: "Image generation failed", type: "server_error" } });
   }
 }

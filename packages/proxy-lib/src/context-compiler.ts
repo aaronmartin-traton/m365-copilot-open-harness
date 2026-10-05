@@ -18,6 +18,7 @@ export function compileDelta({ messages, taskAnchor, hasTools }: DeltaContextInp
   const parts: string[] = hasTools
     ? [LOCAL_TOOL_REMINDER, `<task_anchor>${taskAnchor.slice(0, 3_000)}</task_anchor>`]
     : [];
+
   for (const message of messages) {
     if (message.role === "assistant") {
       continue;
@@ -29,5 +30,6 @@ export function compileDelta({ messages, taskAnchor, hasTools }: DeltaContextInp
       parts.push(`<${message.role}>\n${getMessageContent(message)}\n</${message.role}>`);
     }
   }
+
   return parts.join("\n\n");
 }

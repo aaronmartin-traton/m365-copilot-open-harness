@@ -47,6 +47,7 @@ describe("parseActionConfirmation", () => {
       author: "bot",
       adaptiveCards: [{ actions: [{ type: "Action.Submit", title: "Allow", data: { message: { actionId: "x9", confirmationOption: "confirm" } } }] }],
     });
+
     expect(c?.actionId).toBe("x9");
   });
 

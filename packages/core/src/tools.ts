@@ -79,21 +79,26 @@ const TOOL_CALL_REGEX = /\{\s*"(?:tool|name)"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*
 // drop final when it rides alongside tool calls (it's usually a premature
 // success claim), and unwrap it when it stands alone as the response.
 const CONFIDENCE_REGEX = /\{\s*"confidence"\s*:\s*-?[0-9.]+\s*\}/g;
+
 const FINAL_OBJECT_REGEX = /\{\s*"final"\s*:\s*"(?:[^"\\]|\\.)*"\s*\}/g;
 
 /** Strip invented confidence/final objects from a no-tool-call response and
  *  unwrap a lone {"final": "..."} answer into bare text. Returns null if empty. */
 function cleanLooseText(text: string): string | null {
   let out = text;
+
   for (const m of out.match(FINAL_OBJECT_REGEX) ?? []) {
     try {
       const value = JSON.parse(m).final;
+
       if (typeof value === "string") out = out.replace(m, value);
     } catch {
       // leave the literal text in place if it isn't valid JSON
     }
   }
+
   out = out.replace(CONFIDENCE_REGEX, "").trim();
+
   return out.length ? out : null;
 }
 
@@ -105,22 +110,29 @@ export function formatToolDefinitions(tools: ToolDef[], variantOverride?: string
 
 export function formatToolChoiceInstruction(toolChoice: ToolChoice): string {
   if (!toolChoice || toolChoice === "auto") return "";
+
   if (toolChoice === "none") return "\nDo NOT call tools. Text only.";
+
   if (toolChoice === "required") return "\nYou MUST call at least one tool.";
+
   if (typeof toolChoice === "object" && toolChoice.function) {
     return `\nYou MUST call "${toolChoice.function.name}".`;
   }
+
   return "";
 }
 
 export function getMessageImages(msg: Message): ImageInput[] {
   if (!Array.isArray(msg.content)) return [];
+
   return msg.content.flatMap((part) => "image" in part ? [part.image] : []);
 }
 
 export function getMessageContent(msg: Message): string {
   if (msg.content === null || msg.content === undefined) return "";
+
   if (typeof msg.content === "string") return msg.content;
+
   return msg.content.map((part) => "text" in part ? part.text || "" : "").join("");
 }
 
@@ -128,15 +140,19 @@ export function getMessageContent(msg: Message): string {
  *  (e.g. the shell command, or the file path). Newlines collapsed, truncated. */
 function toolCallSummary(rawArgs: string): string {
   let args: Record<string, unknown> = {};
+
   try {
     args = typeof rawArgs === "string" ? JSON.parse(rawArgs || "{}") : (rawArgs ?? {});
   } catch {
     return "";
   }
+
   const primary =
     args.command ?? args.cmd ?? args.script ?? args.path ?? args.file ??
     args.filename ?? args.query ?? Object.values(args).find((v) => typeof v === "string");
+
   if (typeof primary !== "string") return "";
+
   return primary.replace(/\s+/g, " ").replace(/"/g, "'").trim().slice(0, 100);
 }
 
@@ -155,8 +171,11 @@ function toolCallSummary(rawArgs: string): string {
  */
 function maybeInjectReplyTool(tools: ToolDef[]): ToolDef[] {
   const enabled = process.env.M365_INJECT_REPLY_TOOL || currentFramingVariant() === "reply_tool";
+
   if (!enabled) return tools;
+
   if (tools.some((t) => t.function.name === "reply")) return tools;
+
   const replyTool: ToolDef = {
     type: "function",
     function: {
@@ -170,6 +189,7 @@ function maybeInjectReplyTool(tools: ToolDef[]): ToolDef[] {
       },
     },
   };
+
   return [replyTool, ...tools];
 }
 
@@ -179,9 +199,11 @@ export function boundedToolResult(text: string): string {
   if (!Number.isFinite(TOOL_RESULT_MAX_CHARS) || TOOL_RESULT_MAX_CHARS <= 0 || text.length <= TOOL_RESULT_MAX_CHARS) {
     return text;
   }
+
   const marker = `\n...[tool output truncated: ${text.length - TOOL_RESULT_MAX_CHARS} chars omitted]...\n`;
   const available = Math.max(0, TOOL_RESULT_MAX_CHARS - marker.length);
   const head = Math.ceil(available * 0.7);
+
   return text.slice(0, head) + marker + text.slice(text.length - (available - head));
 }
 
@@ -200,6 +222,7 @@ export function formatMessages(
 
   const effectiveTools = tools ? maybeInjectReplyTool(tools) : tools;
   const specMap = effectiveTools ? buildSpecMap(effectiveTools) : null;
+
   if (effectiveTools && effectiveTools.length > 0 && toolChoice !== "none") {
     parts.push(`<system>\n${formatToolDefinitions(effectiveTools, framingVariant)}${formatToolChoiceInstruction(toolChoice)}\n</system>`);
   }
@@ -209,6 +232,7 @@ export function formatMessages(
   // the result is labelled "unknown" and the model misreads it — observed: it ran
   // `ls`, saw `README.md`, and concluded the *file* was empty (docs §9 F15-adjacent).
   const callMeta = new Map<string, { name: string; summary: string }>();
+
   for (const m of messages) {
     if (m.role === "assistant" && m.tool_calls) {
       for (const tc of m.tool_calls) {
@@ -222,11 +246,13 @@ export function formatMessages(
       const calls = m.tool_calls.map((tc) => {
         const rawArgs = tc.function.arguments;
         let argsObj: Record<string, unknown> = {};
+
         try {
           argsObj = typeof rawArgs === "string" ? JSON.parse(rawArgs || "{}") : (rawArgs ?? {});
         } catch {
           // fall through with empty args; better than crashing the transcript
         }
+
         // Prefer the request's tool schema; otherwise synthesize one from the
         // recorded argument keys so a tool no longer in scope still renders.
         const spec = specMap?.get(tc.function.name) ?? deriveFencedSpec({
@@ -240,8 +266,10 @@ export function formatMessages(
             },
           },
         });
+
         return renderFencedCall(spec, argsObj);
       }).join("\n");
+
       const content = getMessageContent(m);
       parts.push(`<assistant>${content ? "\n" + content : ""}\n${calls}\n</assistant>`);
     } else if (m.role === "tool") {
@@ -371,7 +399,9 @@ const HALLUCINATED_COMPLETION_PATTERNS: RegExp[] = [
 export function looksLikeHallucinatedCompletion(text: string | null): boolean {
   if (!text) return false;
   const t = text.trim();
+
   if (t.length < 8) return false;
+
   return HALLUCINATED_COMPLETION_PATTERNS.some((re) => re.test(t));
 }
 
@@ -383,14 +413,18 @@ export function looksLikeHallucinatedCompletion(text: string | null): boolean {
 export function looksLikeRemoteArtifactCompletion(text: string | null): boolean {
   if (!text) return false;
   const t = text.trim();
+
   if (t.length < 12) return false;
+
   return REMOTE_ARTIFACT_COMPLETION_PATTERNS.some((re) => re.test(t));
 }
 
 export function looksLikeConfabulation(text: string | null): boolean {
   if (!text) return false;
   const t = text.trim();
+
   if (t.length < 12) return false;
+
   return CONFABULATION_PATTERNS.some((re) => re.test(t));
 }
 
@@ -418,6 +452,7 @@ export function isProseDocument(parsed: ParseResult): boolean {
   //           markdown headers, lots of prose, or many fences.
   // Flag only documents. (Old heuristic was prose≥120, which ate Claude's preambles.)
   const hasMarkdownHeaders = /^#{1,6}\s/m.test(prose);
+
   return parsed.toolCalls.length >= 4 || hasMarkdownHeaders || prose.length >= 300;
 }
 
@@ -428,6 +463,7 @@ export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
   // bare or wrapped in a ```json / ```tool_call fence whose markers the cleanup
   // below strips.
   const specMap = tools && tools.length > 0 ? buildSpecMap(tools) : null;
+
   const fenced = specMap
     ? parseFencedToolCalls(text, specMap)
     : { calls: [] as ParsedToolCall[], leftover: text };
@@ -439,10 +475,12 @@ export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
   const jsonRegex = new RegExp(TOOL_CALL_REGEX.source, "g");
   const jsonCalls: ParsedToolCall[] = [];
   let match: RegExpExecArray | null;
+
   while ((match = jsonRegex.exec(fenced.leftover)) !== null) {
     try {
       const parsed = JSON.parse(match[0]);
       const name = resolveName(parsed.tool ?? parsed.name);
+
       if (name) {
         jsonCalls.push({
           id: `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
@@ -461,6 +499,7 @@ export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
   }
 
   const toolCalls = [...fenced.calls, ...jsonCalls];
+
   if (toolCalls.length === 0) {
     return { hasToolCalls: false, toolCalls: [], textContent: cleanLooseText(fenced.leftover) };
   }

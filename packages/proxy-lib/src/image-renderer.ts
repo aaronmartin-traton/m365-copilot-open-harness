@@ -4,7 +4,7 @@
  * Handles fetching and rendering images from M365 artifact tokens or URLs.
  */
 
-import { getImageArtifactToken, fetchImageBytes, type CapturedImage } from "@m365-copilot/core";
+import { getImageArtifactToken, fetchImageBytes, type ProviderImage } from "@m365-copilot/core";
 import { createLogger } from "@m365-copilot/core";
 
 const log = createLogger("image-renderer");
@@ -12,8 +12,9 @@ const log = createLogger("image-renderer");
 /**
  * Render images as Markdown, fetching from M365 artifact tokens when available.
  */
-export async function renderImagesMarkdown(images: CapturedImage[]): Promise<string> {
+export async function renderImagesMarkdown(images: ProviderImage[]): Promise<string> {
   let artifactToken: string | null = null;
+
   try {
     artifactToken = await getImageArtifactToken();
   } catch (error: unknown) {
@@ -21,8 +22,10 @@ export async function renderImagesMarkdown(images: CapturedImage[]): Promise<str
   }
 
   const parts: string[] = [];
+
   for (const image of images) {
     const url = image.referenceUrls[0];
+
     if (!url) continue;
 
     if (artifactToken) {

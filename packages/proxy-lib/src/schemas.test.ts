@@ -25,6 +25,7 @@ describe("ChatMessage role normalization", () => {
         { role: "user", content: "hi" },
       ],
     });
+
     expect(req.messages[0].role).toBe("system");
   });
 });

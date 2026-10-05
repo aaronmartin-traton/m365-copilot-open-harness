@@ -83,16 +83,19 @@ export function createBackoffController(opts: BackoffOptions): BackoffController
   let empties: Array<{ t: number; conv: string }> = [...(opts.initialState?.empties ?? [])];
   let backoffUntil = opts.initialState?.backoffUntil ?? -Infinity;
   let level = opts.initialState?.level ?? 0;
+
   const snapshot = (): BackoffState => ({
     empties: [...empties],
     backoffUntil: Number.isFinite(backoffUntil) ? backoffUntil : null,
     level,
   });
+
   const changed = () => opts.onStateChange?.(snapshot());
 
   return {
     note(empty, conversationId) {
       const t = now();
+
       if (!empty) {
         // A clean response means degradation has lifted — reset the streak AND the
         // backoff window so the next request runs at full speed.
@@ -100,6 +103,7 @@ export function createBackoffController(opts: BackoffOptions): BackoffController
         backoffUntil = -Infinity;
         level = 0;
         changed();
+
         return;
       }
 
@@ -108,7 +112,9 @@ export function createBackoffController(opts: BackoffOptions): BackoffController
 
       const distinct = new Set(empties.map((e) => e.conv)).size;
       changed();
+
       if (distinct < threshold) return;
+
       // Already backing off within the current window — don't re-arm/escalate until it
       // elapses, so a burst of empties doesn't stack the delay unboundedly.
       if (t < backoffUntil) return;
@@ -123,10 +129,13 @@ export function createBackoffController(opts: BackoffOptions): BackoffController
 
     async waitForSlot() {
       const remaining = backoffUntil - now();
+
       if (remaining <= 0) return 0;
       const span = Math.max(0, jitterMaxMs - jitterMinMs);
       const delay = Math.min(remaining, jitterMinMs + Math.floor(rng() * (span + 1)));
+
       if (delay > 0) await sleep(delay);
+
       return delay;
     },
 
@@ -147,10 +156,13 @@ const BACKOFF_STATE_FILE = process.env.M365_BACKOFF_STATE_FILE ||
 
 function loadBackoffState(): BackoffState | undefined {
   if (!existsSync(BACKOFF_STATE_FILE)) return undefined;
+
   try {
     const parsed = JSON.parse(readFileSync(BACKOFF_STATE_FILE, "utf8"));
+
     if (Array.isArray(parsed?.empties) && typeof parsed?.level === "number") return parsed;
   } catch {}
+
   return undefined;
 }
 
@@ -177,6 +189,7 @@ const defaultController = createBackoffController({
   initialState: loadBackoffState(),
   onStateChange: (state) => {
     saveBackoffState(state);
+
     // Telemetry: emit backoff-exit when a window that was active stops being
     // the state (level dropped OR the window elapsed). The elapsed branch is
     // the common "paced until self-healed" case — a clean response may never
@@ -229,6 +242,7 @@ export function noteRequestOutcome(empty: boolean, conversationId: string): void
       convIdHash: hashConversationId(conversationId || "anon"),
     });
   }
+
   if (disabled()) return;
   defaultController.note(empty, conversationId);
 }
@@ -238,6 +252,7 @@ export function noteRequestOutcome(empty: boolean, conversationId: string): void
 export async function awaitDegradationBackoff(): Promise<void> {
   if (disabled()) return;
   const slept = await defaultController.waitForSlot();
+
   if (slept > 0) log.info(`Backoff: paced this turn by ${Math.round(slept / 1000)}s (account degraded)`);
 }
 

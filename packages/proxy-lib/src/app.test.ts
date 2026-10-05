@@ -1,31 +1,37 @@
 import { describe, expect, it, vi } from "vitest";
 
 const calls: string[] = [];
+
 vi.mock("@m365-copilot/core", async (importActual) => {
   const actual = await importActual<typeof import("@m365-copilot/core")>();
+
   class FakeModelSession {
     turnCount = 0;
     conversationId = "app-conversation";
     sessionId = "app-session";
     newConversation() {}
     reset() {}
-    async refreshAgent() { return false; }
+    id = "m365";
+    supportsTools() { return true; }
+    describeModel(model: string) { return model; }
+    recoverFromRefusal(rebuild: (framing: "softened") => string) { return rebuild("softened"); }
+    async refreshTools() { return false; }
     async run(prompt: string) {
       calls.push(prompt);
+
       return {
         fullText: "app response",
         hasContent: true,
+        images: [],
         throttle: { current: 1, max: 600 },
-        contentOrigin: "GPT",
-        messageType: null,
-        messageId: "app-message",
-        scores: null,
+        stopReason: "completed",
         turnCount: ++this.turnCount,
-        turnState: "Completed",
+        usage: { content_origin: "GPT" },
         async *[Symbol.asyncIterator]() { yield "app response"; },
       };
     }
   }
+
   return { ...actual, ModelSession: FakeModelSession };
 });
 
@@ -51,29 +57,35 @@ describe("framework-free app routes", () => {
   it("serves Responses and preserves the session key", async () => {
     calls.length = 0;
     const app = createApp();
+
     const response = await app.fetch(request("/v1/responses", {
       method: "POST",
       headers: { "content-type": "application/json", "x-m365-session-key": "thread-1" },
       body: JSON.stringify(responseBody),
     }));
+
     expect(response.status).toBe(200);
     expect((await response.json()).object).toBe("response");
     expect(calls[0]).toContain("hello");
+
     const followUp = await app.fetch(request("/v1/responses", {
       method: "POST",
       headers: { "content-type": "application/json", "x-m365-session-key": "thread-1" },
       body: JSON.stringify(responseBody),
     }));
+
     expect(followUp.status).toBe(200);
     expect(calls).toHaveLength(2);
   });
 
   it("returns CORS and 400 for malformed Chat and Responses bodies", async () => {
     const app = createApp();
+
     for (const path of ["/v1/chat/completions", "/v1/responses"]) {
       const response = await app.fetch(request(path, {
         method: "POST", headers: { "content-type": "application/json" }, body: "{}",
       }));
+
       expect(response.status).toBe(400);
       expect(response.headers.get("access-control-allow-origin")).toBe("*");
       expect((await response.json()).error.type).toBe("invalid_request_error");

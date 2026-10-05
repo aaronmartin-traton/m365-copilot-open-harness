@@ -67,13 +67,17 @@ export function emitThrottleEvent(ev: ThrottleEvent): void {
   if (process.env.M365_NO_TELEMETRY === "1") {
     // Count events even when file writes are disabled (surfaced on /health).
     counts[ev.event] += 1;
+
     return;
   }
+
   try {
     counts[ev.event] += 1;
     const line = `${JSON.stringify(ev)}\n`;
+
     const path = process.env.M365_THROTTLE_TELEMETRY_FILE?.trim() ||
       join(homedir(), ".config", "opencode-m365", "throttle-telemetry.ndjson");
+
     mkdirSync(join(path, ".."), { recursive: true });
     appendFileSync(path, line, { mode: 0o600 });
   } catch (err) {

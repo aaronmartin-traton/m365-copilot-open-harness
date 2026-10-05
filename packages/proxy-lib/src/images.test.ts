@@ -17,9 +17,11 @@ describe("parseImageDataUrl", () => {
 
   it("accepts signed JPEG and WebP data URLs", () => {
     const jpeg = `data:image/jpeg;base64,${Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString("base64")}`;
+
     const webp = `data:image/webp;base64,${Buffer.from([
       0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50,
     ]).toString("base64")}`;
+
     expect(parseImageDataUrl(jpeg).mediaType).toBe("image/jpeg");
     expect(parseImageDataUrl(webp).mediaType).toBe("image/webp");
   });
@@ -34,6 +36,7 @@ describe("parseImageDataUrl", () => {
       Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
       Buffer.alloc(MAX_IMAGE_BYTES + 1),
     ]);
+
     expect(() => parseImageDataUrl(`data:image/png;base64,${bytes.toString("base64")}`)).toThrow("exceeds");
   });
 

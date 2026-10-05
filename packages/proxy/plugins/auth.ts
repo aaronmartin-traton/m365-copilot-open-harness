@@ -8,6 +8,7 @@ import { getToken, validateLocalShellBackend } from "@m365-copilot/core";
 export default defineNitroPlugin(async () => {
   console.log("Authenticating...");
   validateLocalShellBackend();
+
   try {
     await getToken();
   } catch (err: any) {

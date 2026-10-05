@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { produceToolPath, type ToolPathDeps, type ToolPathResult } from "./tool-path.js";
 import type { ToolDef } from "@m365-copilot/core";
+
 /** Assert the result kind and narrow the discriminated union for typecheck. */
 function narrow<T extends ToolPathResult["kind"]>(
   r: ToolPathResult,
   kind: T,
 ): Extract<ToolPathResult, { kind: T }> {
   expect(r.kind).toBe(kind);
+
   return r as Extract<ToolPathResult, { kind: T }>;
 }
 
@@ -51,6 +53,7 @@ describe("produceToolPath normal path", () => {
     const runTurn = vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" });
     const markSent = vi.fn();
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn,
       markSent,
@@ -77,6 +80,7 @@ describe("produceToolPath normal path", () => {
     const runTurn = vi.fn().mockResolvedValue({ fullText: "hello" });
     const markSent = vi.fn();
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn,
       markSent,
@@ -100,6 +104,7 @@ describe("produceToolPath normal path", () => {
     const runTurn = vi.fn().mockResolvedValue({ error: resp });
     const markSent = vi.fn();
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn,
       markSent,
@@ -119,11 +124,14 @@ describe("produceToolPath normal path", () => {
 
   it("multiple calls collapse to the first by default", async () => {
     delete process.env.M365_ALLOW_MULTI_TOOL;
+
     const runTurn = vi.fn().mockResolvedValue({
       fullText: "```bash\necho 1\n```\n```bash\necho 2\n```",
     });
+
     const markSent = vi.fn();
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn,
       markSent,
@@ -147,11 +155,14 @@ describe("produceToolPath normal path", () => {
 
   it("M365_ALLOW_MULTI_TOOL preserves the batch", async () => {
     process.env.M365_ALLOW_MULTI_TOOL = "1";
+
     const runTurn = vi.fn().mockResolvedValue({
       fullText: "```bash\necho 1\n```\n```bash\necho 2\n```",
     });
+
     const markSent = vi.fn();
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn,
       markSent,
@@ -179,6 +190,7 @@ describe("produceToolPath normal path", () => {
     const runTurn = vi.fn().mockResolvedValue({ fullText: "```reply\ndone\n```" });
     const markSent = vi.fn();
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn,
       markSent,
@@ -201,8 +213,10 @@ describe("produceToolPath normal path", () => {
     const runTurn = vi.fn().mockResolvedValue({
       fullText: "```reply\ndone\n```\n```bash\nls -la\n```",
     });
+
     const markSent = vi.fn();
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn,
       markSent,
@@ -237,6 +251,7 @@ describe("produceToolPath steering-attribution gate (ticket 03)", () => {
 
   it("degrades to raw text when the ladder is active but the response is unsteered", async () => {
     process.env.M365_STEERING = "1";
+
     const deps: ToolPathDeps = {
       runTurn: vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" }),
       markSent: vi.fn(),
@@ -255,6 +270,7 @@ describe("produceToolPath steering-attribution gate (ticket 03)", () => {
   it("degrades to raw text when the ladder is active and no fingerprint is available", async () => {
     process.env.M365_STEERING = "1";
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn: vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" }),
       markSent: vi.fn(),
@@ -272,6 +288,7 @@ describe("produceToolPath steering-attribution gate (ticket 03)", () => {
   it("routes the fence when the response is attributable as steered", async () => {
     process.env.M365_STEERING = "1";
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn: vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" }),
       markSent: vi.fn(),
@@ -291,6 +308,7 @@ describe("produceToolPath steering-attribution gate (ticket 03)", () => {
   it("preserves legacy routing when the ladder is disabled (M365_STEERING unset)", async () => {
     delete process.env.M365_STEERING;
     const registerToolCalls = vi.fn();
+
     const deps: ToolPathDeps = {
       runTurn: vi.fn().mockResolvedValue({ fullText: "```bash\nls -la\n```" }),
       markSent: vi.fn(),

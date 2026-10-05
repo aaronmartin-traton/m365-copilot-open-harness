@@ -44,10 +44,12 @@ describe("handleImageGeneration", () => {
 
   it("returns the base64 payload for response_format b64_json", async () => {
     const generateImage = vi.fn(async () => [image({ base64: "aGVsbG8=" })]);
+
     const res = await handleImageGeneration(
       ImageGenerationRequest.parse({ prompt: "a dog", response_format: "b64_json" }),
       { generateImage },
     );
+
     expect(res.status).toBe(200);
     expect((await res.json()).data).toEqual([{ b64_json: "aGVsbG8=" }]);
     expect(generateImage).toHaveBeenCalledWith("a dog", expect.objectContaining({ urlsOnly: false }));
@@ -118,10 +120,12 @@ describe("handleImageGeneration", () => {
     const ac = new AbortController();
     ac.abort();
     const generateImage = vi.fn(async () => { throw new Error("websocket closed"); });
+
     const res = await handleImageGeneration(ImageGenerationRequest.parse({ prompt: "p" }), {
       generateImage,
       signal: ac.signal,
     });
+
     expect(res.status).toBe(499);
     expect((await res.json()).error.type).toBe("request_aborted");
   });
@@ -137,11 +141,14 @@ describe("handleImageGeneration", () => {
 
   it("is all-or-nothing on partial n-loop failure (no data leak)", async () => {
     let calls = 0;
+
     const generateImage = vi.fn(async () => {
       calls++;
+
       if (calls === 1) return [image()];
       throw new ImageGenerationError("capacity", "capacity boom");
     });
+
     const res = await handleImageGeneration(ImageGenerationRequest.parse({ prompt: "p", n: 2 }), { generateImage });
     expect(res.status).toBe(400);
     const body = await res.json();
@@ -158,10 +165,12 @@ describe("handleImageGeneration", () => {
 
   it("maps a missing base64 to 500 on the b64_json path", async () => {
     const generateImage = vi.fn(async () => [image({ base64: "" })]);
+
     const res = await handleImageGeneration(
       ImageGenerationRequest.parse({ prompt: "p", response_format: "b64_json" }),
       { generateImage },
     );
+
     expect(res.status).toBe(500);
     expect((await res.json()).error.type).toBe("server_error");
   });
@@ -172,9 +181,11 @@ describe("handleImageGeneration", () => {
 
   it("accepts the gpt-image-1 size set including auto", async () => {
     const generateImage = vi.fn(async () => [image()]);
+
     const res = await handleImageGeneration(ImageGenerationRequest.parse({ prompt: "p", size: "auto" }), {
       generateImage,
     });
+
     expect(res.status).toBe(200);
     expect(generateImage).toHaveBeenCalledWith("p", expect.objectContaining({ orientation: undefined }));
   });
@@ -182,10 +193,14 @@ describe("handleImageGeneration", () => {
   it("routes every image through the injected schedule gate", async () => {
     const generateImage = vi.fn(async () => [image()]);
     const scheduled: number[] = [];
+
     const res = await handleImageGeneration(ImageGenerationRequest.parse({ prompt: "p", n: 3 }), {
       generateImage,
-      schedule: async (task) => { scheduled.push(1); return task(); },
+      schedule: async (task) => { scheduled.push(1);
+
+ return task(); },
     });
+
     expect(res.status).toBe(200);
     expect(scheduled).toHaveLength(3);
   });

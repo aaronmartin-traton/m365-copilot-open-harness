@@ -15,5 +15,6 @@ export function outputFinishReason(text: string): "stop" | "length" {
   if (OUTPUT_CHAR_CEILING > 0 && text.length >= OUTPUT_CHAR_CEILING) {
     return "length";
   }
+
   return "stop";
 }

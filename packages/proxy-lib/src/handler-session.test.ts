@@ -11,6 +11,7 @@ const dirs: string[] = [];
 function pool() {
   const dir = mkdtempSync(join(tmpdir(), "m365-handler-session-"));
   dirs.push(dir);
+
   return new SessionPool({}, {
     stateStore: new SessionStateStore(join(dir, "sessions.json")),
   });
@@ -70,10 +71,12 @@ describe("SessionPool identity", () => {
 
   it("rotates a session when the transcript shrinks and resets sent position", () => {
     const sessions = pool();
+
     const state = sessions.resolve(messages([
       { role: "user", content: "one" },
       { role: "assistant", content: "answer" },
     ]), "thread-shrink");
+
     const originalConversation = state.session.conversationId;
     sessions.markSent(state, 2);
     const rotated = sessions.resolve(messages([{ role: "user", content: "new task" }]), "thread-shrink");
@@ -90,13 +93,16 @@ describe("SessionPool identity", () => {
     const clock = vi.spyOn(Date, "now");
     const current = Date.now();
     clock.mockReturnValue(current + 31 * 60_000);
+
     try {
       const unrelated = sessions.resolve(messages([{ role: "user", content: "other" }]));
+
       const followUp = messages([{
         role: "assistant",
         content: null,
         tool_calls: [{ id: "stale-call", type: "function", function: { name: "bash", arguments: "{}" } }],
       }]);
+
       expect(sessions.resolve(followUp).session.conversationId).not.toBe(first.session.conversationId);
       expect(unrelated.session.conversationId).not.toBe(first.session.conversationId);
     } finally {
@@ -108,10 +114,12 @@ describe("SessionPool identity", () => {
     dirs.push(dir);
     const stateStore = new SessionStateStore(join(dir, "sessions.json"));
     const deleted: Array<{ sessionId: string; conversationId: string }> = [];
+
     const sessions = new SessionPool({}, {
       stateStore,
       remotePruner: async (ids) => { deleted.push(ids); },
     });
+
     const state = sessions.resolve(messages([{ role: "user", content: "owned" }]), "prune-me");
     sessions.markSent(state, 1);
     sessions.bindResponseId("resp-prune", sessions.managedKeyForSessionKey("prune-me"));
@@ -127,12 +135,14 @@ describe("SessionPool identity", () => {
     dirs.push(dir);
     const stateStore = new SessionStateStore(join(dir, "sessions.json"));
     let now = 1_000_000;
+
     const sessions = new SessionPool({}, {
       stateStore,
       now: () => now,
       pruneRetryMs: 15 * 60_000,
       remotePruner: async () => { throw new Error("browser failed"); },
     });
+
     const state = sessions.resolve(messages([{ role: "user", content: "owned" }]), "retry-me");
     sessions.markSent(state, 1);
     await expect(sessions.prune({ sessionKey: "retry-me" })).rejects.toThrow("browser failed");
@@ -147,15 +157,18 @@ describe("SessionPool identity", () => {
     const stateStore = new SessionStateStore(join(dir, "sessions.json"));
     let now = 2_000_000;
     const remote: string[] = [];
+
     const sessions = new SessionPool({}, {
       stateStore,
       now: () => now,
       remotePruner: async ({ conversationId }) => { remote.push(conversationId); },
     });
+
     const state = sessions.resolve(messages([{ role: "user", content: "idle" }]), "idle-key");
     sessions.markSent(state, 1);
     const previousTtl = process.env.M365_SESSION_TTL_MINUTES;
     process.env.M365_SESSION_TTL_MINUTES = "180";
+
     try {
       now += 180 * 60_000;
       await expect(sessions.reapIdle()).resolves.toEqual({ pruned: 1, failed: 0 });
@@ -163,23 +176,28 @@ describe("SessionPool identity", () => {
       if (previousTtl === undefined) delete process.env.M365_SESSION_TTL_MINUTES;
       else process.env.M365_SESSION_TTL_MINUTES = previousTtl;
     }
+
     expect(remote).toEqual([state.session.conversationId]);
     expect(stateStore.size).toBe(0);
   });
   it("blocks a same-key turn behind a queued prune", async () => {
     let resolveRemote!: () => void;
     let remoteDone = false;
+
     const sessions = new SessionPool({}, {
       remotePruner: async () => await new Promise<void>((resolve) => { resolveRemote = () => { remoteDone = true; resolve(); }; }),
     });
+
     const state = sessions.resolve(messages([{ role: "user", content: "owned" }]), "queued-prune");
     sessions.markSent(state, 1);
     const release = await sessions.acquire(messages([{ role: "user", content: "owned" }]), "queued-prune");
     const prune = sessions.prune({ sessionKey: "queued-prune" });
+
     const turn = sessions.acquire(messages([{ role: "user", content: "next" }]), "queued-prune").then((done) => {
       expect(remoteDone).toBe(true);
       done();
     });
+
     release();
     await Promise.resolve();
     expect(remoteDone).toBe(false);

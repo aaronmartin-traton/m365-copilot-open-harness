@@ -51,9 +51,11 @@ describe("steering state machine", () => {
 
   it("opens the breaker after N failures and flips back to unsteered", () => {
     let state = recordChannelPass(readSteeringState(), "textarea", "payload", 9999);
+
     for (let i = 0; i < STEERING_BREAKER_THRESHOLD; i++) {
       state = recordChannelFailure(state, "textarea", 10000 + i);
     }
+
     const breaker = state.breakers.textarea;
     expect(breaker.failures).toBe(STEERING_BREAKER_THRESHOLD);
     expect(breaker.open).toBe(true);
@@ -97,6 +99,7 @@ describe("ensureSteered (replay-only path, no M365_STEERING_LIVE)", () => {
 
   it("returns unsteered when the latched channel's breaker is open", async () => {
     let state = recordChannelPass(readSteeringState(), "textarea", "payload", Date.now());
+
     for (let i = 0; i < STEERING_BREAKER_THRESHOLD; i++) state = recordChannelFailure(state, "textarea", Date.now() + i);
     writeSteeringState(state);
     expect(await ensureSteered()).toBe("unsteered");

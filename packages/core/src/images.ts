@@ -1,5 +1,6 @@
 
 export const MAX_IMAGE_BYTES = Number(process.env.M365_IMAGE_MAX_BYTES ?? 20 * 1024 * 1024);
+
 export type ImageMediaType = "image/png" | "image/jpeg" | "image/webp";
 
 export interface ImageInput {
@@ -34,10 +35,14 @@ interface UploadResponse {
 
 function tokenClaims(token: string): { oid: string; tid: string } {
   const payload = token.split(".")[1];
+
   if (!payload) throw new Error("M365 image upload token is not a JWT");
+
   try {
     const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+
     if (!parsed.oid || !parsed.tid) throw new Error("missing oid/tid");
+
     return { oid: parsed.oid, tid: parsed.tid };
   } catch (error) {
     throw new Error(`M365 image upload token claims are invalid: ${error instanceof Error ? error.message : String(error)}`);
@@ -53,6 +58,7 @@ export async function prepareImageAttachments(
   if (images.length === 0) return [];
   const claims = tokenClaims(token);
   const attachments: PreparedImageAttachment[] = [];
+
   for (let index = 0; index < images.length; index++) {
     const image = images[index];
     const fileType = image.mediaType === "image/jpeg" ? "jpg" : image.mediaType.split("/")[1];
@@ -78,14 +84,19 @@ export async function prepareImageAttachments(
       },
       body: form,
     });
+
     const raw = await response.text();
+
     if (!response.ok) throw new Error(`M365 image upload failed: HTTP ${response.status} ${raw.slice(0, 500)}`);
     let payload: UploadResponse;
+
     try { payload = JSON.parse(raw) as UploadResponse; }
     catch { throw new Error("M365 image upload returned invalid JSON"); }
+
     if (payload.result?.value !== "Success" || !payload.docId) {
       throw new Error(`M365 image upload failed: ${raw.slice(0, 500)}`);
     }
+
     const uploadedType = (payload.fileType || fileType).replace(/^\./, "").toLowerCase().replace(/^jpeg$/, "jpg");
     const fileName = payload.fileName || fallbackName;
     attachments.push({
@@ -104,5 +115,6 @@ export async function prepareImageAttachments(
       },
     });
   }
+
   return attachments;
 }

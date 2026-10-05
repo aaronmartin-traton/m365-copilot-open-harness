@@ -69,7 +69,9 @@ const ChatCompletionResponse = z.object({
 });
 
 export type ResponsesRequestBody = z.infer<typeof ResponsesRequest>;
+
 type ChatMessageInput = z.input<typeof ChatCompletionRequest>["messages"][number];
+
 type OutputItem =
   | {
       id: string;
@@ -89,11 +91,13 @@ type OutputItem =
 
 function contentText(content: string | Array<z.infer<typeof ContentPart>>): string {
   if (typeof content === "string") return content;
+
   return content.map((part) => part.text ?? "").filter(Boolean).join("\n");
 }
 
 function toChatContent(content: string | Array<z.infer<typeof ContentPart>>): ChatMessageInput["content"] {
   if (typeof content === "string") return content;
+
   return content.flatMap((part): Array<{ type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } } | { type: "text"; text: string }> => {
     if ((part.type === "input_image" || part.type === "image_url") && part.image_url) {
       return [{
@@ -101,22 +105,27 @@ function toChatContent(content: string | Array<z.infer<typeof ContentPart>>): Ch
         image_url: { url: part.image_url, detail: part.detail },
       }];
     }
+
     if (part.text !== undefined) return [{ type: "text" as const, text: part.text }];
+
     return [];
   });
 }
 
 function toChatMessages(body: ResponsesRequestBody): ChatMessageInput[] {
   const messages: ChatMessageInput[] = [];
+
   if (body.instructions) messages.push({ role: "system", content: body.instructions });
 
   if (typeof body.input === "string") {
     messages.push({ role: "user", content: body.input });
+
     return messages;
   }
 
   for (const rawItem of body.input) {
     const message = MessageItem.safeParse(rawItem);
+
     if (message.success) {
       messages.push({
         role: message.data.role,
@@ -126,6 +135,7 @@ function toChatMessages(body: ResponsesRequestBody): ChatMessageInput[] {
     }
 
     const call = FunctionCallItem.safeParse(rawItem);
+
     if (call.success) {
       messages.push({
         role: "assistant",
@@ -140,6 +150,7 @@ function toChatMessages(body: ResponsesRequestBody): ChatMessageInput[] {
     }
 
     const output = FunctionCallOutputItem.safeParse(rawItem);
+
     if (output.success) {
       messages.push({
         role: "tool",
@@ -155,7 +166,9 @@ function toChatMessages(body: ResponsesRequestBody): ChatMessageInput[] {
 function toChatTools(rawTools: unknown[]) {
   return rawTools.flatMap((rawTool) => {
     const tool = FunctionTool.safeParse(rawTool);
+
     if (!tool.success) return [];
+
     return [{
       type: "function" as const,
       function: {
@@ -170,6 +183,7 @@ function toChatTools(rawTools: unknown[]) {
 function toChatToolChoice(choice: unknown) {
   if (choice === "auto" || choice === "none" || choice === "required") return choice;
   const selected = z.object({ type: z.literal("function"), name: z.string() }).safeParse(choice);
+
   return selected.success
     ? { type: "function" as const, function: { name: selected.data.name } }
     : undefined;
@@ -222,6 +236,7 @@ function sse(type: string, payload: unknown): string {
 
 function streamResponse(response: ResponseEnvelope): Response {
   const inProgress = { ...response, status: "in_progress", completed_at: null, output: [], usage: null };
+
   const events: string[] = [
     sse("response.created", { type: "response.created", response: inProgress }),
     sse("response.in_progress", { type: "response.in_progress", response: inProgress }),
@@ -284,6 +299,7 @@ function streamResponse(response: ResponseEnvelope): Response {
         part: item.content[0],
       }));
     }
+
     events.push(sse("response.output_item.done", {
       type: "response.output_item.done",
       output_index: outputIndex,
@@ -292,6 +308,7 @@ function streamResponse(response: ResponseEnvelope): Response {
   });
 
   events.push(sse("response.completed", { type: "response.completed", response }));
+
   return new Response(events.join(""), {
     status: 200,
     headers: {
@@ -313,13 +330,17 @@ async function buildResponse(
   },
 ): Promise<BuiltResponse> {
   const id = `resp_${crypto.randomUUID().replaceAll("-", "")}`;
+
   const metadataSessionId = body.client_metadata && typeof body.client_metadata.session_id === "string"
     ? body.client_metadata.session_id
     : undefined;
+
   let sessionKey = options.sessionKey;
   let managedKey: string | undefined;
+
   if (!sessionKey && body.previous_response_id) {
     managedKey = pool.lookupResponseId(body.previous_response_id);
+
     if (!managedKey) {
       return { error: new Response(JSON.stringify({ error: {
         type: "invalid_request_error",
@@ -327,6 +348,7 @@ async function buildResponse(
       } }), { status: 404, headers: { "Content-Type": "application/json" } }) };
     }
   }
+
   sessionKey ??= body.prompt_cache_key ?? metadataSessionId ?? `response:${id}`;
 
   const chatBody = ChatCompletionRequest.parse({
@@ -336,15 +358,18 @@ async function buildResponse(
     tools: toChatTools(body.tools),
     tool_choice: toChatToolChoice(body.tool_choice),
   });
+
   const chatResponse = await handleChatCompletion(chatBody, pool, {
     ...options,
     sessionKey,
     managedKey,
   });
+
   if (!chatResponse.ok) return { error: chatResponse };
 
   const completion = ChatCompletionResponse.parse(await chatResponse.json());
   const message = completion.choices[0].message;
+
   const output: OutputItem[] = message.tool_calls?.length
     ? message.tool_calls.map((call) => ({
         id: `fc_${crypto.randomUUID().replaceAll("-", "")}`,
@@ -361,34 +386,47 @@ async function buildResponse(
         role: "assistant",
         content: [{ type: "output_text", text: message.content ?? "", annotations: [] }],
       }];
+
   pool.bindResponseId(id, managedKey ?? pool.managedKeyForSessionKey(sessionKey));
+
   return { envelope: responseEnvelope(body, id, Math.floor(Date.now() / 1000), output, completion.usage, completion.system_fingerprint) };
 }
 
 function streamDeferredResponse(pending: Promise<BuiltResponse>): Response {
   const enc = new TextEncoder();
+
   return new Response(new ReadableStream({
     async start(controller) {
       const heartbeat = setInterval(() => {
         try { controller.enqueue(enc.encode(": keepalive\n\n")); } catch {}
       }, 15_000);
+
       try {
         const built = await pending;
+
         if ("error" in built) {
           let error: unknown = { message: "M365 upstream error", type: "upstream_error" };
+
           try { error = JSON.parse(await built.error.text()).error ?? error; } catch {}
+
           controller.enqueue(enc.encode(sse("response.failed", { type: "response.failed", error })));
+
           return;
         }
+
         const source = streamResponse(built.envelope).body?.getReader();
+
         if (!source) return;
+
         while (true) {
           const chunk = await source.read();
+
           if (chunk.done) break;
           controller.enqueue(chunk.value);
         }
       } finally {
         clearInterval(heartbeat);
+
         try { controller.close(); } catch {}
       }
     },
@@ -411,9 +449,12 @@ export async function handleResponse(
   } = {},
 ): Promise<Response> {
   const pending = buildResponse(body, pool, options);
+
   if (body.stream) return streamDeferredResponse(pending);
   const built = await pending;
+
   if ("error" in built) return built.error;
+
   return new Response(JSON.stringify(built.envelope), {
     status: 200,
     headers: { "Content-Type": "application/json" },

@@ -3,10 +3,13 @@ import { z } from "zod/v4";
 import type { ParsedToolCall } from "@m365-copilot/core";
 
 const CLIENTS = ["pi", "omp", "codex"] as const;
+
 const TTL_MS = 60_000;
+
 const CAPACITY = 1_000;
 
 type CandidateState = "PENDING" | "AUTHORIZED" | "RESULT_ACCEPTED";
+
 export type AttestationClient = (typeof CLIENTS)[number];
 
 export const AttestationRequestSchema = z.object({
@@ -44,8 +47,10 @@ function sha256(value: string): string {
 
 function commandFor(call: ParsedToolCall): string | null {
   if (call.function.name !== "bash") return null;
+
   try {
     const args = JSON.parse(call.function.arguments) as { command?: unknown };
+
     return typeof args.command === "string" ? args.command : null;
   } catch {
     return null;
@@ -67,6 +72,7 @@ function validSignature(secret: string, request: AttestationRequest, supplied: s
   if (!supplied || !/^[0-9a-f]{64}$/.test(supplied)) return false;
   const expected = createHmac("sha256", secret).update(signaturePayload(request), "utf8").digest();
   const actual = Buffer.from(supplied, "hex");
+
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
@@ -85,6 +91,7 @@ class InMemoryAttestationGate implements AttestationGate {
   /** Drop expired and terminal candidates so a long-lived process stays under CAPACITY. */
   private pruneCandidates(now: number): void {
     if (this.candidates.size < CAPACITY) return;
+
     for (const [id, candidate] of this.candidates) {
       if (candidate.expiresAt <= now || candidate.state === "RESULT_ACCEPTED") {
         this.candidates.delete(id);
@@ -94,10 +101,12 @@ class InMemoryAttestationGate implements AttestationGate {
 
   register(client: AttestationClient, call: ParsedToolCall): boolean {
     const command = commandFor(call);
+
     if (command === null) return false;
     const now = Date.now();
     this.pruneNonces(now);
     this.pruneCandidates(now);
+
     if (this.candidates.size >= CAPACITY || this.candidates.has(call.id)) return false;
     this.candidates.set(call.id, {
       client,
@@ -105,17 +114,22 @@ class InMemoryAttestationGate implements AttestationGate {
       expiresAt: now + TTL_MS,
       state: "PENDING",
     });
+
     return true;
   }
 
   attest(request: AttestationRequest, signature: string | undefined): boolean {
     const now = Date.now();
     this.pruneNonces(now);
+
     // Signature before nonce: never reveal whether a nonce was seen.
     if (!validSignature(this.secret, request, signature)) return false;
+
     if (Math.abs(now - request.ts * 1_000) > TTL_MS) return false;
+
     if (this.nonces.has(request.nonce)) return false;
     const candidate = this.candidates.get(request.tool_call_id);
+
     if (
       !candidate ||
       candidate.state !== "PENDING" ||
@@ -125,6 +139,7 @@ class InMemoryAttestationGate implements AttestationGate {
     ) return false;
     this.nonces.set(request.nonce, now + TTL_MS);
     candidate.state = "AUTHORIZED";
+
     return true;
   }
 
@@ -134,8 +149,10 @@ class InMemoryAttestationGate implements AttestationGate {
 
   authorized(toolCallId: string, client: AttestationClient | undefined): boolean {
     const candidate = this.candidates.get(toolCallId);
+
     if (!candidate) return false;
     const now = Date.now();
+
     return candidate.expiresAt > now && candidate.client === client && candidate.state === "AUTHORIZED";
   }
 
@@ -145,10 +162,13 @@ class InMemoryAttestationGate implements AttestationGate {
     // that went through the 8H verifier path never registered a candidate, so
     // the handler must consult the pool's emitted-ids instead (see handler).
     const candidate = this.candidates.get(toolCallId);
+
     if (!candidate) return false;
     const now = Date.now();
+
     if (candidate.expiresAt <= now || candidate.client !== client || candidate.state !== "AUTHORIZED") return false;
     candidate.state = "RESULT_ACCEPTED";
+
     return true;
   }
 }
@@ -160,8 +180,10 @@ export function getAttestationGate(): AttestationGate | null {
   const secret = process.env.M365_CLIENT_ATTESTATION === "1"
     ? process.env.M365_ATTESTATION_SECRET?.trim()
     : undefined;
+
   if (!secret) return null;
   singleton ??= new InMemoryAttestationGate(secret);
+
   return singleton;
 }
 
@@ -181,15 +203,20 @@ export function handleAttestationRequest(
   if (!isLoopback) {
     return response(404, { error: { type: "not_found", message: "Not found" } });
   }
+
   const gate = getAttestationGate();
+
   if (!gate) return response(404, { error: { type: "not_found", message: "Not found" } });
   const parsed = AttestationRequestSchema.safeParse(body);
+
   if (!parsed.success) {
     return response(400, { error: { type: "invalid_request_error", message: parsed.error.message } });
   }
+
   if (!gate.attest(parsed.data, signature)) {
     return response(403, { error: { type: "attestation_denied", message: "Attestation denied" } });
   }
+
   return response(200, { decision: "allow" });
 }
 
@@ -206,17 +233,22 @@ export function requestedAttestationClient(
   proof: string | undefined,
 ): AttestationClient | undefined {
   if (executionGate !== "attestation-v1") return undefined;
+
   if (!client || !(CLIENTS as readonly string[]).includes(client)) return undefined;
   const secret = getAttestationSecret();
+
   if (!secret || !proof) return undefined;
   const expected = createHmac("sha256", secret).update(`attestation-v1\n${client}`, "utf8").digest();
   const actual = Buffer.from(proof, "hex");
+
   if (actual.length !== expected.length) return undefined;
+
   try {
     if (!timingSafeEqual(actual, expected)) return undefined;
   } catch {
     return undefined;
   }
+
   return client as AttestationClient;
 }
 

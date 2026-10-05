@@ -19,6 +19,15 @@ These modules are now separate from `handler.ts`.
 - `buildUsage()` makes usage objects.
 - Usage objects work with OpenAI.
 - The function formats throttle data and scores.
+- Provider telemetry is namespaced under `x_<providerId>_*`
+  (`x_m365_tone`, `x_chatgpt_web_turn_key`).
+
+**backends.ts** - Backend selection
+- `activeBackend()` resolves `PROVIDER` to a `BackendDescriptor`.
+- Each descriptor owns its models, `owned_by`, context hints, and a
+  `createSession` factory.
+- `SessionPool` receives that factory, so it is the single injection point for a
+  backend. Nothing else in `proxy-lib` knows which backend it is driving.
 
 **response-helpers.ts** - Response creation
 - `jsonResponse()` makes JSON responses.
@@ -69,6 +78,15 @@ These modules are now separate from `handler.ts`.
 **auth.ts** - Authentication
 - Handles M365 authentication.
 
+**provider.ts** - The backend seam
+- `ModelProvider` is what `proxy-lib` talks to instead of `ModelSession`.
+- `ProviderTurn` is one backend turn: live deltas, `stopReason`
+  (`completed` / `refused` / `rate_limited` / `empty`), quota, and a
+  provider-owned `usage` bag.
+- A provider keeps its own vocabulary — `ModelSession` maps M365's
+  `messageType: "Disengaged"` onto `refused`; `ChatGptWebProvider` binds a
+  ChatGPT DOM turn.
+
 ## Main Handler
 
 **handler.ts** - Request handler
@@ -101,5 +119,7 @@ handler.ts
 We follow these rules:
 - Each module has one job.
 - Each module is testable.
+- A module never learns backend vocabulary it does not own; it asks the
+  provider (`supportsTools`, `recoverFromRefusal`) instead.
 - We do not change behavior.
 - We commit each extraction separately.

@@ -47,7 +47,9 @@ export async function renderResponse(args: RenderResponseArgs): Promise<Response
 
   if (!stream) {
     const p = await produce();
+
     if (p.kind === "error") return p.resp;
+
     if (p.kind === "tools") {
       return jsonResponse(200, fp({
         id: completionId, object: "chat.completion", created, model,
@@ -55,6 +57,7 @@ export async function renderResponse(args: RenderResponseArgs): Promise<Response
         usage: usage(),
       }));
     }
+
     return jsonResponse(200, fp({
       id: completionId, object: "chat.completion", created, model,
       choices: [{ index: 0, message: { role: "assistant", content: p.text }, finish_reason: outputFinishReason(p.text) }],
@@ -83,20 +86,27 @@ export async function renderResponse(args: RenderResponseArgs): Promise<Response
       // every forwarded delta extends the answer, so `sent` is always a prefix of the
       // final text — the remainder is a clean tail, never a duplicate.
       let sent = "";
+
       const liveDelta = hasTools ? undefined : (delta: string) => {
         if (!delta) return;
         sent += delta;
+
         try { send({ ...base, choices: [{ index: 0, delta: { content: delta }, finish_reason: null }] }); } catch {}
       };
 
       let p: Produced;
+
       try { p = await produce(liveDelta); }
       catch (err: unknown) { p = { kind: "error", resp: jsonResponse(502, { error: { message: err instanceof Error ? err.message : String(err), type: "upstream_error" } }) }; }
+
       clearInterval(hb);
+
       try {
         if (p.kind === "error") {
           let message = "upstream error";
+
           try { message = (JSON.parse(await p.resp.text())?.error?.message) || message; } catch {}
+
           // HTTP 200 is already committed, so surface the failure as an in-stream error chunk.
           send({ ...base, error: { message, type: "upstream_error" } });
         } else if (p.kind === "tools") {
@@ -110,7 +120,9 @@ export async function renderResponse(args: RenderResponseArgs): Promise<Response
           // the final text (a divergent snapshot upstream chose not to stream), fall
           // back to sending nothing more rather than duplicating already-sent bytes.
           const remainder = p.text.startsWith(sent) ? p.text.slice(sent.length) : "";
+
           if (!p.text.startsWith(sent)) log.info(`Streamed prefix diverged from final text (sent ${sent.length}, final ${p.text.length} chars) — not re-sending to avoid duplication`);
+
           if (remainder) send({ ...base, choices: [{ index: 0, delta: { content: remainder }, finish_reason: null }] });
           send({ ...base, choices: [{ index: 0, delta: {}, finish_reason: outputFinishReason(p.text) }], ...(includeUsage ? { usage: usage() } : {}) });
         }

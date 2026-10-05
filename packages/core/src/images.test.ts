@@ -3,14 +3,17 @@ import { prepareImageAttachments } from "./images.js";
 
 const jwt = (payload: object) => {
   const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+
   return `${encode({ alg: "none" })}.${encode(payload)}.`;
 };
 
 describe("prepareImageAttachments", () => {
   it("uploads a data URL and returns an ImageFile annotation", async () => {
     let request: RequestInit | undefined;
+
     const fetchImpl: typeof fetch = async (_url, init) => {
       request = init;
+
       return new Response(JSON.stringify({
         docId: "doc-1",
         fileName: "capture.png",
@@ -69,24 +72,31 @@ describe("prepareImageAttachments", () => {
 
   it("does not upload an empty image list", async () => {
     let called = false;
+
     const fetchImpl: typeof fetch = async () => {
       called = true;
+
       return new Response();
     };
+
     await expect(prepareImageAttachments("not-a-jwt", "conversation-1", [], fetchImpl)).resolves.toEqual([]);
     expect(called).toBe(false);
   });
 
   it("uploads multiple images in order with fallback file names", async () => {
     const requests: RequestInit[] = [];
+
     const fetchImpl: typeof fetch = async (_url, init) => {
       requests.push(init);
+
       return new Response(JSON.stringify({ result: { value: "Success" }, docId: `doc-${requests.length}` }), { status: 200 });
     };
+
     const attachments = await prepareImageAttachments(jwt({ oid: "u", tid: "t" }), "c", [
       { mediaType: "image/png", data: Uint8Array.from([1]) },
       { mediaType: "image/jpeg", data: Uint8Array.from([2]), name: "photo.jpg" },
     ], fetchImpl);
+
     expect(requests).toHaveLength(2);
     expect(attachments.map((item) => item.fileName)).toEqual(["image-1.png", "photo.jpg"]);
     expect(attachments.map((item) => item.docId)).toEqual(["doc-1", "doc-2"]);

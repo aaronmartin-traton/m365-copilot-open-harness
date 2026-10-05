@@ -22,12 +22,14 @@ export async function handleConversationPrune(
 ): Promise<Response> {
   try {
     const result = await pool.prune(toSelector(body));
+
     if (!result) {
       return new Response(JSON.stringify({ error: { type: "not_found", message: "Unknown managed conversation" } }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }
+
     return new Response(JSON.stringify({ deleted: true, conversation_id: result.conversationId }), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -36,6 +38,7 @@ export async function handleConversationPrune(
     const message = error instanceof Error && error.message === "remote_prune_unavailable"
       ? "M365 web conversation deletion is unavailable"
       : "M365 web conversation deletion failed";
+
     return new Response(JSON.stringify({ error: { type: "remote_prune_unavailable", message } }), {
       status: 503,
       headers: { "Content-Type": "application/json" },

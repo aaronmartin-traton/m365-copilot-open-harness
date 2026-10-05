@@ -8,6 +8,7 @@ const saved = {
 afterEach(() => {
   if (saved.proven === undefined) delete process.env.M365_WEB_PRUNE_PROVEN;
   else process.env.M365_WEB_PRUNE_PROVEN = saved.proven;
+
   if (saved.ttl === undefined) delete process.env.M365_SESSION_TTL_MINUTES;
   else process.env.M365_SESSION_TTL_MINUTES = saved.ttl;
   vi.resetModules();

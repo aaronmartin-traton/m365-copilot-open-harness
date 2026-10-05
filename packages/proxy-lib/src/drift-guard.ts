@@ -29,10 +29,13 @@ export interface DriftSample {
 
 /** Steered mean dea must exceed the unsteered baseline mean by this factor. */
 export const DRIFT_DEA_FACTOR = 3;
+
 /** Steered Disengaged rate must exceed the unsteered baseline rate by this gap. */
 export const DRIFT_DISENGAGED_GAP = 0.1;
+
 /** A bucket with fewer than this many samples never alerts. */
 export const DRIFT_MIN_SAMPLES = 5;
+
 /** Per-bucket ring size: bounded memory while remembering a session's tail. */
 export const DRIFT_WINDOW = 100;
 
@@ -56,6 +59,7 @@ export function recordDriftSample(sample: DriftSample): void {
   const bucket = bucketOf(sample.fingerprint);
   const ring = sink.get(bucket) ?? [];
   ring.push(sample);
+
   if (ring.length > DRIFT_WINDOW) ring.splice(0, ring.length - DRIFT_WINDOW);
   sink.set(bucket, ring);
 }
@@ -64,9 +68,11 @@ export function recordDriftSample(sample: DriftSample): void {
 export function driftStats(fingerprint: string): DriftStats {
   const ring = sink.get(bucketOf(fingerprint)) ?? [];
   const disengaged = ring.filter((s) => s.disengaged).length;
+
   const deaScores = ring
     .filter((s) => typeof s.deaScore === "number")
     .map((s) => s.deaScore as number);
+
   return {
     fingerprint: bucketOf(fingerprint),
     turns: ring.length,
@@ -87,30 +93,39 @@ export function driftStats(fingerprint: string): DriftStats {
  */
 export function driftAlert(): string | null {
   const baseline = driftStats("unsteered");
+
   if (baseline.turns < DRIFT_MIN_SAMPLES) return null;
+
   const steered = [...sink.keys()]
     .filter((k) => k !== "unsteered")
     .flatMap((k) => sink.get(k) ?? []);
+
   if (steered.length < DRIFT_MIN_SAMPLES) return null;
   const sTurns = steered.length;
   const sDisengaged = steered.filter((s) => s.disengaged).length;
   const sRate = sDisengaged / sTurns;
+
   const sDeaScores = steered
     .filter((s) => typeof s.deaScore === "number")
     .map((s) => s.deaScore as number);
+
   const sMean =
     sDeaScores.length > 0
       ? sDeaScores.reduce((a, b) => a + b, 0) / sDeaScores.length
       : null;
 
   const problems: string[] = [];
+
   if (baseline.meanDea !== null && sMean !== null && sMean > baseline.meanDea * DRIFT_DEA_FACTOR) {
     problems.push(`mean dea ${sMean.toFixed(6)} vs baseline ${baseline.meanDea.toFixed(6)} (>${DRIFT_DEA_FACTOR}x)`);
   }
+
   if (sRate > baseline.disengagedRate + DRIFT_DISENGAGED_GAP) {
     problems.push(`Disengaged rate ${sRate.toFixed(3)} vs baseline ${baseline.disengagedRate.toFixed(3)} (+>${DRIFT_DISENGAGED_GAP})`);
   }
+
   if (problems.length === 0) return null;
+
   return `steered (${sTurns} turns) exceeds baseline (${baseline.turns} turns): ${problems.join("; ")}`;
 }
 

@@ -36,6 +36,7 @@ Available actions:
 /** Fill NATIVE_ACTION_INSTRUCTIONS with a concrete action list. */
 export function buildNativeActionPrompt(actions: Array<{ name: string; description?: string }>): string {
   const list = actions.map((a) => `- ${a.name}${a.description ? ` — ${a.description}` : ""}`).join("\n");
+
   return NATIVE_ACTION_INSTRUCTIONS.replace("{{ACTIONS}}", list || "- (none)");
 }
 
@@ -102,14 +103,18 @@ export interface ActionConfirmation {
 
 function collectActions(cards: AdaptiveCard[] | undefined): AdaptiveCardAction[] {
   const out: AdaptiveCardAction[] = [];
+
   for (const c of cards ?? []) {
     for (const a of c.actions ?? []) out.push(a);
+
     for (const b of c.body ?? []) for (const a of b.actions ?? []) out.push(a);
   }
+
   return out;
 }
 
 const NEGATIVE = /cancel|decline|deny|reject|no\b|dismiss|not now/i;
+
 const AFFIRMATIVE = /allow|confirm|continue|proceed|yes|approve|run|send|ok/i;
 
 /** Pick the affirmative Action.Submit — its `data.message` (actionId + confirmationOption)
@@ -117,11 +122,13 @@ const AFFIRMATIVE = /allow|confirm|continue|proceed|yes|approve|run|send|ok/i;
  *  as the resume message's `text`, matching the button by actionId+confirmationOption. */
 function pickAffirmative(actions: AdaptiveCardAction[]): { message: { actionId?: string; confirmationOption?: string }; title?: string } | null {
   const submits = actions.filter((a) => (a.type ?? "").includes("Submit") && a.data?.message);
+
   if (!submits.length) return null;
   // Prefer an explicit affirmative title; else the first non-negative; else the first.
   const affirmative = submits.find((a) => AFFIRMATIVE.test(a.title ?? "") && !NEGATIVE.test(a.title ?? ""));
   const nonNegative = submits.find((a) => !NEGATIVE.test(a.title ?? ""));
   const chosen = affirmative ?? nonNegative ?? submits[0];
+
   return { message: chosen.data!.message ?? {}, title: chosen.title };
 }
 
@@ -132,6 +139,7 @@ function pickAffirmative(actions: AdaptiveCardAction[]): { message: { actionId?:
  */
 export function parseActionConfirmation(m: MaybeTriggerMessage | null | undefined): ActionConfirmation | null {
   if (!m || typeof m !== "object") return null;
+
   const isConfirmType =
     (m.messageType && ACTION_CONFIRM_MESSAGE_TYPES.has(m.messageType)) ||
     m.layout === "confirmation_trigger" ||
@@ -139,11 +147,14 @@ export function parseActionConfirmation(m: MaybeTriggerMessage | null | undefine
 
   const picked = pickAffirmative(collectActions(m.adaptiveCards));
   const actionId = m.actionId ?? picked?.message.actionId;
+
   // Need something that looks like an action to act on.
   if (!isConfirmType && !(actionId && m.adaptiveCards?.length)) return null;
+
   if (!actionId) return null;
 
   const sourceRequestId = m.sourceRequestId ?? m.requestId ?? m.messageId ?? "";
+
   return {
     actionId,
     sourceRequestId,
@@ -187,5 +198,6 @@ export function buildResumeInvokeAction(conf: ActionConfirmation, opts: ResumeIn
  */
 export function shouldAutoConfirm(conf: ActionConfirmation, env: { autoConfirmAll?: boolean } = {}): boolean {
   if (env.autoConfirmAll) return true;
+
   return !conf.isConsequential;
 }
