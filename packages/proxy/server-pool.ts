@@ -1,7 +1,6 @@
-import type { M365WebConversationClientLike } from "@m365-copilot/core";
 import { SessionPool, activeBackend } from "@m365-copilot/proxy-lib";
 
-let webClient: M365WebConversationClientLike | null = null;
+const backend = activeBackend();
 
 let automaticReaperDisabled = process.env.M365_WEB_PRUNE_PROVEN !== "1";
 
@@ -11,26 +10,29 @@ let lastRunAt: number | null = null;
 
 let lastResult = { pruned: 0, failed: 0 };
 
-const remotePruner = async (ids: { sessionId: string; conversationId: string }): Promise<void> => {
-  if (!webClient) {
-    // Keep Playwright out of Bun startup and ordinary proxy requests. This import
-    // runs only after the proof gate and only when a due record is actually pruned.
-    const { M365WebConversationClient } = await import("@m365-copilot/core");
-    webClient = new M365WebConversationClient();
+/**
+ * The backend decides whether its conversations can be deleted remotely.
+ *
+ * M365 exposes a web API for that; ChatGPT Web does not, so `deleteConversation`
+ * is absent from its descriptor and the pruner is never installed. Calling the
+ * M365 client with a chatgpt.com conversation id would fail, and that failure
+ * permanently disables the reaper.
+ */
+const remotePruner = backend.deleteConversation
+  ? async (ids: { sessionId: string; conversationId: string }): Promise<void> => {
+    try {
+      await backend.deleteConversation!(ids);
+    } catch (error) {
+      automaticReaperDisabled = true;
+      throw error;
+    }
   }
-
-  try {
-    await webClient.deleteConversation({ conversationId: ids.conversationId });
-  } catch (error) {
-    automaticReaperDisabled = true;
-    throw error;
-  }
-};
+  : undefined;
 
 /** Process-wide pool; every request and maintenance operation shares its scheduler. */
 export const pool = new SessionPool(
   {},
-  { remotePruner, createSession: activeBackend().createSession },
+  { remotePruner, createSession: backend.createSession },
 );
 
 export async function runReaper(): Promise<{ pruned: number; failed: number }> {

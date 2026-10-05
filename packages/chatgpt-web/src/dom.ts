@@ -102,42 +102,74 @@ export async function captureBaseline(page: Page): Promise<SubmissionBaseline> {
   };
 }
 
-/** Text of the most recent user bubble. */
-async function lastUserBubbleText(page: Page): Promise<string> {
-  const bubbles = page.locator(USER_BUBBLE);
-  const count = await bubbles.count();
+/**
+ * The prompt that belongs to one specific turn container.
+ *
+ * Scoped to the turn, never page-global. ChatGPT usually nests the user bubble
+ * inside the turn container, but a submit can also render it as its own
+ * container directly above the answer — so the preceding new container is
+ * checked too. Returns "" when the turn cannot be attributed to a prompt,
+ * which never matches a real submission.
+ */
+async function promptForTurn(
+  page: Page,
+  turnKey: string,
+  newTurnKeys: string[],
+): Promise<string> {
+  const own = page.locator(`${TURN}[data-turn-key="${turnKey}"] ${USER_BUBBLE}`);
 
-  if (count === 0) return "";
+  if ((await own.count()) > 0) return (await own.first().innerText()).trim();
 
-  return (await bubbles.nth(count - 1).innerText()).trim();
+  const position = newTurnKeys.indexOf(turnKey);
+  const preceding = position > 0 ? newTurnKeys[position - 1] : undefined;
+
+  if (preceding !== undefined) {
+    const bubble = page
+      .locator(`${TURN}[data-turn-key="${preceding}"] ${USER_BUBBLE}`)
+      .first();
+
+    if ((await bubble.count()) > 0) return (await bubble.innerText()).trim();
+  }
+
+  return "";
 }
 
 /**
- * Wait for the assistant turn that answers our submission and
- * return its logical id.
+ * Wait for the assistant turn that answers our submission and return its
+ * logical id.
  *
- * A user bubble whose text is not the prompt we submitted means
- * the page accepted someone else's turn while ours was in
- * flight. Binding to that would return a stranger's answer as
- * ours, so this throws instead.
+ * Every candidate is attributed to a prompt on its own terms, and only a
+ * candidate whose prompt IS the one we submitted may be bound. A page-global
+ * check is not enough: when a stranger's exchange renders above ours, the last
+ * bubble on the page is still ours while the first *new* answer turn is theirs.
+ * Binding that one returns their answer as ours.
+ *
+ * Throws when the deadline passes. Honours `signal`, so a disconnected client
+ * does not hold a browser — and an upstream concurrency slot — until the
+ * deadline.
  */
 export async function waitForAssistantTurn(
   page: Page,
   baseline: SubmissionBaseline,
   deadlineMs: number,
   prompt: string,
+  signal?: AbortSignal,
 ): Promise<string> {
   const known = new Set(baseline.turnKeys);
+  const wanted = prompt.trim();
   const expiry = Date.now() + deadlineMs;
 
   while (Date.now() < expiry) {
+    if (signal?.aborted) {
+      throw Object.assign(new Error("Aborted while waiting for the ChatGPT turn"), {
+        name: "AbortError",
+      });
+    }
+
     const turnKeys = (await attrValues(page.locator(TURN), "data-turn-key")).filter(
       (key) => key && !known.has(key),
     );
 
-    // A new exchange can add more than one turn container (the user bubble can
-    // render separately from the answer), so scan all of them rather than
-    // binding to whichever comes first in document order.
     for (const turnKey of turnKeys) {
       const started = await page
         .locator(`${TURN}[data-turn-key="${turnKey}"]`)
@@ -146,17 +178,7 @@ export async function waitForAssistantTurn(
 
       if (started === 0) continue;
 
-      const submitted = await lastUserBubbleText(page);
-
-      if (submitted !== prompt.trim()) {
-        throw new ChatGptDomError(
-          `Newest user turn does not match the submitted prompt (${JSON.stringify(
-            submitted.slice(0, 80),
-          )}); refusing to bind to it`,
-        );
-      }
-
-      return turnKey;
+      if ((await promptForTurn(page, turnKey, turnKeys)) === wanted) return turnKey;
     }
 
     await sleep(POLL_INTERVAL_MS);

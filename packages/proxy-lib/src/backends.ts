@@ -12,6 +12,7 @@
 
 import {
   getAvailableModels,
+  M365WebConversationClient,
   ModelSession,
   type ModelProvider,
   type ModelSessionOptions,
@@ -34,6 +35,13 @@ export interface BackendDescriptor {
   maxOutputTokens: number;
   /** The single seam `SessionPool` uses to build a conversation session. */
   createSession(options: ModelSessionOptions): ModelProvider;
+  /**
+   * Delete the backend-side conversation for an idle thread, when the backend
+   * supports it. Optional: a backend with no remote deletion omits it, and the
+   * reaper then leaves that lane's conversations alone instead of calling
+   * somebody else's API with a foreign conversation id.
+   */
+  deleteConversation?(ids: { sessionId: string; conversationId: string }): Promise<void>;
 }
 
 const DEFAULT_CONTEXT_WINDOW = 1_000_000;
@@ -45,14 +53,20 @@ const M365_BACKEND: BackendDescriptor = {
   contextWindowTokens: Number(process.env.M365_CONTEXT_WINDOW) || DEFAULT_CONTEXT_WINDOW,
   maxOutputTokens: Number(process.env.M365_MAX_OUTPUT_TOKENS) || DEFAULT_CONTEXT_WINDOW,
   createSession: (options) => new ModelSession(options),
+  deleteConversation: async (ids) => {
+    const client = new M365WebConversationClient();
+    await client.deleteConversation({ conversationId: ids.conversationId });
+  },
 };
 
 const CHATGPT_WEB_BACKEND: BackendDescriptor = {
   id: "chatgpt-web",
   ownedBy: "chatgpt-web",
   listModels: chatGptWebModelNames,
-  // Measured ChatGPT Plus Medium/High window (docs/models.ts); the
-  // advertised figure is a hint only, ChatGPT compacts its own context.
+  // Measured ChatGPT Plus Medium/High window
+  // (packages/chatgpt-web/src/models.ts); advertised only, ChatGPT compacts
+  // its own context. No `deleteConversation`: the idle reaper must not call the
+  // M365 web API with a chatgpt.com conversation.
   contextWindowTokens: Number(process.env.CHATGPT_WEB_CONTEXT_WINDOW) || 90_000,
   maxOutputTokens: Number(process.env.CHATGPT_WEB_MAX_OUTPUT_TOKENS) || DEFAULT_CONTEXT_WINDOW,
   createSession: (options) => new ChatGptWebProvider(options),

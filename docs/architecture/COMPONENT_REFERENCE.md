@@ -27,7 +27,11 @@ These modules are now separate from `handler.ts`.
 - Each descriptor owns its models, `owned_by`, context hints, and a
   `createSession` factory.
 - `SessionPool` receives that factory, so it is the single injection point for a
-  backend. Nothing else in `proxy-lib` knows which backend it is driving.
+  backend.
+- The descriptor also owns `deleteConversation` when a backend supports remote
+  conversation deletion. The idle reaper installs no pruner for a backend that
+  does not — M365 has a web API for this, ChatGPT Web does not, and calling the
+  M365 client with a chatgpt.com id would fail and disable the reaper.
 
 **response-helpers.ts** - Response creation
 - `jsonResponse()` makes JSON responses.

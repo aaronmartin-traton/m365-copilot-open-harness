@@ -106,7 +106,13 @@ export async function generateImage(prompt: string, opts: GenerateImageOptions =
     return [];
   }
 
-  const urls = captured.map((image) => ({ url: image.referenceUrls[0], meta: image })).filter((entry): entry is { url: string; meta: ProviderImage } => !!entry.url);
+  const urls: Array<{ url: string; meta: ProviderImage }> = [];
+
+  for (const image of captured) {
+    const url = image.referenceUrls[0];
+
+    if (url) urls.push({ url, meta: image });
+  }
 
   if (opts.urlsOnly) return urls.map(({ url, meta }) => ({ url, contentType: "image/png", data: Buffer.alloc(0), base64: "", size: meta.size, orientation: meta.orientation }));
   const artifactToken = opts.artifactToken ?? (await getImageArtifactToken());

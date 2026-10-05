@@ -54,6 +54,29 @@ export function chatGptProfileDir(): string {
   );
 }
 
+let shared: ChatGptBrowserSession | undefined;
+
+/**
+ * The process-wide browser session.
+ *
+ * Chromium allows exactly one instance per persistent profile directory — a
+ * second `launchPersistentContext` on the same directory fails with a
+ * ProcessSingleton error. So this is deliberately a singleton: one window, one
+ * logged-in session, shared by every conversation. Turns are serialized by the
+ * proxy's scheduler, which is also what ChatGPT expects.
+ */
+export function sharedChatGptSession(options: ChatGptBrowserOptions = {}): ChatGptBrowserSession {
+  shared ??= new ChatGptBrowserSession(options);
+
+  return shared;
+}
+
+/** Close the shared session, if one was ever opened. */
+export async function closeSharedChatGptSession(): Promise<void> {
+  await shared?.close();
+  shared = undefined;
+}
+
 const sleep = (ms: number): Promise<void> => {
   const { promise, resolve } = Promise.withResolvers<void>();
   setTimeout(resolve, ms);
@@ -157,7 +180,14 @@ export class ChatGptBrowserSession {
     await composer.fill(prompt);
     await composer.press("Enter");
 
-    const turnKey = await waitForAssistantTurn(page, baseline, deadline - Date.now(), prompt);
+    const turnKey = await waitForAssistantTurn(
+      page,
+      baseline,
+      deadline - Date.now(),
+      prompt,
+      signal,
+    );
+
     log.info(`ChatGPT turn ${turnKey} started for ${trunc(prompt, 120)}`);
 
     let emitted = "";
@@ -176,9 +206,11 @@ export class ChatGptBrowserSession {
         emitted = snapshot.text;
       }
 
-      if (snapshot.finished && snapshot.text.length > 0) {
-        return { text: snapshot.text, turnKey };
-      }
+      // A turn that settles with no assistant text is still a completed turn —
+      // moderation, a usage-limit interstitial, an errored generation. Return
+      // it rather than polling to the deadline: the caller needs to see `empty`
+      // and run its own retry policy.
+      if (snapshot.finished) return { text: snapshot.text, turnKey };
 
       if (Date.now() > deadline) {
         throw new Error(`ChatGPT turn ${turnKey} did not finish within ${deadline}ms`);

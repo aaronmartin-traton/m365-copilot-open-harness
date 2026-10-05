@@ -56,6 +56,10 @@ Adding a backend means implementing `ModelProvider`
 (`packages/core/src/provider.ts`) — not forking the translation layer. See
 `.scratch/chatgpt-web-backend/spec.md`.
 
+On `chatgpt-web`, `model:` is **advisory**: nothing drives ChatGPT's model
+picker, so the slug labels telemetry and `/v1/models` rather than switching the
+model.
+
 ## Development
 
 Install dependencies:

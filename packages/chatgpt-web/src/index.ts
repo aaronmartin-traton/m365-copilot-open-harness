@@ -26,6 +26,7 @@ import {
 } from "@m365-copilot/core";
 import {
   ChatGptBrowserSession,
+  sharedChatGptSession,
   type ChatGptBrowserOptions,
 } from "./browser.js";
 import {
@@ -108,17 +109,15 @@ class StreamingTurn implements ProviderTurn {
 export class ChatGptWebProvider implements ModelProvider {
   readonly id = "chatgpt-web";
   readonly sessionId: string;
-  readonly refusalHint =
-    "The ChatGPT Web backend declined to answer. ChatGPT Web has no "
-    + "tool-agent machinery to retry against — rephrase the request or "
-    + "reduce the toolset.";
-
   private readonly browser: ChatGptBrowserSession;
   private turns = 0;
   private freshConversation = false;
 
   constructor(options: ChatGptWebOptions = {}) {
-    this.browser = options.browser ?? new ChatGptBrowserSession(options);
+    // One browser for the whole process: Chromium refuses a second instance on
+    // the same profile directory, and a per-conversation browser would also
+    // never be closed (the pool drops its map entry, not the browser).
+    this.browser = options.browser ?? sharedChatGptSession(options);
     this.sessionId = options.sessionId ?? crypto.randomUUID();
   }
 
@@ -164,7 +163,10 @@ export class ChatGptWebProvider implements ModelProvider {
         log.info(
           `turn complete: model=${describeChatGptModel(model)}, turn=${turnKey}, chars=${reply.length}`,
         );
-        turn.finish("completed", {
+        // A turn that finished with no prose is not an answer. Report it as
+        // `empty` so the handler's empty-retry ladder engages instead of the
+        // refusal prose being passed off as a completed completion.
+        turn.finish(reply.length > 0 ? "completed" : "empty", {
           conversation_url: this.browser.conversationUrl ?? null,
           turn_key: turnKey,
           requested_model: model,
@@ -189,9 +191,12 @@ export class ChatGptWebProvider implements ModelProvider {
   }
 
   /**
-   * ChatGPT Web has no per-conversation quota to burn by retrying a
-   * refusal, but it also has no known framing that reliably flips a
-   * refusal into an answer, so this never retries. Fail fast.
+   * Always fail fast.
+   *
+   * ChatGPT Web has no per-conversation quota to burn by retrying a refusal,
+   * and no known framing that flips one into an answer. Note this lane never
+   * *reports* a refusal today — see `finish()` — so the handler does not
+   * currently reach this path here.
    */
   recoverFromRefusal(): string | null {
     return null;

@@ -10,8 +10,8 @@ import {
   fetchImageBytes,
   emitThrottleEvent,
   hashConversationId,
-  type ProviderImage,
   type ProviderTurn,
+  type ProviderUsage,
 } from "@m365-copilot/core";
 import { ChatCompletionRequest } from "./schemas.js";
 import { RequestScheduler, SchedulerBusyError, type ScheduleOptions, type SchedulerStats } from "./scheduler.js";
@@ -119,7 +119,7 @@ export async function handleChatCompletion(
   // Captured from the final attempt and surfaced through the OpenAI `usage` block,
   // so clients can see the backend's own telemetry. Token counts aren't exposed
   // by either backend, so the base fields stay zero.
-  let lastUsage: Record<string, unknown> | undefined;
+  let lastUsage: ProviderUsage | undefined;
   let lastSteeringFingerprint: string | undefined;
 
   // `onDelta` (when provided) forwards each text delta to the caller AS IT ARRIVES,
@@ -168,6 +168,11 @@ export async function handleChatCompletion(
           fullText = turn.fullText;
         }
       } catch (err: unknown) {
+        // A client that disconnects mid-turn is not a server fault. Rethrow so
+        // the scheduler's outer catch maps it to 499 `request_aborted`; only
+        // genuine backend faults become 502 here.
+        if (err instanceof Error && err.name === "AbortError") throw err;
+
         return { error: jsonResponse(502, { error: { message: err instanceof Error ? err.message : String(err), type: "upstream_error" } }) };
       }
 
@@ -184,9 +189,10 @@ export async function handleChatCompletion(
       }
 
       lastUsage = turn.usage;
-      lastSteeringFingerprint = typeof turn.usage?.system_fingerprint === "string"
-        ? turn.usage.system_fingerprint
-        : undefined;
+
+      // `system_fingerprint` is emitted by the M365 steering ladder only, so it
+      // is absent on every other backend.
+      lastSteeringFingerprint = turn.usage?.system_fingerprint ?? undefined;
 
       // Disengagement/dea-drift guard (ticket 03): observational sink keyed by
       // fingerprint bucket — alerts (log line) when steered turns drift above
@@ -194,7 +200,7 @@ export async function handleChatCompletion(
       recordDriftSample({
         fingerprint: lastSteeringFingerprint ?? "unsteered",
         disengaged: turn.stopReason === "refused",
-        deaScore: typeof turn.usage?.dea_score === "number" ? turn.usage.dea_score : undefined,
+        deaScore: turn.usage?.dea_score ?? undefined,
         at: Date.now(),
       });
       const drift = driftAlert();

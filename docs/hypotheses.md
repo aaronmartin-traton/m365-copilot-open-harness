@@ -2565,6 +2565,14 @@ Sample size is 2 (one capture per state, from a single account). Both are real
 ChatGPT renderings, not hand-written markup. Selector drift remains possible and
 the captured tests will *not* catch it — only a live run will.
 
+A third, found by adversarial review: **attribution must be per-candidate, not
+page-global.** Binding "the first new answer turn whose predecessor's bubble
+equals our prompt" is wrong when a stranger's exchange renders above ours —
+the last bubble on the page is still ours, so a page-global check passes while
+the first new answer is theirs. Each candidate turn is now attributed to a
+prompt on its own terms (its own bubble, or the new container immediately
+preceding it) and only an exact match may be bound.
+
 ### Live lane: unproven
 
 **Not verified.** No ChatGPT account was used; every test runs against a local

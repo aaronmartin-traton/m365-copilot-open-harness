@@ -18,7 +18,6 @@ import {
   isSignedIn,
   readTurn,
   waitForAssistantTurn,
-  ChatGptDomError,
 } from "./dom.js";
 import { chromiumExecutable } from "../tests/chromium.js";
 
@@ -101,22 +100,56 @@ describe("ChatGPT Web DOM reader", () => {
     expect(bound).toBe("second-turn-uuid");
   });
 
-  it("refuses to bind when the newest user turn is not the prompt we submitted", async () => {
+  it("binds OUR turn when a stranger's exchange renders above it", async () => {
     const page = await openFixture("chatgpt-power-complete.html");
     const baseline = await captureBaseline(page);
 
-    // Someone else's turn lands while ours is in flight.
+    // The adversarial ordering: a stranger's exchange lands FIRST, ours second.
+    // Ours is the last bubble on the page, so a page-global "last bubble" check
+    // would pass — while the first *new* answer turn belongs to the stranger.
     await page.locator("body").evaluate((node, html) => {
       node.insertAdjacentHTML("beforeend", html);
-    }, `<div data-turn-key="stranger"><div data-user-message-bubble="true"><div>someone else's question</div></div></div>
-      <div data-turn-key="stranger-answer"><span data-chatgpt-agent-turn-start></span>
-      <div data-markdown-text-style="assistant-message">stranger answer</div>
-      <div class="turn-action-controls"><button>Copy</button></div></div>`);
+    }, `<div data-turn-key="stranger-q"><div data-user-message-bubble="true"><div>someone else's question</div></div></div>
+      <div data-turn-key="stranger-a"><span data-chatgpt-agent-turn-start></span>
+      <div data-markdown-text-style="assistant-message">stranger answer</div></div>
+      <div data-turn-key="our-q"><div data-user-message-bubble="true"><div>the prompt we sent</div></div></div>
+      <div data-turn-key="our-a"><span data-chatgpt-agent-turn-start></span>
+      <div data-markdown-text-style="assistant-message">our answer</div></div>`);
 
-    // Binding to that would return another user's answer as ours.
+    const bound = await waitForAssistantTurn(page, baseline, 5_000, "the prompt we sent");
+
+    // Streaming the stranger's answer to our client is the silent-wrong-answer
+    // failure this guards against.
+    expect(bound).toBe("our-a");
+  });
+
+  it("times out rather than binding a stranger when only theirs lands", async () => {
+    const page = await openFixture("chatgpt-power-complete.html");
+    const baseline = await captureBaseline(page);
+
+    await page.locator("body").evaluate((node, html) => {
+      node.insertAdjacentHTML("beforeend", html);
+    }, `<div data-turn-key="stranger-q"><div data-user-message-bubble="true"><div>someone else's question</div></div></div>
+      <div data-turn-key="stranger-a"><span data-chatgpt-agent-turn-start></span>
+      <div data-markdown-text-style="assistant-message">stranger answer</div></div>`);
+
+    // Failing is correct here: binding would answer us with someone else's turn.
     await expect(
-      waitForAssistantTurn(page, baseline, 5_000, "the prompt we sent"),
-    ).rejects.toThrow(ChatGptDomError);
+      waitForAssistantTurn(page, baseline, 400, "the prompt we sent"),
+    ).rejects.toThrow(/No assistant turn appeared/);
+  });
+
+  it("stops waiting when the client aborts, instead of polling to the deadline", async () => {
+    const page = await openFixture("chatgpt-power-complete.html");
+    const baseline = await captureBaseline(page);
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 50);
+
+    // Without the signal this would hold a browser (and the single upstream
+    // concurrency slot) for the whole deadline.
+    await expect(
+      waitForAssistantTurn(page, baseline, 60_000, "the prompt we sent", controller.signal),
+    ).rejects.toMatchObject({ name: "AbortError" });
   });
 
   it("times out explicitly instead of returning whatever text is on screen", async () => {

@@ -1,15 +1,19 @@
 /**
  * The ChatGPT Web models this proxy advertises.
  *
- * What an account can actually serve is decided by ChatGPT's own model picker,
- * not by us. Upstream's launcher generates its catalog from the signed-in
- * account and refuses to install a row that account cannot use; these are the
- * rows its documentation names. The picker stays the authority — a mismatch
- * surfaces as a failed turn, never as a silent downgrade to a different model.
+ * **The requested model is advisory on this lane.** Nothing here drives
+ * ChatGPT's model picker: the browser submits a prompt and the answer comes
+ * from whatever the picker had selected. So these slugs label telemetry and
+ * populate `/v1/models`; they do not switch the model. Selecting a specific
+ * model requires driving the picker UI, whose selectors are unverified against
+ * a live account — see `.scratch/chatgpt-web-backend/issues/03`.
  *
- * Context windows are the measured figures upstream reports for Plus
- * Medium/High (90k) and for the experimental 3x context (270k); the planner
- * reserves 10% on top for auto-compaction.
+ * Until that exists, treat `model:` on this lane as metadata. Do not read a
+ * correct-looking `x_chatgpt_web_requested_model` as proof of which model
+ * answered.
+ *
+ * Context windows are the figures upstream reports for Plus Medium/High (90k)
+ * and for the experimental 3x context (270k), plus a 10% compaction reserve.
  */
 
 export interface ChatGptWebModel {

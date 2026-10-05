@@ -16,6 +16,7 @@ import type { Browser } from "playwright";
 import { ChatGptWebProvider, type ChatGptWebOptions } from "./index.js";
 import { CHATGPT_WEB_MODELS } from "./models.js";
 import { chromiumExecutable } from "../tests/chromium.js";
+import { closeSharedChatGptSession } from "./browser.js";
 
 /**
  * Timers below are page-side, not test-side: they stand in for ChatGPT's own
@@ -34,19 +35,22 @@ const FAKE_CHAT_PAGE = `<!doctype html>
 <textarea id="prompt-textarea"></textarea>
 <div id="turns"></div>
 <script>
+let submissions = 0;
 document.getElementById("prompt-textarea").addEventListener("keydown", (event) => {
   if (event.key !== "Enter") return;
   event.preventDefault();
   const prompt = event.target.value;
   event.target.value = "";
+  submissions += 1;
+  const turnKey = "a-answer-" + submissions;
   const turns = document.getElementById("turns");
   const user = document.createElement("div");
-  user.setAttribute("data-turn-key", "u-" + Math.random());
+  user.setAttribute("data-turn-key", "u-" + submissions);
   user.innerHTML = '<div data-user-message-bubble="true"><div>' + prompt + '</div></div>';
   turns.appendChild(user);
   setTimeout(() => {
     const turn = document.createElement("div");
-    turn.setAttribute("data-turn-key", "a-fixed-answer-key");
+    turn.setAttribute("data-turn-key", turnKey);
     turn.innerHTML = '<span data-chatgpt-agent-turn-start></span>' +
       '<div data-markdown-animated data-markdown-text-style="assistant-message"></div>' +
       '<div class="turn-action-controls"><button>Copy</button></div>';
@@ -68,11 +72,24 @@ document.getElementById("prompt-textarea").addEventListener("keydown", (event) =
 </script>
 </body></html>`;
 
+/** A ChatGPT turn that settles with no assistant prose: moderation, or a cap. */
+const REFUSAL_PAGE = FAKE_CHAT_PAGE.replace(
+  'let step = 0;\n    const chunks = ["Let", " me check", " that for you."];',
+  'let step = 0;\n    const chunks = [];',
+).replace(
+  'msg.textContent = chunks.slice(0, step).join("");',
+  'msg.textContent = "";',
+);
+
 let server: Server | undefined;
 
 let browser: Browser | undefined;
 
 afterEach(async () => {
+  // The browser session is a process-wide singleton by design, so each test must
+  // drop it — otherwise the first test's options (origin, launcher) would be
+  // reused by every later one.
+  await closeSharedChatGptSession();
   await browser?.close();
   browser = undefined;
   await new Promise<void>((resolve) => {
@@ -82,10 +99,10 @@ afterEach(async () => {
   });
 });
 
-async function startFakeChat(): Promise<string> {
+async function startFakeChat(page: string = FAKE_CHAT_PAGE): Promise<string> {
   server = createServer((_req, res) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end(FAKE_CHAT_PAGE);
+    res.end(page);
   });
   await new Promise<void>((resolve) => server!.listen(0, "127.0.0.1", resolve));
   const address = server!.address();
@@ -140,7 +157,13 @@ describe("ChatGptWebProvider", () => {
     const provider = new ChatGptWebProvider({});
     // No known framing flips a ChatGPT refusal, so recovery is a fail-fast.
     expect(provider.recoverFromRefusal()).toBeNull();
-    expect(provider.refusalHint).toContain("ChatGPT Web");
+  });
+
+  it("does not advertise a refusal hint it cannot produce", () => {
+    const provider = new ChatGptWebProvider({});
+    // Nothing in the ChatGPT DOM identifies a safety refusal, so this lane never
+    // reports `refused`. Claiming a hint would document a path that never runs.
+    expect(provider.refusalHint).toBeUndefined();
   });
 
   it("has no remote tool machinery to refresh", async () => {
@@ -177,7 +200,7 @@ describe("ChatGptWebProvider", () => {
     expect(turn.turnCount).toBe(1);
 
     // Telemetry namespaced for this backend, under `x_chatgpt_web_*`.
-    expect(turn.usage?.turn_key).toBe("a-fixed-answer-key");
+    expect(turn.usage?.turn_key).toBe("a-answer-1");
     expect(turn.usage?.requested_model).toBe("chatgpt-web/luna");
 
     await provider.close();
@@ -201,5 +224,43 @@ describe("ChatGptWebProvider", () => {
     expect(provider.sessionId).toBe(sessionId);
 
     await provider.close();
+  }, 40_000);
+
+  it("reports a settled turn with no prose as empty, so the retry ladder runs", async () => {
+    const origin = await startFakeChat(REFUSAL_PAGE);
+    const provider = new ChatGptWebProvider(fakeChatOptions(origin));
+
+    const turn = await provider.run("do something refused", "chatgpt-web/luna");
+
+    for await (const _ of turn) { /* drain */ }
+
+    // A moderation/usage-limit turn finishes with no text. Reporting it as
+    // `completed` would pass the refusal off as an answer; polling to the
+    // deadline instead would hold a worker for ten minutes.
+    expect(turn.stopReason).toBe("empty");
+    expect(turn.fullText).toBe("");
+    expect(turn.hasContent).toBe(false);
+
+    await provider.close();
+  }, 40_000);
+
+  it("shares one browser across providers, since Chromium allows one per profile", async () => {
+    // Two providers must not each launch a Chromium on the same profile dir:
+    // the second launch fails with a ProcessSingleton error. The session is a
+    // process-wide singleton for that reason.
+    const origin = await startFakeChat();
+    const a = new ChatGptWebProvider(fakeChatOptions(origin));
+    const b = new ChatGptWebProvider(fakeChatOptions(origin));
+
+    const first = await a.run("one", "chatgpt-web/luna");
+
+    for await (const _ of first) { /* drain */ }
+
+    // Would fail on a ProcessSingleton collision if each provider owned a browser.
+    const second = await b.run("two", "chatgpt-web/luna");
+
+    for await (const _ of second) { /* drain */ }
+
+    expect(second.fullText).toBe("Let me check that for you.");
   }, 40_000);
 });
