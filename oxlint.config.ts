@@ -16,6 +16,39 @@ export default {
   jsPlugins: [
     { name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" },
   ],
+  // SHARED paths track upstream (.gitattributes). Upstream does not
+  // satisfy these rules, so enforcing them there would force a
+  // permanent divergence — the findings are the upstream code itself.
+  overrides: [
+    {
+      files: [
+        "packages/core/src/auth.ts",
+        "packages/core/src/schemas.ts",
+        "packages/core/src/copilot.ts",
+        "packages/core/src/model.ts",
+        "packages/core/src/images.ts",
+        "packages/core/src/image.ts",
+        "packages/core/src/auth.test.ts",
+        "packages/core/src/images.test.ts",
+        "packages/proxy-lib/src/schemas.ts",
+        "packages/proxy-lib/src/images-generation.ts",
+        "packages/proxy-lib/src/scheduler.ts",
+        "packages/proxy-lib/src/responses.ts",
+        "packages/proxy-lib/src/responses.test.ts",
+        "packages/proxy/bin/m365-login.mjs",
+      ],
+      rules: {
+        "anti-slop/no-runtime-typeof": "off",
+        "anti-slop/require-safety-comment-for-type-assertion": "off",
+        "anti-slop/no-unsafe-dictionary-type": "off",
+        "anti-slop/no-unknown-parameters": "off",
+        "anti-slop/no-unknown-returns": "off",
+        "anti-slop/no-known-value-widening": "off",
+        "anti-slop/no-conditional-empty-object-spread": "off",
+      },
+    },
+  ],
+
   rules: {
     "oxc/no-accumulating-spread": "error",
     "anti-slop/no-array-filter-map": "error",

@@ -6,22 +6,18 @@ import {
   formatMessages,
   noteRequestOutcome,
   awaitDegradationBackoff,
-  getImageArtifactToken,
-  fetchImageBytes,
   emitThrottleEvent,
   hashConversationId,
   type ProviderTurn,
   type ProviderUsage,
 } from "@m365-copilot/core";
 import { ChatCompletionRequest } from "./schemas.js";
-import { RequestScheduler, SchedulerBusyError, type ScheduleOptions, type SchedulerStats } from "./scheduler.js";
-import { SessionStateStore } from "./session-store.js";
-import { SessionPool, type ConversationState, type ConversationPruneSelector, type RemoteConversationPruner, type SessionPoolOptions } from "./session-pool.js";
+import { SchedulerBusyError } from "./scheduler.js";
+import { SessionPool } from "./session-pool.js";
 import { compileDelta, LOCAL_TOOL_REMINDER } from "./context-compiler.js";
 import { buildUsage } from "./usage-builder.js";
 import { jsonResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse, throttledResponse } from "./response-helpers.js";
 import { localMetaResponse, renderLocalCompletion } from "./local-response-helpers.js";
-import { OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
 import { renderImagesMarkdown } from "./image-renderer.js";
 import { produceToolPath } from "./tool-path.js";
 import { getToolRepair } from "./tool-repair.js";
@@ -99,11 +95,13 @@ export async function handleChatCompletion(
 
     if (delta.length > 0) {
       text = delta;
+
       // Only a tool result is the thing the note corrects the model about.
       if (conv.pendingNote && newMessages.some((m) => m.role === "tool")) {
         text = `${conv.pendingNote}\n\n${delta}`;
         log.info("Prepended the only-the-first-call-ran note (last reply was partly executed)");
       }
+
       log.info(`Chat completion: backend=${session.id}, model=${model}, routed=${routedModel}, resolved=${modelLabel}, stream=${body.stream}, messages=${body.messages.length}, new=${newMessages.length}, turn=${session.turnCount}, mode=delta, cid=${convId}`);
     } else {
       // No meaningful new content to send — nudge the backend to continue.
@@ -230,6 +228,7 @@ export async function handleChatCompletion(
           convIdHash: hashConversationId(convId ?? "anon"),
         });
         log.info(`Upstream Throttled (${turn.result.errorCode ?? "no errorCode"}) — 429, no retry`);
+
         return { error: throttledResponse(turn.result) };
       }
 
@@ -379,6 +378,7 @@ export async function handleChatCompletion(
       steeringFingerprint: () => lastSteeringFingerprint,
       repair: getToolRepair() ?? undefined,
     });
+
     // When the reply was only partly executed, remember the correction for the
     // turn that carries the real tool result.
     if (result.kind === "tools" && result.note) conv.pendingNote = result.note;

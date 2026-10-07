@@ -23,7 +23,7 @@ const DASH = /^-([ \t]|$)/;
 // A plain key may not start with a flow indicator: `{oldText: "a", …}` is a flow
 // mapping, not a key named "{oldText". Quoted keys are matched by the first two
 // alternatives, so nothing readable is lost.
-const YAML_KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s:#'"{\[][^:]*?):(?:[ \t]+(.*)|[ \t]*)$/;
+const YAML_KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s:#'"{[][^:]*?):(?:[ \t]+(.*)|[ \t]*)$/;
 
 class YamlSubsetError extends Error {}
 

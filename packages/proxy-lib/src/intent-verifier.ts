@@ -66,8 +66,6 @@ export interface IntentVerifier {
 
 const POLICY_VERSION = "8h";
 
-const VOCAB = new Set(["EXECUTE", "TEXT", "UNCERTAIN"]);
-
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------

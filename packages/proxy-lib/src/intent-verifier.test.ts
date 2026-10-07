@@ -22,7 +22,6 @@ import {
   getIntentVerifier,
   resetIntentVerifier,
   INTENT_VERIFIER_PROMPT,
-  type IntentVerifier,
 } from "./intent-verifier.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -76,8 +75,6 @@ function tokenResponse(token: string, reasoning = ""): Response {
     { status: 200, headers: { "Content-Type": "application/json" } },
   );
 }
-
-const fetchMock = () => vi.mocked(globalThis.fetch);
 
 describe("intent verifier — env gate", () => {
   beforeEach(() => disableGate());

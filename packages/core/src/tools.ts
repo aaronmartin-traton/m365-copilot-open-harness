@@ -473,6 +473,7 @@ export function truncateAtFabricatedToolResponse(text: string, tools?: ToolDef[]
  */
 export function isProseDocument(parsed: ParseResult, text?: string, tools?: ToolDef[]): boolean {
   if (!parsed.hasToolCalls || parsed.toolCalls.length < 2) return false;
+
   // A reply that OPENS with a tool call is an action, whatever follows it
   // (upstream 0b1538e, #33): a tool-calling model stops at its call, so
   // everything M365 writes after it was written before the result existed.
@@ -484,6 +485,7 @@ export function isProseDocument(parsed: ParseResult, text?: string, tools?: Tool
 
     if (first && !looksLikeDocumentPreamble(text.slice(0, first.start))) return false;
   }
+
   const prose = parsed.textContent ? parsed.textContent.trim() : "";
   // Distinguish a coding-agent ACTION turn from a written DOCUMENT.
   //   ACTION  (execute it): a short preamble + a couple command fences, e.g. Claude's

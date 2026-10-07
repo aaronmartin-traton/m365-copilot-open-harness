@@ -67,23 +67,30 @@ describe("foldStreamText", () => {
     expect(r.answer.startsWith(r.streamed)).toBe(false); // divergence recorded, not streamed
   });
 });
+
 describe("TurnTextComposer (multi-message turns)", () => {
   type F = { cursor?: string } & ({ d: string } | { s: string; id: string });
+
   /** Replay frames through the composer AND the streaming fold, like session.ts. */
   function compose(frames: F[]) {
     const c = new TurnTextComposer();
     let answer = "";
     let streamed = "";
+
     for (const f of frames) {
       if (f.cursor) c.cursor(cursorMessageId(f.cursor)!); // as session.ts does
+
       if ("d" in f) c.delta(f.d);
       else c.snapshot(f.id, f.s);
       const r = foldStreamText(answer, c.text);
       answer = r.answer;
+
       if (r.emit) streamed += r.emit;
     }
+
     return { text: c.text, answer, streamed };
   }
+
   const cur = (id: string) => `$['${id}'].adaptiveCards[0].body[0].text`;
 
   it("keeps the head of a second message — the live turn that lost a tool fence", () => {
@@ -99,6 +106,7 @@ describe("TurnTextComposer (multi-message turns)", () => {
       { d: "bash\ngrep -r" }, { d: ' "^' }, { d: 'SECRET_CODE=" notes' }, { d: "/" }, { d: "\n```" },
       { s: '```bash\ngrep -r "^SECRET_CODE=" notes/\n```', id: "m2" },
     ]);
+
     expect(r.text).toBe(
       'Let me look through the files in the notes/ directory to find the SECRET_CODE.\n\n```bash\ngrep -r "^SECRET_CODE=" notes/\n```',
     );
@@ -121,12 +129,25 @@ describe("TurnTextComposer (multi-message turns)", () => {
       { s: "one!", id: "m1" },
       { d: " more" },
     ]);
+
     expect(r.text).toBe("one!\n\ntwo more");
   });
 
   it("falls back to the snapshot's message when no cursor was ever sent", () => {
     const r = compose([{ s: "x", id: "m1" }, { d: "yz" }]);
     expect(r.text).toBe("xyz");
+  });
+
+  it("folds deltas that arrive before any cursor into the first message", () => {
+    // Token deltas can precede the first cursor. Left on their own they compose as
+    // a phantom bubble: the real message's head appears twice and the fragment's
+    // unclosed fence swallows the real one.
+    const r = compose([
+      { d: "```bash\ngrep -r" },
+      { cursor: cur("m1"), s: '```bash\ngrep -r "^X=" notes/\n```', id: "m1" },
+    ]);
+
+    expect(r.text).toBe('```bash\ngrep -r "^X=" notes/\n```');
   });
 
   it("parses the message id out of a cursor path", () => {

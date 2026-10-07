@@ -22,11 +22,13 @@ export interface DeltaContextInput {
  */
 export function compileDelta({ messages, taskAnchor, hasTools, history = messages }: DeltaContextInput): string {
   const callNames = new Map<string, string>();
+
   for (const message of history) {
     for (const call of message.role === "assistant" ? message.tool_calls ?? [] : []) {
       if (call.id) callNames.set(call.id, call.function.name);
     }
   }
+
   const parts: string[] = hasTools
     ? [LOCAL_TOOL_REMINDER, `<task_anchor>${taskAnchor.slice(0, 3_000)}</task_anchor>`]
     : [];

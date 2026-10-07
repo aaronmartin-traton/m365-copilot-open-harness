@@ -20,16 +20,13 @@ Each module has one job.
 
 ### Main Handler
 
-`handler.ts` has 540 lines.
-It contains `handleChatCompletion()`.
-This function handles requests.
+`handler.ts` holds `handleChatCompletion()`.
 
 ## Documentation
 
-See `docs/architecture/` for documentation:
-- **ENGINEERING_RULES.md** - Development rules
-- **COMPONENT_REFERENCE.md** - Module descriptions
-- **ARCHITECTURE_ROADMAP.md** - Extraction progress
+- **docs/development/ENGINEERING_RULES.md** - Development rules
+- **docs/architecture/COMPONENT_REFERENCE.md** - Module descriptions
+- **docs/architecture/ARCHITECTURE_ROADMAP.md** - Extraction progress
 
 ## Backends
 
@@ -85,6 +82,6 @@ bun run lint:fix
 
 ## Handoff
 
-See `CONTINUATION_PROMPT.md` for instructions.
+See `docs/development/CONTINUATION_PROMPT.md` for instructions.
 
 **Rule**: Extract from real code. Make small changes. Keep behavior.

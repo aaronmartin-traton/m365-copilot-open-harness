@@ -480,6 +480,7 @@ describe("formatToolDefinitions", () => {
     expect(output).toContain("</tools>");
   });
 });
+
 describe("truncateAtFabricatedToolResponse (a self-written <tool_response> is a stop sequence)", () => {
   const bash = { type: "function" as const, function: { name: "bash", description: "run", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } };
   // Shape of a Sonnet 4.6 fix-bug turn (Sep 28 bench): a real action, then an
@@ -522,11 +523,13 @@ describe("truncateAtFabricatedToolResponse (a self-written <tool_response> is a 
     expect(truncateAtFabricatedToolResponse(plain, [bash])).toBe(plain);
   });
 });
+
 describe("isProseDocument with the reply text: a reply that OPENS with a tool call is an action", () => {
   const tools = [
     { type: "function" as const, function: { name: "bash", description: "run", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } },
     { type: "function" as const, function: { name: "write_file", description: "write", parameters: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"] } } },
   ];
+
   // Shape of a live Sonnet 4.6 turn (Sep 28, fizzbuzz): the right two actions,
   // then a change of heart and a markdown answer. The old guard judged the
   // whole reply, called it a document, and discarded the correct write_file.

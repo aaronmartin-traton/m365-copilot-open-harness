@@ -1,4 +1,3 @@
-import { createHash, createHmac } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 
 // tool-path tests run WITHOUT a local intent verifier: the simplified proxy
@@ -82,6 +81,7 @@ describe("handler deterministic boundaries", () => {
       type: "function" as const,
       function: { name: "bash", description: "Run a command", parameters: { type: "object" as const, properties: { command: { type: "string" as const } }, required: ["command"] } },
     }];
+
     scripted.prompts.length = 0;
     scripted.text = "```bash\nls\n```\n\n<tool_response>\nok\n</tool_response>\n\nFixed.";
     const pool = new SessionPool();
@@ -167,6 +167,7 @@ describe("handler deterministic boundaries", () => {
     scripted.prompts.length = 0;
     const core = await import("@m365-copilot/core");
     const emitSpy = vi.spyOn(core, "emitThrottleEvent");
+
     try {
       const response = await handleChatCompletion(body([{ role: "user", content: "task" }]), new SessionPool());
       expect(response.status).toBe(429);
@@ -185,6 +186,7 @@ describe("handler deterministic boundaries", () => {
   it("a Throttled result wins even if apology text arrived as content", async () => {
     scripted.text = "I'm sorry, I can't help right now.";
     scripted.result = { value: "Throttled" };
+
     try {
       const response = await handleChatCompletion(body([{ role: "user", content: "task" }]), new SessionPool());
       expect(response.status).toBe(429);

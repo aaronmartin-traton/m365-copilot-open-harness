@@ -242,32 +242,6 @@ export async function getTokenForScope(scopes: string[]): Promise<string | null>
   return loginInteractive(scopes);
 }
 
-let inflightReauth: Promise<boolean> | null = null;
-
-function forceReauth(): Promise<boolean> {
-  return (inflightReauth ??= getTokenSilent()
-    .then(async (token) => {
-      if (token) return true;
-
-      if (!canPromptForInteractiveApproval()) return false;
-      await loginInteractive(SCOPES);
-
-      return true;
-    })
-    .catch((error: unknown) => {
-      log.error(
-        `Interactive reauthentication failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-
-      return false;
-    })
-    .finally(() => {
-      inflightReauth = null;
-    }));
-}
-
 let inflightToken: Promise<string> | null = null;
 
 export function getToken(): Promise<string> {

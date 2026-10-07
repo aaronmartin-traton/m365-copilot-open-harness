@@ -234,6 +234,7 @@ describe("renderResponse streaming", () => {
 
   it("forwards the producer's error object so a throttle stays machine-readable", async () => {
     const throttled = { errorCode: "PerUserThrottled", message: "slow down" };
+
     const a = args({
       stream: true,
       produce: vi.fn(async () => ({ kind: "error" as const, resp: throttledResponse(throttled) })),

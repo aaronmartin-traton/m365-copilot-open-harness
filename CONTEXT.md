@@ -26,7 +26,7 @@ against a live, undocumented, throttled API. It is not a normal SDK wrapper.
 | **EXECUTE** | Verifier verdict: the tool call is authorized to run. |
 | **TEXT** | Verifier verdict: return the model's raw text instead of executing. |
 | **8H fail-closed** | The approved policy: only verifier `EXECUTE` authorizes tool execution. Anything else (TEXT/UNCERTAIN/error/timeout) resolves to raw text. |
-| **optionsSets** | The server-side capability flags array in the chat payload. This repo historically sends `[]` — likely leaving capabilities off the table. |
+| **optionsSets** | The server-side capability flags array in the chat payload. The agent-less lane turns on M365's hosted code interpreter and image generation (`CODE_INTERPRETER_OPTIONS_SETS`, `IMAGE_GEN_OPTIONS_SETS`, `M365_EXTRA_OPTIONSSETS`); the agent lane sends none. |
 | **benchtop** | The quantitative benchmark (`scripts/bench/`): scores real agentic coding tasks in `--network none` sandboxes. |
 | **backend** | The model backend a turn runs against. Chosen by `PROVIDER`: `m365` (default) or `chatgpt-web`. |
 | **provider** | A backend's implementation of `ModelProvider` (`packages/core/src/provider.ts`). Owns its own refusal vocabulary, quota shape and telemetry, and maps them onto `ProviderTurn`. `ModelSession` is the M365 one; `ChatGptWebProvider` is the ChatGPT Web one. |

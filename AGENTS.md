@@ -147,10 +147,18 @@ bun run build          # tsdown, all packages (tests import from dist/, so build
 bun run test:unit      # canonical suite: bun run build && bun run vitest run. Pure unit tests, NO auth/network.
                        # Use `bun run test` / `bun run test:unit`, NOT bare `bun test` — bare `bun test`
                        # invokes Bun's native runner, which cannot run this vitest suite (20 fails / 11 errors on pristine HEAD).
-bun run typecheck      # tsc --noEmit per package (after build). tsdown does NOT typecheck, so run this:
-                       # a missing import once silently dropped a public export from dist.
+                       # tsc --noEmit over the four tsconfig'd packages
+                       # (openclaw-plugin has no tsconfig). tsdown does NOT
+                       # typecheck, so run this: a missing import once silently
+                       # dropped a public export from dist.
 bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
 ```
+
+`bun run lint` is NOT a pass/fail gate today (2026-10-06). It
+reports a pre-existing baseline (~205 findings in owned files, mostly
+the frozen research artifacts and hand-ported protocol parsing; SHARED
+upstream paths are exempted in `oxlint.config.ts`). To check YOUR
+change, scope it: `bunx oxlint <changed files>`.
 
 - ESM with `.js`-suffixed relative imports (tsdown/Node ESM). Keep that
   convention.
@@ -214,8 +222,8 @@ bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
   Stale versions are **always left in place** (we never delete agents). This
   avoids the multi-host footgun where a host on new code deletes the agent
   another host/PC is still using mid-conversation. A few orphaned lightweight
-  bots are harmless. `updateBotInstructions()` is still dead code. We re-create
-  rather than update in place. See the protocol doc §10.
+  bots are harmless. We re-create rather than update in place (the update
+  API needs a `changeToken` only *create* returns). See the protocol doc §10.
 - **Reasoning tones do not work with the agent.** `gpt-5.x` / `*-think-deeper`
   route through the `DeepLeo` reasoning pipeline. The pipeline meta-analyzes
   the injected prompt instead of obeying it. Only the default `magic` and

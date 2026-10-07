@@ -130,6 +130,7 @@ export function executedOnlyFirstNote(fabricated: boolean, droppedCalls: number,
   if (fabricated) {
     return "(Note: only the first tool call in your previous reply was actually run. Everything you wrote after it, including the <tool_response> you wrote yourself, did not happen. Here is the real output of that first call:)";
   }
+
   const speculated = trailingChars >= TRAILING_NOTE_CHARS;
 
   if (droppedCalls > 0) {
@@ -176,6 +177,7 @@ export async function produceToolPath(
     log.info(`Self-written <tool_response> found after a tool call; dropped ${fullText.length - cut.length} fabricated chars`);
     fullText = cut;
   }
+
   let parsed = parseToolCalls(fullText, tools);
   log.info(`Parse result: hasToolCalls=${parsed.hasToolCalls}, count=${parsed.toolCalls.length}`);
 

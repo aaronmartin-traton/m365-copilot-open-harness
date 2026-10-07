@@ -9,7 +9,8 @@
  * small generic surface below, so the retry/fail-fast policy in the handler
  * never branches on which backend it is talking to.
  *
- * See docs/architecture/BACKENDS.md.
+ * The two implementations and the `PROVIDER` selection are
+ * documented in README.md ("Backends").
  */
 
 import type { ImageInput } from "./images.js";

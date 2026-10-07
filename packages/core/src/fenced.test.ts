@@ -415,6 +415,7 @@ describe("array and object params written as a YAML block (#50)", () => {
       "```edit\npath: a.py\nedits:\n  - oldText: x\n        newText: misaligned\n```",
       piSpecs,
     );
+
     expect(calls).toHaveLength(0);
     expect(leftover).toContain("misaligned");
   });
@@ -424,6 +425,7 @@ describe("array and object params written as a YAML block (#50)", () => {
       '```edit\npath: a.py\nedits:\n  - {oldText: "x", newText: "y"}\n```',
       piSpecs,
     );
+
     expect(calls).toHaveLength(0);
   });
 

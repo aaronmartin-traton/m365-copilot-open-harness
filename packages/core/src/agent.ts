@@ -108,6 +108,7 @@ When the message has no <tools> block, respond normally as a helpful assistant i
  */
 export function environmentUrlFromName(envName: string): string {
   const isDefault = /^Default-/i.test(envName);
+
   const envId = envName
     .replace(/^Default-/i, "")
     .replace(/-/g, "")
