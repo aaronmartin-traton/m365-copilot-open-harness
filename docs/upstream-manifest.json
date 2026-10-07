@@ -754,6 +754,279 @@
       "status": "taken",
       "reason": "Merge of PR #30 (70d2e2b), hand-ported.",
       "evidence": "feat/upstream-ports"
+    },
+    {
+      "sha": "ec89776f9dbde878e46d5aff6fd632df1124ec58",
+      "subject": "Merge pull request #61 from cramt/feat/sonnet-5-5",
+      "status": "skipped",
+      "reason": "Merge of PR #61 (67394ed48). Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "b083df73950f4899afe88f390833133a1ef6a18b",
+      "subject": "chore(scripts): return the paid scenario's metering map from _probe-ch",
+      "status": "skipped",
+      "reason": "Paid-scenario metering map for the probe helper. Dead on an un-metered account. Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "67394ed483414fd10e868e7b9068401362691a64",
+      "subject": "feat(models): Claude_Sonnet @ paid is now Sonnet 5.5 (metered), Sonnet",
+      "status": "skipped",
+      "reason": "Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "59852737f40e6e54f15866a29ab58b0008fbd635",
+      "subject": "Merge pull request #57 from cramt/fix/declare-types-node-main",
+      "status": "superseded",
+      "reason": "@types/node is already a workspace devDependency and every program sets types:[node]. See fe721d1af.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "8829b3e29d949a7e873eccaf92babb643599dd45",
+      "subject": "Merge pull request #55 from cramt/fix/tsc-noemit-32-errors",
+      "status": "superseded",
+      "reason": "Root tsc --noEmit is clean here (tsconfig excludes Nitro + test files; per-package typecheck script added). See f9f956d6b / fe721d1af.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "aaa3445500c86c56943d20dd07be362cb603509b",
+      "subject": "feat(framing): default Sonnet 4.6 and GPT-6 to relay_batch, and fall b",
+      "status": "skipped",
+      "reason": "relay_batch as the default for Sonnet 4.6 / GPT-6, and the no-shell -> relay fallback. The variant itself is worth a bench A/B before it can be a default; that is ticket item 8. Not taken as a default.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "cffee7d928234bee41d3595273977b96baddc678",
+      "subject": "feat(bench): opt-in throttle pacing (M365_AVOID_THROTTLING)",
+      "status": "rejected",
+      "reason": "Bench-only. scripts/bench is local-only (.gitattributes OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "7248d17c8fd04e7c6c33f1348ef0d716ac5db225",
+      "subject": "chore: remove unused framing variant relay_nolook, fake the clock in G",
+      "status": "skipped",
+      "reason": "Removes upstream's relay_nolook variant. We never had it, so there is nothing to remove.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "006cbe00d406a3494905601ab1c1ab1831274e90",
+      "subject": "chore(bench): phase-sweep + analyze-arms, run bench scripts in the Nix",
+      "status": "rejected",
+      "reason": "Bench-only. scripts/bench is local-only (.gitattributes OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "4cca4798dfd0fecbc130c6f2235f511c4f80ac9e",
+      "subject": "Merge pull request #43 from cramt/feat/gpt-6-sol",
+      "status": "skipped",
+      "reason": "Merge of PR #43 (33fcbb3ce). Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "33fcbb3cef0f2ed253474f87db6b0284496332d7",
+      "subject": "feat(models): add gpt-6-sol, with the tool agent only on premium accou",
+      "status": "skipped",
+      "reason": "gpt-6-sol: agent on premium accounts only, relay framing. Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "01cee315c74c46dc049f1ba93ceee6703d4f32d4",
+      "subject": "Merge pull request #42 from cramt/fix/gpt6-agentless",
+      "status": "skipped",
+      "reason": "Merge of PR #42 (b68a86211). Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "b68a86211cc7bd7c27a29250609e8111d65c8326",
+      "subject": "fix(handler): send gpt-6-think-deeper tool requests agent-less, with r",
+      "status": "skipped",
+      "reason": "gpt-6-think-deeper agent-less + relay framing; depends on scenario routing. Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "dd8d140e584fdd32441a9879b867c2a4ffaeab8b",
+      "subject": "Merge pull request #38 from cramt/feat/claude-sonnet-5",
+      "status": "skipped",
+      "reason": "Merge of PR #38 (5e7229df0). Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "5e7229df0ed35298e9f4fe59661bffc4a4f8d7a5",
+      "subject": "feat(claude): route claude-sonnet-5 via the paid scenario, relay frami",
+      "status": "skipped",
+      "reason": "claude-sonnet-5 via the paid scenario, relay framing. Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "6db2bb89842e8d0a82a69515eb4d48718725552c",
+      "subject": "Revert direct mapping of live tones to tone-probe",
+      "status": "rejected",
+      "reason": "Reverts the tone-probe mapping; net effect is zero once 9fd9d36cd is rejected.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "bacb505890721712f64a4f3a5019358d3d73e25e",
+      "subject": "Merge pull request #27 from cramt/fix/retired-quick-tones",
+      "status": "rejected",
+      "reason": "Blocked on the live tone-retirement probe — see 9fd9d36cd.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "9fd9d36cd1cb3fbb010bfde94c69845306c0edfe",
+      "subject": "fix(tones): re-point the retired Quick tones at their Chat replacement",
+      "status": "rejected",
+      "reason": "Do NOT take blind. Upstream claims M365 now rejects the Quick/Reasoning tones; we have not verified it, and AGENTS.md documents *-quick as working. Probe written and ready: scripts/tone-retirement-probe.mjs (7 tones, 1 message each, with a control tone). Take the mapping only if the probe shows the retired tones are dead; until then the old mapping is the verified one. Ticket: .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md item 3.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "c83b6fecca50116f4bc79f91693e6aafa97abf39",
+      "subject": "Merge pull request #26 from cramt/feat/probe-temp-chat",
+      "status": "rejected",
+      "reason": "Merge of PR #26 (019f1571b); the flag-name mismatch still stands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "019f1571b9a3a419af7ea83fa7ac5d2429af9400",
+      "subject": "feat(temp-chat): send disableMemory=1 from the probe helper too",
+      "status": "skipped",
+      "reason": "Probe sends disableMemory=1 under upstream's M365_SAVE_HISTORY name; our flag is M365_TEMPORARY_CHAT=1 and it is opt-in rather than default. Aligning the probe name without flipping our default would make the probe disagree with the proxy in a new way. Only worth it together with a decision on temporary chats (42e7de23f).",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "ccda7f3918d582c94a12cda455ad5bf87d43c384",
+      "subject": "fix(bench): drop the undici import that broke run.mjs when it isn't in",
+      "status": "rejected",
+      "reason": "Bench-only; our bench runner does not import undici, so this cannot apply to us.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "d613836126b000dca2f578c2f1c53ab546a0b341",
+      "subject": "Merge pull request #25 from cramt/fix/bench-timeout-resume",
+      "status": "rejected",
+      "reason": "Bench-only. scripts/bench is local-only (.gitattributes OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "05f7eed11ca1f43aadfb7b300a70abb45d0ff824",
+      "subject": "fix(bench): don't let one slow turn's timeout discard the whole run",
+      "status": "rejected",
+      "reason": "Bench-only. scripts/bench is local-only (.gitattributes OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "2d08a35219a35d0453bec21f009893906ab251fc",
+      "subject": "Merge pull request #22 from cramt/feat/gpt-5.6-quick",
+      "status": "rejected",
+      "reason": "Merge of PR #22 (2682cf567): adds Gpt_5_6_Chat for gpt-5.6. Blocked with 9fd9d36cd until the live probe runs.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "2682cf5671a76fd000eed3654bf1c0283bbc3611",
+      "subject": "feat: add Gpt_5_6_Chat tone as gpt-5.6 / gpt-5.6-quick",
+      "status": "rejected",
+      "reason": "Mapping-only commit (gpt-5.6 -> Gpt_5_6_Chat, gpt-5.6-quick). Same live question as 9fd9d36cd: our own tone probe already recorded Gpt_5_6_Chat as 'registered but dead: BotConnection deflection'. Not taken on upstream's word.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "78009942f15fa58c0224ae33b92119554c9d63ed",
+      "subject": "Merge pull request #20 from m365coder/gpt-6-think-deeper",
+      "status": "skipped",
+      "reason": "Merge of PR #20 (fcc8672ea). Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "fcc8672eab099c666a8c4d9883013639d2da01ea",
+      "subject": "feat(gpt-6): add the Gpt_6_Reasoning tone, and split entitlement from ",
+      "status": "skipped",
+      "reason": "Gpt_6_Reasoning tone + entitlement/metering split. Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "60d50a38703fab012cba69a0a7602d556ebc5d03",
+      "subject": "docs: name the pi apiKey placeholder for what it is",
+      "status": "skipped",
+      "reason": "Docs-only (README/AGENTS pi apiKey placeholder). docs/** is OWNED; our README already documents the auth setup.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "74e9a2c6e5772b26cc1dd81cd58ff4f9753663a6",
+      "subject": "fix(verify): make the smoke test capable of passing",
+      "status": "taken",
+      "reason": "Hand-ported 2026-10-06: proxy-verify --model=, and AGENTS.md now says --tools --multiturn --model=claude-sonnet.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "725f4002eee9dcbda32204dedd10c9d96bb72c45",
+      "subject": "docs(temp-chat): verify disableMemory against the live service (F28/F2",
+      "status": "skipped",
+      "reason": "Docs-only, and its probe needs upstream's loadSecrets which our core does not export. The F28/F29 question (does disableMemory suppress longer-term personalisation?) is unanswered either way.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "43e35c58b65d8822022b54be4f2a8dcd995bd6ca",
+      "subject": "Merge PR #15: temporary chats by default (disableMemory=1)",
+      "status": "superseded",
+      "reason": "Merge PR #15 (42e7de23f).",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "1edc9fcc5c72ce3af46d16e7ed7b99929b621b6a",
+      "subject": "Merge PR #14: coerce fenced header values to their declared schema typ",
+      "status": "superseded",
+      "reason": "Merge main into zed-compatibility (246b4df85).",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "246b4df85b56eb761460c29e53216c585a1eac06",
+      "subject": "fix(fenced): never let a failed coercion become a plausible wrong valu",
+      "status": "superseded",
+      "reason": "Never let a failed coercion become a wrong value: already ours. parseHeaderScalar returns undefined on a bad boolean/integer/number and parseFencedInner rejects the block. Optional nicety they add (True/yes/no booleans) not taken.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "4ca08fad2820f05f5bc548e709d5310691e0d264",
+      "subject": "Merge main into zed-compatibility",
+      "status": "superseded",
+      "reason": "Merge main into zed-compatibility (0217eecf1).",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "4c06b7d9ec65da80f5020cba8b5871af80775440",
+      "subject": "Merge PR #16: Opus via the paid scenario, and its priority-access quot",
+      "status": "skipped",
+      "reason": "Merge PR #16 (73f37afc9). Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "21de62c84ee72bc27c5f360c524e4961995edd9e",
+      "subject": "fix(opus): keep the quota signal machine-readable on the streaming pat",
+      "status": "skipped",
+      "reason": "Structured SSE error fields (type/code/retry_after) for the Opus priority-access quota. Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "73f37afc9eb780401f42111d10123a2d95388f2f",
+      "subject": "feat(opus): unlock Claude_Opus via the paid scenario, and handle its q",
+      "status": "skipped",
+      "reason": "Paid/premium-scenario model routing (metering, entitlement split, Claude_Opus/Opus 5.5, Sonnet 5/5.5, GPT-6, priority-access quota). Needs the scenario-routing port plus a paid account and a bench A/B. Tracked as ticket items 8 and 9 in .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md. Their fallback re-sends (M365_OPUS_FALLBACK_MODEL) are behavioral retries and would break the one-runTurn-per-request invariant — not wanted even if the rest lands.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "42e7de23f1ac038c32661380c0dc975d83a60ea0",
+      "subject": "feat: use temporary M365 Copilot chats by default",
+      "status": "superseded",
+      "reason": "Temporary chats by default. We send disableMemory behind opt-in M365_TEMPORARY_CHAT=1. Flipping the default is a product decision with a real cost (no server-side context to resume from), not an upstream catch-up.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
+    },
+    {
+      "sha": "0217eecf1f11896413caed7bd7de86d427224603",
+      "subject": "Fix Zed tool schema coercion",
+      "status": "superseded",
+      "reason": "Zed tool-schema coercion: already ours via deriveFencedSpec.paramTypes + parseHeaderScalar. Their commit also leaves a console.error debug line in library code, which our conventions forbid.",
+      "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
     }
   ]
 }

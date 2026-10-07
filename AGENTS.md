@@ -242,8 +242,15 @@ bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
 Make sure that the changes work end to end:
 
 ```sh
-M365_DEBUG=1 bun scripts/proxy-verify.mjs --agent --multiturn
+M365_DEBUG=1 bun scripts/proxy-verify.mjs --tools --multiturn --model=claude-sonnet
 ```
+
+`--tools` is load-bearing: without it no tools are sent and "NO TOOL CALL" is
+the correct result, not a failure. `--model=` picks the lane. The default
+`m365-copilot` resolves to the magic tone, which does not tool-call right now
+and confabulates "no file-reading tool is available to me" — upstream re-measured
+that at 0/2 on 2026-09-21, so a magic-tone failure is not a regression here.
+Use a Claude model for the smoke test.
 
 The changes pass when the command exits 0 after a real tool loop. A real tool
 loop means the agent called a tool and used its result.
