@@ -121,7 +121,7 @@ These modules are now separate from `handler.ts`.
 - It calls the M365 API.
 - It handles streaming.
 - It is orchestration only: request setup, message compilation, the buffered retry loop, and response rendering.
-- Architect verdict (2026-08-07): cohesive orchestration; extraction phase closed. Characterization coverage: tool-path.ts (23 tests: 11 translation + 12 contract) and response-renderer.ts (17 tests). Mutable counts live in `NEXT.md`.
+- Architect verdict (2026-08-07): cohesive orchestration; extraction phase closed. Characterization coverage: tool-path.ts (translation + contract, incl. the repair pass, the stop sequence and the partly-executed note) and response-renderer.ts. Read the suites for the current count; the number drifts every cycle.
 
 ## Module Dependencies
 
