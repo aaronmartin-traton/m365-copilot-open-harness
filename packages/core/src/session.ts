@@ -144,6 +144,61 @@ export function foldStreamText(
   return { answer: next, emit: null };
 }
 
+/** The messageId a streaming `cursor` points at: `$['<id>'].adaptiveCards[0]…`. */
+export function cursorMessageId(j: string | undefined): string | null {
+  const m = j?.match(/^\$\['([^']+)'\]/);
+
+  return m ? m[1] : null;
+}
+
+/**
+ * Reassemble one turn's text from M365's PER-MESSAGE stream.
+ *
+ * A turn can carry several bot messages (distinct messageIds): Claude narrates in
+ * one and writes its tool fence in the next. Each message streams the same way —
+ * its first token usually arrives only as a snapshot that carries a `cursor`
+ * naming the message, then `writeAtCursor` deltas that carry NO messageId and
+ * extend whatever the cursor last named, then a final snapshot.
+ *
+ * Folding all of that into ONE string (what foldStreamText alone does) loses the
+ * head of every message after the first: the new message's head snapshot is
+ * shorter than the accumulated answer, so it is dropped, and its deltas get
+ * glued onto the previous message — a fence with no opening backticks, so the
+ * tool call never parses (upstream #29, 70d2e2b).
+ *
+ * Messages are kept separately and composed in order of first appearance,
+ * separated by a blank line (they are separate bubbles in the real client).
+ */
+export class TurnTextComposer {
+  private texts = new Map<string, string>();
+  private target: string | null = null;
+
+  /** A cursor frame: subsequent deltas extend message `id`. */
+  cursor(id: string): void {
+    this.target = id;
+  }
+
+  /** A full-text snapshot of one message. Before any cursor has been seen, the
+   *  snapshot's message also becomes the delta target (older frame shapes). */
+  snapshot(id: string | undefined, text: string): void {
+    const key = id ?? this.target ?? "";
+
+    if (this.target === null) this.target = key;
+    this.texts.set(key, foldStreamText(this.texts.get(key) ?? "", text).answer);
+  }
+
+  /** A token delta for the message the cursor last named. */
+  delta(text: string): void {
+    const key = this.target ?? "";
+
+    this.texts.set(key, (this.texts.get(key) ?? "") + text);
+  }
+
+  get text(): string {
+    return [...this.texts.values()].filter((t) => t.length > 0).join("\n\n");
+  }
+}
+
 /**
  * Attach a native custom action/plugin to a conversation and drive the confirm→invoke
  * round-trip over the WS (docs/hypotheses.md §12.6, H-NATIVE-6/7). All fields are
@@ -278,6 +333,7 @@ export class CopilotSession {
       // token often arrives only as a snapshot, not a delta), so we can't just
       // concatenate deltas — we fold both into this one string. See `advance`.
       let answer = "";
+      const composer = new TurnTextComposer();
       let receivedContent = false;
       let throttleInfo: { current: number; max: number } | null = null;
       let contentOrigin: string | null = null;
@@ -810,12 +866,17 @@ export class CopilotSession {
           for (const arg of base.arguments) {
             const delta = DeltaUpdate.safeParse(arg);
             if (delta.success) {
-              advance(answer + delta.data.writeAtCursor);
+              composer.delta(delta.data.writeAtCursor);
+              advance(composer.text);
               continue;
             }
 
             const msgUpdate = MessageUpdate.safeParse(arg);
             if (msgUpdate.success) {
+              // A cursor names the message that the following deltas extend.
+              const cursorId = cursorMessageId(msgUpdate.data.cursor?.j);
+
+              if (cursorId) composer.cursor(cursorId);
               for (const m of msgUpdate.data.messages) {
                 if (maybeInterceptHostedCommand(m)) continue;
                 // Capture diagnostic meta from every bot message — including the
@@ -841,7 +902,8 @@ export class CopilotSession {
                   maybeResumeAction(m);
                 }
                 if (m.author === "bot" && m.text && !m.messageType) {
-                  advance(m.text);
+                  composer.snapshot(m.messageId, m.text);
+                  advance(composer.text);
                 }
               }
               continue;
