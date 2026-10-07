@@ -48,6 +48,8 @@ export const CHATGPT_WEB_MODELS = {
   "chatgpt-web/pro": model("chatgpt-web/pro", "GPT-5.6 Pro (Web)", MEASURED_WINDOW_3X),
 } satisfies Record<string, ChatGptWebModel>;
 
+const MODEL_BY_SLUG = new Map<string, ChatGptWebModel>(Object.entries(CHATGPT_WEB_MODELS));
+
 export function chatGptWebModelNames(): string[] {
   return Object.keys(CHATGPT_WEB_MODELS);
 }
@@ -58,5 +60,5 @@ export function chatGptWebModelNames(): string[] {
  * runs, so a guess here would be a lie in the usage block.
  */
 export function describeChatGptModel(requested: string): string {
-  return CHATGPT_WEB_MODELS[requested]?.label ?? requested;
+  return MODEL_BY_SLUG.get(requested)?.label ?? requested;
 }

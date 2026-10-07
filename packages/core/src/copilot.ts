@@ -1,5 +1,5 @@
 import { JwtClaims } from "./schemas.js";
-import type { ProviderTurn, ProviderUsage } from "./provider.js";
+import type { ProviderStopReason, ProviderTurn, ProviderUsage, ProviderUsageValue } from "./provider.js";
 
 // Model name → tone mapping.
 // The server VALIDATES tones (an unknown tone errors with "Failed to invoke
@@ -46,8 +46,10 @@ const MODEL_TONES = {
   "gpt-5.2-think-deeper": "Gpt_5_2_Reasoning",
 } satisfies Record<string, string>;
 
+const TONE_BY_MODEL = new Map<string, string>(Object.entries(MODEL_TONES));
+
 export function getToneForModel(model: string): string {
-  const exact = MODEL_TONES[model];
+  const exact = TONE_BY_MODEL.get(model);
 
   if (exact) return exact;
 
@@ -111,7 +113,7 @@ export function m365UsageFields(stream: {
   tone?: string;
   steeringFingerprint?: string;
 }): ProviderUsage {
-  const fields: ProviderUsage = {};
+  const fields: Record<string, ProviderUsageValue> = {};
 
   if (stream.tone) fields.tone = stream.tone;
 

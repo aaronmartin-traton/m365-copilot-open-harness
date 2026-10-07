@@ -29,7 +29,7 @@ export interface UsageInput {
 }
 
 export function buildUsage(input: UsageInput): UsageBlock {
-  const base: UsageBlock = {
+  const base: Record<string, number | ProviderUsageValue> & Pick<UsageBlock, "prompt_tokens" | "completion_tokens" | "total_tokens"> = {
     prompt_tokens: 0,
     completion_tokens: 0,
     total_tokens: 0,
@@ -37,7 +37,7 @@ export function buildUsage(input: UsageInput): UsageBlock {
 
   const prefix = `x_${input.providerId.replace(/-/g, "_")}_`;
 
-  const fields: ProviderUsage = { ...input.fields };
+  const fields: Record<string, ProviderUsageValue> = { ...input.fields };
 
   if (input.requestedModel !== undefined) fields.requested_model = input.requestedModel;
 

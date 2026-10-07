@@ -192,7 +192,9 @@ export async function handleChatCompletion(
 
       // `system_fingerprint` is emitted by the M365 steering ladder only, so it
       // is absent on every other backend.
-      lastSteeringFingerprint = turn.usage?.system_fingerprint ?? undefined;
+      const fingerprint = turn.usage?.system_fingerprint;
+      lastSteeringFingerprint = typeof fingerprint === "string" ? fingerprint : undefined;
+      const deaScore = turn.usage?.dea_score;
 
       // Disengagement/dea-drift guard (ticket 03): observational sink keyed by
       // fingerprint bucket — alerts (log line) when steered turns drift above
@@ -200,7 +202,7 @@ export async function handleChatCompletion(
       recordDriftSample({
         fingerprint: lastSteeringFingerprint ?? "unsteered",
         disengaged: turn.stopReason === "refused",
-        deaScore: turn.usage?.dea_score ?? undefined,
+        deaScore: typeof deaScore === "number" ? deaScore : undefined,
         at: Date.now(),
       });
       const drift = driftAlert();

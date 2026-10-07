@@ -18,6 +18,7 @@
 
 import {
   createLogger,
+  type ImageInput,
   type ModelProvider,
   type ProviderImage,
   type ProviderStopReason,
@@ -26,6 +27,7 @@ import {
 } from "@m365-copilot/core";
 import {
   ChatGptBrowserSession,
+  chatGptProfileDir,
   sharedChatGptSession,
   type ChatGptBrowserOptions,
 } from "./browser.js";
@@ -33,6 +35,7 @@ import {
   CHATGPT_WEB_MODELS,
   chatGptWebModelNames,
   describeChatGptModel,
+  type ChatGptWebModel,
 } from "./models.js";
 
 const log = createLogger("chatgpt-web-provider");
@@ -142,7 +145,7 @@ export class ChatGptWebProvider implements ModelProvider {
     model: string,
     signal?: AbortSignal,
     wantTools?: boolean,
-    images?: { referenceUrls: string[] }[],
+    images?: ImageInput[],
   ): Promise<ProviderTurn> {
     if (images && images.length > 0) {
       throw new Error("chatgpt-web backend does not accept image inputs yet");
