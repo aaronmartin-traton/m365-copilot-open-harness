@@ -20,15 +20,34 @@ full re-audit.
 bun scripts/upstream-absorb.mjs            # fetch + classify + gate + worklist
 git show <sha>                             # review each PENDING commit
 # edit docs/upstream-manifest.json: pending -> taken/rejected/superseded/skipped
-git merge upstream/main                    # owned paths auto-resolve to ours
+git -c merge.ours.driver=true merge upstream/main   # owned paths resolve to ours
 bun run build && bun run test:unit         # validation gate — required
 ```
 
-The `merge=ours` driver needs a one-time local registration (the script does
-this automatically, but you can also run it by hand):
+**Scope the `merge=ours` driver to the upstream merge command. Never register
+it persistently.** `.gitattributes` applies to every merge, not only upstream
+merges. With `merge.ours.driver=true` in `.git/config`, git keeps our side of
+every owned path whenever both sides changed it. This includes merges between
+our own branches, rebases, cherry-picks, and `git stash pop`/`apply`. Git still
+prints `Auto-merging <file>` and reports no conflict, but the incoming change is
+gone. (Found 2026-10-06: merging `feat/tool-repair` into
+`feat/chatgpt-web-backend` dropped all changes to `tool-path.ts`, `handler.ts`
+and the docs.)
+
+When the driver is not defined, git uses its normal text merge for these
+paths. That is the correct behavior for internal work. Earlier versions of
+`upstream-absorb.mjs` registered the driver persistently. If your clone has it,
+remove it:
 
 ```sh
-git config merge.ours.driver true
+git config --get merge.ours.driver && git config --unset merge.ours.driver
+```
+
+If you cannot remove it, override it for one command with the built-in text
+merge:
+
+```sh
+git -c merge.ours.driver='git merge-file --marker-size=%L %A %O %B' merge <branch>
 ```
 
 ## OWNED — ours wins (`merge=ours` in `.gitattributes`)
