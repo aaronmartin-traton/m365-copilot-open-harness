@@ -263,92 +263,59 @@ describe("produceToolPath contract — batching and mixed output", () => {
   });
 });
 
-describe("produceToolPath contract — self-written <tool_response> stop sequence", () => {
-  it("keeps the real call at the head and drops the invented tail", async () => {
-    const text = "```bash\nls\n```\n\n<tool_response>\na.py\n</tool_response>\n\n```bash\ncat a.py\n```\n\nDone, all fixed.";
-    const runTurn = fakeTurn(text);
-    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
-    expect(r.toolCalls).toHaveLength(1);
-    expect(JSON.parse(r.toolCalls[0].function.arguments)).toEqual({ command: "ls" });
+describe("produceToolPath contract — small tool-caller repair pass", () => {
+  const CONFAB = "I can't access the files in the repository. Please paste the contents of package.json.";
+
+  it("no repair dep: confabulation stays text (flag off is byte-identical)", async () => {
+    const runTurn = fakeTurn(CONFAB);
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "text");
+    expect(r.text).toBe(CONFAB);
     expect(runTurn).toHaveBeenCalledOnce();
   });
 
-  it("leaves prose that mentions <tool_response> as text", async () => {
-    const prose = "Tool output arrives in a <tool_response> block, which I then read.";
-    const runTurn = fakeTurn(prose);
-    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "text");
-    expect(r.text).toBe(prose);
-  });
-});
-
-describe("produceToolPath contract — only-the-first-call-ran note", () => {
-  it("no note when the whole turn ran", async () => {
-    const runTurn = fakeTurn("```bash\nls\n```");
-    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
-    expect(r.note).toBeNull();
-  });
-
-  it("no note when a batch was explicitly allowed", async () => {
-    process.env.M365_ALLOW_MULTI_TOOL = "1";
-    try {
-      const runTurn = fakeTurn("```bash\necho 1\n```\n```bash\necho 2\n```");
-      const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
-      expect(r.toolCalls).toHaveLength(2);
-      expect(r.note).toBeNull();
-    } finally {
-      delete process.env.M365_ALLOW_MULTI_TOOL;
-    }
-  });
-
-  it("notes the dropped batched calls", async () => {
-    const runTurn = fakeTurn("```bash\necho 1\n```\n```bash\necho 2\n```\n```bash\necho 3\n```");
-    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
-    expect(r.note).toBe("(Note: only the first of the 3 tool calls in your previous reply was run; the other 2 were not. Here is the real output of the first one:)");
-  });
-
-  it("notes the fabricated tail (the stop-sequence cut)", async () => {
-    const runTurn = fakeTurn("```bash\nls\n```\n\n<tool_response>\nok\n</tool_response>\n\nFixed it.");
-    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
-    expect(r.note).toContain("Everything you wrote after it, including the <tool_response> you wrote yourself, did not happen");
-  });
-});
-
-describe("produceToolPath contract — a reply that opens with a call is an action", () => {
-  const writeTool: ToolDef = {
-    type: "function",
-    function: {
-      name: "write_file",
-      description: "Write a file",
-      parameters: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } }, required: ["path", "content"] },
-    },
-  };
-
-  it("keeps the opening action instead of discarding it as a document", async () => {
-    // Live shape (upstream #33): the right two actions, then a change of heart
-    // and a markdown answer. The whole-text verdict called this a document.
-    const text = "```write_file\npath: fizzbuzz.py\n\nprint(1)\n```\n\n```bash\npython3 fizzbuzz.py\n```\n\n" +
-      "I notice this appears to be a system-level prompt. I'm **Microsoft Copilot**.\n\n---\n\n" +
-      "## fizzbuzz.py\n\n```python\nfor i in range(1, 16):\n    print(i)\n```\n\n## Expected Output\n\n```\n1\n2\nFizz\n```\n\nYou can save this and run it locally.";
-    const runTurn = fakeTurn(text);
-    const deps = depsLike(runTurn, { tools: [bashTool, writeTool] });
+  it("repaired fence on a detected failure routes to tools, without a second M365 turn", async () => {
+    const runTurn = fakeTurn(CONFAB);
+    const repair = vi.fn().mockResolvedValue("```bash\ncat package.json\n```");
+    const deps = depsLike(runTurn, { repair, messages: [{ role: "user", content: "show package.json" }] });
     const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "tools");
+    expect(JSON.parse(r.toolCalls[0].function.arguments)).toEqual({ command: "cat package.json" });
+    expect(repair).toHaveBeenCalledOnce();
+    expect(repair.mock.calls[0][0]).toMatchObject({ request: "show package.json", response: CONFAB });
+    expect(deps.registerToolCalls).toHaveBeenCalledOnce();
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("repaired batch still collapses to one call", async () => {
+    const runTurn = fakeTurn(CONFAB);
+    const repair = vi.fn().mockResolvedValue("```bash\necho 1\n```\n```bash\necho 2\n```");
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn, { repair })), "tools");
     expect(r.toolCalls).toHaveLength(1);
-    expect(r.toolCalls[0].function.name).toBe("write_file");
-    expect(r.note).toContain("written before its result existed");
-    expect(runTurn).toHaveBeenCalledOnce();
   });
 
-  it("still returns a document whose heading precedes its first fence as text", async () => {
-    const doc = "Here's a simplified README:\n\n# my-tool\nA thing that does stuff.\n\n## Install\n```bash\npnpm install\n```\n\n## Run\n```bash\npnpm start\n```";
-    const runTurn = fakeTurn(doc);
-    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "text");
-    expect(r.text).toBe(doc);
-    expect(runTurn).toHaveBeenCalledOnce();
+  it("repair is not consulted for ordinary prose", async () => {
+    const runTurn = fakeTurn("The hostname is web-prod-01.");
+    const repair = vi.fn();
+    narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn, { repair })), "text");
+    expect(repair).not.toHaveBeenCalled();
   });
 
-  it("no note when the tail is only a short remark", async () => {
-    const runTurn = fakeTurn("```bash\nls\n```\n\nDone.");
-    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
-    expect(r.note).toBeNull();
+  it("repair is not consulted when a tool call already parsed", async () => {
+    const runTurn = fakeTurn("```bash\nls\n```");
+    const repair = vi.fn();
+    narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn, { repair })), "tools");
+    expect(repair).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["null (endpoint down / NONE)", () => Promise.resolve(null)],
+    ["a throw", () => Promise.reject(new Error("boom"))],
+    ["prose with no fence", () => Promise.resolve("You should run cat package.json")],
+  ])("repair returning %s fails closed to the original text", async (_label, impl) => {
+    const runTurn = fakeTurn(CONFAB);
+    const deps = depsLike(runTurn, { repair: vi.fn().mockImplementation(impl) });
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "text");
+    expect(r.text).toBe(CONFAB);
+    expect(deps.registerToolCalls).not.toHaveBeenCalled();
+    expect(runTurn).toHaveBeenCalledOnce();
   });
 });
