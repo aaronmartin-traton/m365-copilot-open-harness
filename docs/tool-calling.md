@@ -69,8 +69,26 @@ prompt is tuned. The layers, in handler order:
 - **Document guard** (`isProseDocument`): shell-routing turns *every* ` ```bash ` block into
   a tool call — so a model that ANSWERS with a markdown document full of code fences (e.g.
   "here's a simplified README") would get its own answer executed as shell. A response that
-  looks like a document (≥2 fences AND ≥120 chars surrounding prose, OR ≥4 fences) is returned
-  as **text**, not executed. A single action is never reclassified. (hypotheses §9 F15.)
+  looks like a document (≥4 fences, a markdown heading, or ≥300 chars surrounding prose) is
+  returned as **text**, not executed. A single action is never reclassified. (hypotheses §9 F15.)
+  **Opens-with-a-call overrides it:** a reply whose first fence is a real call to one of the
+  request's tools is an *action* whatever follows it — the tail was written before the result
+  existed — so the preamble decides (`looksLikeDocumentPreamble`). Judged as a whole, those
+  tails made 34 of 42 guard verdicts discard a correct first action upstream (#33).
+- **Self-written `<tool_response>` is a stop sequence** (`truncateAtFabricatedToolResponse`):
+  M365's chat models do not stop at the call, they write the fence, then invent the result and
+  act on it. When a real call precedes an invented `<tool_response>`/`<tool_result>`, only the
+  head is parsed — otherwise the invented tail makes the turn look like a document and the
+  guard throws the real action away (#31).
+- **Partly-executed replies are corrected, not retried:** M365 keeps the WHOLE reply in its
+  server-side history, so after a cut, a dropped batch, or a speculative tail the model
+  believes its own fiction and reads the real result as stale. The turn that carries the real
+  tool result opens with a one-line `executedOnlyFirstNote()` saying exactly what ran.
+  Upstream: 9 of 56 Sonnet bench runs ended believing the invented tail before the note, 0 of
+  70 after it.
+- **Explicit throttle beats every guess** (`result.value: "Throttled"`): M365 says when the
+  account is rate-limited, on a turn with no content frames. Checked before the content check,
+  answered 429 `m365_throttled`, never retried, fed to the degradation backoff (#35).
 - **No behavioral retry (simplify-tool-path pivot):** the proxy does **not** re-prompt on
   confabulation, hallucination, or remote-artifact prose. A buffered M365 turn is translated
   once; prose that lacks a tool call stays prose. Execution intent and retry policy belong to
@@ -90,6 +108,10 @@ prompt is tuned. The layers, in handler order:
   riding alongside tool calls (premature success), and **unwraps** a lone `{"final":"…"}`.
 - **One call per turn:** keeps only the **first** tool call; M365 batches its whole plan into
   one response, running later steps on guessed state. Override with `M365_ALLOW_MULTI_TOOL`.
+- **Fence parsing is tolerant of how the models actually write:** array/object params accept
+  inline JSON *and* an indented YAML block under an empty `key:` line (upstream lost 44 of 47
+  real-pi `edit` calls to the empty-block case, #50), and a fence ended by Claude Opus's native
+  `</invoke>` / `</parameter>` markup parses whether or not the closing ``` follows.
 - **Empty ≠ rate limit:** an empty reply is treated as throttling only when the throttle is
   **at-limit**; otherwise it fails fast after a couple of quick retries. Repeated empties
   across **distinct conversations** (the thread-rate-throttle signature) trigger **degradation

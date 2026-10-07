@@ -129,8 +129,9 @@ tools below make a probe cheap:
 
 | Package | Role |
 |---|---|
-| `@m365-copilot/core` | auth (MSAL+Playwright), WebSocket client, sessions, agent mgmt, tool formatting, schemas |
-| `@m365-copilot/proxy-lib` | OpenAI↔M365 translation: framework-free `createApp()` fetch handler, `SessionPool`, handler, tool-call parsing |
+| `@m365-copilot/core` | auth (MSAL+Playwright), WebSocket client, sessions, agent mgmt, tool formatting, schemas, the `ModelProvider` seam |
+| `@m365-copilot/proxy-lib` | OpenAI↔backend translation: framework-free `createApp()` fetch handler, `SessionPool`, handler, tool-call parsing, provider selection |
+| `@m365-copilot/chatgpt-web` | opt-in second backend: a real browser driving chatgpt.com behind `ModelProvider` (`PROVIDER=chatgpt-web`) |
 | `@m365-copilot/proxy` | standalone **Nitro** service / proxy binary (`m365-proxy`). File-based `routes/`, startup-auth `plugins/`, builds to `.output/` |
 | `@m365-copilot/openclaw-plugin` | disabled, non-publishable compatibility tombstone |
 
@@ -220,6 +221,14 @@ bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
   the injected prompt instead of obeying it. Only the default `magic` and
   `*-quick` tones behave. The model cannot be bound to our (declarative
   `minimalBots`) agent type at all. See the protocol doc §10 *Agent types*.
+- **`M365_TOOL_REPAIR=1`** adds an opt-in repair pass after the parse: when no tool
+  call parsed AND a confab/hallucination/remote-artifact detector fired, a small
+  local model (`M365_TOOL_REPAIR_ENDPOINT`, default LM Studio on `:1234`, model
+  `M365_TOOL_REPAIR_MODEL`, default `watt-tool-8b`) is asked for ONE fenced call,
+  which re-enters `parseToolCalls`. Fail-closed on every error (`null` → the
+  original text). Default OFF, byte-identical when off. Still zero extra M365
+  turns. See `packages/proxy-lib/src/tool-repair.ts` and
+  `.scratch/small-toolcaller/issues/01-repair-pass.md`.
 - **M365 disengages on large tool payloads.** Keep injected toolsets lean.
   This is why pi works and heavy harnesses (opencode) do not. The proxy also
   enforces one tool call per turn and strips M365's invented

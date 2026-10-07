@@ -620,3 +620,47 @@ deletion when OneDrive releases it.
 **Next actions:** (1) user opens bake-off → ticket 01 work item 1;
 (2) implement repair pass behind M365_TOOL_REPAIR flag; (3) document the
 proven cross-machine herdr/collab topology in docs/agents/session-workflow.md §3.
+
+## 2026-10-06 — autonomous session: branches integrated, upstream wave absorbed
+
+Everything below is merged into `main` (tip `2047def`). `feat/tool-repair`,
+`feat/chatgpt-web-backend` and `fix/merge-driver-scope` are merged and can be
+deleted; `feat/upstream-ports` == `main`.
+
+**Data-loss hazard found and fixed.** A persistent `merge.ours.driver=true` in
+`.git/config` made `.gitattributes` resolve every OWNED path to our side on
+*internal* merges, rebases and stash applications — a clean-looking
+`Auto-merging tool-path.ts` that silently dropped the incoming change. It is now
+scoped to the upstream merge command only (`.gitattributes`, `scripts/upstream-absorb.mjs`),
+and the local registration was removed. **Check `git config --get
+merge.ours.driver` before any merge.**
+
+**Shipped offline:**
+- Small tool-caller repair pass, default off (`M365_TOOL_REPAIR=1`).
+- `429 m365_throttled` when M365 says so (`result.value: "Throttled"`), no
+  retry, degradation backoff fed, `throttled` telemetry event.
+- A self-written `<tool_response>` is a stop sequence, plus the
+  `executedOnlyFirstNote()` correction for partly-executed replies.
+- A reply that OPENS with a tool call is an action, not a document (the guard was
+  discarding 34 of 42 correct first actions upstream).
+- Multi-message turns assemble per message (`TurnTextComposer`) — Claude's fence
+  was losing its opening backticks.
+- YAML-block / inline-JSON array+object params; Opus native `</invoke>` trailers
+  stripped; Power Platform host derived from both DNS labels.
+- `M365_LOG_FILE` / `M365_FRAME_DIR`; `bun run typecheck`; clean root `tsc --noEmit`.
+
+**Upstream wave closed:** 56 commits triaged, all recorded in
+`docs/upstream-manifest.json` (`bun scripts/upstream-absorb.mjs` → OK). 8 hand-ports
+landed, the rest rejected/skipped with reasons. Deliberately NOT taken: the
+retired-Quick-tone remapping (unverified — probe ready at
+`scripts/tone-retirement-probe.mjs`), `relay_batch` as a default, and every
+paid-scenario/fallback re-send (they are behavioral retries).
+
+**Still human-gated:** the small-model bake-off + repair bench, the retired-tone
+probe, and ChatGPT Web live validation (interactive sign-in).
+
+**Next actions:** (1) user opens the live window → run
+`scripts/tone-retirement-probe.mjs`, then the bake-off and
+`bench --label small-toolcaller-repair`; (2) bench `relay`/`relay_batch` framing
+A/B before any default changes; (3) ChatGPT Web sign-in → `bench --label
+chatgpt-web-01`.

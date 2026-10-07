@@ -268,6 +268,33 @@ without relying on the unavailable `minimalBots` agent endpoint.
 ### End of turn
 A `type:2` (stream item), `type:3` (completion), or `type:7` (close) ends the turn; we close the socket. Reply to `type:6` pings in the meantime.
 
+The final `type:2` item carries an explicit verdict in `item.result`:
+
+```json
+{ "value": "Success" }
+{ "value": "Throttled", "errorCode": "PerUserThrottled",
+  "message": "…BotConnection apology…" }
+```
+
+`Throttled` arrives after ~26 s with **no content frames at all** — only the apology
+inside the item. It is the account-level governor, and it names its scope but not its
+duration. Read it BEFORE the content check (an apology can never pass for an answer)
+and never retry into it. Upstream measured 41 such turns in a day after ~190 new
+conversations; see §7.
+
+### One turn, several bot messages (and the `cursor`)
+A single turn can carry more than one bot message, each with its own `messageId`.
+Every message streams the same way: its first token usually arrives **only as a
+snapshot** carrying `cursor.j` = `$['<messageId>'].adaptiveCards[0].body[0].text`,
+then `writeAtCursor` deltas that carry **no** messageId and extend whatever the cursor
+last named, then a final snapshot.
+
+Folding that into one string loses the head of every message after the first (its head
+snapshot is shorter than the accumulated text, so it is dropped, and its deltas get
+glued onto the previous message) — a Claude tool fence loses its opening backticks and
+the call never parses. Assemble per message and compose in order of first appearance;
+see `TurnTextComposer` in `session.ts`.
+
 ### Cancelling a turn (the "Stop generating" button)
 Captured from the real `m365.cloud.microsoft` client (June 2026, `scripts/cancel-frame-capture.mjs`): clicking **Stop generating** sends a single frame **on the same socket**, then the client closes it:
 ```
@@ -300,7 +327,7 @@ The final `type:2` frame carries the canonical state of the whole conversation i
 
 - **600 user messages per conversation** (`maxNumUserMessagesInConversation`). This is the hard cap; it is **per `ConversationId`**, not per day.
 - This is why we **reuse one conversation** across an agent session and send **only new messages** on follow-up turns (delta mode) — every `Please continue.` retry also counts against the 600.
-- There is also opaque **account-level throttling** (rapid-fire requests can start returning empties). It recovers on its own.
+- There is also opaque **account-level throttling** (rapid-fire requests can start returning empties). It recovers on its own. M365 usually states this outright: the final `type:2` item's `result.value` is `Throttled` (see "End of turn" above). When it does, the turn carries no content frames, so it is distinguishable from a `Disengaged` and from a transient empty — answer it 429 and do not retry.
 
 ### Account degradation under sustained use (observed June 13 2026)
 
