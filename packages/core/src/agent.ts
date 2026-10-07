@@ -91,16 +91,23 @@ When the message has no <tools> block, respond normally as a helpful assistant i
 }
 
 /**
- * Derive the Power Platform environment host from a BAP environment name
- * (e.g. "Default-00000000-0000-4000-8000-000000000000"). Pure — no network.
+ * Derive the Power Platform environment host from a BAP environment
+ * name (e.g. "Default-00000000-0000-4000-8000-000000000000").
+ * Pure — no network.
  *
- * The host is `default<envId minus last 2 chars>.<last 2 chars>.environment…`.
- * The old code hardcoded `.df.`, which only resolves for IDs ending in "df".
- * Hand-ported from upstream 6a1a12c / d7c6d80 (found by @FreemindTrader, #8;
- * confirmed live upstream: for an ID ending "df" both forms reach the same
- * host, for any other ending the hardcoded form does not resolve).
+ * The host is `default<envId minus last 2 chars>.<last 2 chars>.environment…`
+ * — but only for a `Default-*` environment. A named environment has no
+ * `default` label (microsoft/power-platform-skills#333, browser-captured),
+ * and prefixing it produces a host that never resolves.
+ *
+ * The old code hardcoded `.df.`, which only resolves for IDs ending
+ * in "df". Hand-ported from upstream 6a1a12c / d7c6d80 (found by
+ * @FreemindTrader, #8; confirmed live upstream: for an ID ending
+ * "df" both forms reach the same host, for any other ending the
+ * hardcoded form does not resolve).
  */
 export function environmentUrlFromName(envName: string): string {
+  const isDefault = /^Default-/i.test(envName);
   const envId = envName
     .replace(/^Default-/i, "")
     .replace(/-/g, "")
@@ -110,10 +117,12 @@ export function environmentUrlFromName(envName: string): string {
     throw new Error(`Unexpected Power Platform environment ID: ${envId}`);
   }
 
-  return `https://default${envId.slice(0, -2)}.${envId.slice(-2)}.environment.api.powerplatform.com`;
+  const prefix = isDefault ? "default" : "";
+
+  return `https://${prefix}${envId.slice(0, -2)}.${envId.slice(-2)}.environment.api.powerplatform.com`;
 }
 
-async function getEnvironmentUrl(bapToken: string, ppToken: string): Promise<string> {
+async function getEnvironmentUrl(bapToken: string): Promise<string> {
   // Query BAP API to discover the default environment
   const res = await fetch(
     `${BAP_API}/providers/Microsoft.BusinessAppPlatform/environments/~default?api-version=2023-06-01`,
@@ -131,19 +140,13 @@ async function getEnvironmentUrl(bapToken: string, ppToken: string): Promise<str
   const envName = z.object({ name: z.string().min(1) }).parse(await res.json()).name;
   const url = environmentUrlFromName(envName);
 
-  try {
-    // Any response (even 401/403) means the host resolved; only DNS matters here.
-    await fetch(`${url}/copilotstudio/minimalBots/api?api-version=2022-03-01-preview`, {
-      method: "HEAD",
-      headers: { Authorization: `Bearer ${ppToken}` },
-    });
-    log.info(`Resolved environment URL: ${url}`);
-  } catch {
-    log.info(`Environment URL did not resolve, using it anyway: ${url}`);
-  }
+  // No HEAD probe: every outcome was a log line, and a host that
+  // blackholes DNS would stall agent provisioning for the full connect
+  // timeout. The real bot list call below is what actually validates
+  // the URL.
+  log.info(`Resolved environment URL: ${url}`);
 
   return url;
-
 }
 
 interface CachedAgent {
@@ -399,7 +402,7 @@ export async function getOrCreateAgent(
 
   let envUrl: string;
 
-  try { envUrl = await getEnvironmentUrl(bapToken, ppToken); }
+  try { envUrl = await getEnvironmentUrl(bapToken); }
   catch (error: any) {
     markUnavailable(error?.message ?? "PowerPlatform environment discovery failed");
 

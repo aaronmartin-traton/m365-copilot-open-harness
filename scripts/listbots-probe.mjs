@@ -27,16 +27,8 @@ const envRes = await fetch(
   { headers: { Authorization: `Bearer ${bapToken}` } },
 );
 const env = await envRes.json();
-const candidates = [environmentUrlFromName(env.name)];
+const envUrl = environmentUrlFromName(env.name);
 
-let envUrl = candidates[0];
-for (const url of candidates) {
-  const probe = await fetch(
-    `${url}/copilotstudio/minimalBots/api?api-version=2022-03-01-preview`,
-    { method: "HEAD", headers: { Authorization: `Bearer ${ppToken}` } },
-  ).catch(() => null);
-  if (probe) { envUrl = url; break; }
-}
 console.log(`[probe] envUrl=${envUrl}`);
 
 const res = await fetch(
