@@ -11,6 +11,7 @@
     "test": "bun run test:unit",
     "test:unit": "bun run build && bun run vitest run",
     "test:live": "bun run build && M365_LIVE=1 bun run vitest run",
+    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/chatgpt-web && tsc --noEmit -p packages/proxy-lib && tsc --noEmit -p packages/proxy",
     "lint": "oxlint packages",
     "lint:fix": "oxlint --fix packages"
   },

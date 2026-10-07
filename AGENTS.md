@@ -146,6 +146,8 @@ bun run build          # tsdown, all packages (tests import from dist/, so build
 bun run test:unit      # canonical suite: bun run build && bun run vitest run. Pure unit tests, NO auth/network.
                        # Use `bun run test` / `bun run test:unit`, NOT bare `bun test` — bare `bun test`
                        # invokes Bun's native runner, which cannot run this vitest suite (20 fails / 11 errors on pristine HEAD).
+bun run typecheck      # tsc --noEmit per package (after build). tsdown does NOT typecheck, so run this:
+                       # a missing import once silently dropped a public export from dist.
 bun run test:live      # M365_LIVE=1; live tests that hit real M365 (uses quota)
 ```
 
