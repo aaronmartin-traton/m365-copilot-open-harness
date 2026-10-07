@@ -25,7 +25,8 @@ export type ThrottleEventType =
   | "backoff-enter"
   | "backoff-exit"
   | "disengaged"
-  | "at-limit";
+  | "at-limit"
+  | "throttled";
 
 export interface ThrottleEvent {
   /** ISO timestamp. */
@@ -60,6 +61,7 @@ const counts: Record<ThrottleEventType, number> = {
   "backoff-exit": 0,
   disengaged: 0,
   "at-limit": 0,
+  throttled: 0,
 };
 
 /** Record one telemetry event. Passive + best-effort; never throws upstream. */

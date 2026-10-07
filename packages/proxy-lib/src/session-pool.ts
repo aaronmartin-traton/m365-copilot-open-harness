@@ -22,6 +22,12 @@ export interface ConversationState {
   session: ModelSession;
   sentMessageCount: number;
   lastAccessedAt: number;
+  /**
+   * A one-line correction to prepend to the next tool result when the proxy
+   * executed less than the model wrote last turn (see executedOnlyFirstNote).
+   * Per-conversation and one turn only: consumed or cleared by the handler.
+   */
+  pendingNote: string | null;
 }
 
 export type ConversationPruneSelector = { sessionKey: string } | { conversationId: string };
@@ -83,6 +89,7 @@ export class SessionPool {
         log.info(`Conversation ${key}: messages shrunk (${messages.length} < ${existing.sentMessageCount}), rotating M365 conversation`);
         existing.session.newConversation();
         existing.sentMessageCount = 0;
+        existing.pendingNote = null;
       }
       return existing;
     }
@@ -101,6 +108,7 @@ export class SessionPool {
       }),
       sentMessageCount: persisted?.restorable ? persisted.sentMessageCount : 0,
       lastAccessedAt: persisted?.lastAccessedAt ?? this.now(),
+      pendingNote: null,
     };
     this.conversations.set(key, state);
     return state;

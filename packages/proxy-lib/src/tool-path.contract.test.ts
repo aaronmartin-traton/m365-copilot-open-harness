@@ -280,3 +280,35 @@ describe("produceToolPath contract — self-written <tool_response> stop sequenc
     expect(r.text).toBe(prose);
   });
 });
+
+describe("produceToolPath contract — only-the-first-call-ran note", () => {
+  it("no note when the whole turn ran", async () => {
+    const runTurn = fakeTurn("```bash\nls\n```");
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
+    expect(r.note).toBeNull();
+  });
+
+  it("no note when a batch was explicitly allowed", async () => {
+    process.env.M365_ALLOW_MULTI_TOOL = "1";
+    try {
+      const runTurn = fakeTurn("```bash\necho 1\n```\n```bash\necho 2\n```");
+      const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
+      expect(r.toolCalls).toHaveLength(2);
+      expect(r.note).toBeNull();
+    } finally {
+      delete process.env.M365_ALLOW_MULTI_TOOL;
+    }
+  });
+
+  it("notes the dropped batched calls", async () => {
+    const runTurn = fakeTurn("```bash\necho 1\n```\n```bash\necho 2\n```\n```bash\necho 3\n```");
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
+    expect(r.note).toBe("(Note: only the first of the 3 tool calls in your previous reply was run; the other 2 were not. Here is the real output of the first one:)");
+  });
+
+  it("notes the fabricated tail (the stop-sequence cut)", async () => {
+    const runTurn = fakeTurn("```bash\nls\n```\n\n<tool_response>\nok\n</tool_response>\n\nFixed it.");
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
+    expect(r.note).toContain("Everything you wrote after it, including the <tool_response> you wrote yourself, did not happen");
+  });
+});

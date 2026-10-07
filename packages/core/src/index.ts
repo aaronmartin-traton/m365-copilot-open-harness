@@ -55,6 +55,7 @@ export {
   getAvailableModels,
   type CopilotStream,
   type CapturedImage,
+  type TurnResult,
 } from "./copilot.js";
 
 export {

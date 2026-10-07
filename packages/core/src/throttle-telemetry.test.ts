@@ -60,6 +60,7 @@ describe("throttle telemetry — NDJSON emission", () => {
       "backoff-exit": 1,
       disengaged: 1,
       "at-limit": 1,
+      throttled: 0,
     });
   });
 

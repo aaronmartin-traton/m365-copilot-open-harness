@@ -51,7 +51,34 @@ export interface ToolPathDeps {
 export type ToolPathResult =
   | { kind: "error"; resp: Response }
   | { kind: "text"; text: string }
-  | { kind: "tools"; toolCalls: ParsedToolCall[] };
+  | { kind: "tools"; toolCalls: ParsedToolCall[]; note?: string | null };
+
+/**
+ * The correction the model needs on the turn that carries the real result.
+ *
+ * When the proxy executes less than the model wrote — the head before a
+ * self-written `<tool_response>`, or the first of several batched calls — M365's
+ * server-side history still holds the WHOLE reply. The model then believes its
+ * invented results happened, often including an invented "done", and reads the
+ * real result as stale ("It looks like this tool response came in out of
+ * context"). Upstream measured 9 of 56 Sonnet 4.6 bench runs ending that way
+ * without this note and 0 of 70 with it (upstream 4f6c95f, #31).
+ *
+ * Deterministic statement of what the proxy ran — not an inference about
+ * intent. Null when the whole turn executed.
+ */
+export function executedOnlyFirstNote(fabricated: boolean, droppedCalls: number): string | null {
+  if (fabricated) {
+    return "(Note: only the first tool call in your previous reply was actually run. Everything you wrote after it, including the <tool_response> you wrote yourself, did not happen. Here is the real output of that first call:)";
+  }
+  if (droppedCalls > 0) {
+    const rest = droppedCalls === 1 ? "the other one was not" : `the other ${droppedCalls} were not`;
+
+    return `(Note: only the first of the ${droppedCalls + 1} tool calls in your previous reply was run; ${rest}. Here is the real output of the first one:)`;
+  }
+
+  return null;
+}
 
 /**
  * Produce the tool-path result for one request. Returns either an error
@@ -62,6 +89,7 @@ export async function produceToolPath(
   deps: ToolPathDeps,
 ): Promise<ToolPathResult> {
   const { runTurn, markSent, registerToolCalls, messages, tools } = deps;
+  let droppedCalls = 0;
 
   // Initial turn — the handler has already compiled the prompt.
   const initial = await runTurn(initialPrompt);
@@ -75,8 +103,9 @@ export async function produceToolPath(
   // Stop sequence: a <tool_response> the model wrote itself is invented. When a
   // real call precedes it, keep only that head (upstream #31).
   const cut = truncateAtFabricatedToolResponse(fullText, tools);
+  const cutFabricated = cut !== fullText;
 
-  if (cut !== fullText) {
+  if (cutFabricated) {
     log.info(`Self-written <tool_response> found after a tool call; dropped ${fullText.length - cut.length} fabricated chars`);
     fullText = cut;
   }
@@ -134,6 +163,7 @@ export async function produceToolPath(
     // previous tool_response. Set M365_ALLOW_MULTI_TOOL to restore batching.
     if (!process.env.M365_ALLOW_MULTI_TOOL && parsed.toolCalls.length > 1) {
       log.info(`One-call-per-turn: keeping ${parsed.toolCalls[0].function.name}, dropping ${parsed.toolCalls.length - 1} batched call(s)`);
+      droppedCalls = parsed.toolCalls.length - 1;
       parsed.toolCalls = [parsed.toolCalls[0]];
     }
   }
@@ -153,7 +183,11 @@ export async function produceToolPath(
 
   if (parsed.hasToolCalls && parsed.toolCalls.length > 0) {
     registerToolCalls(parsed.toolCalls);
-    return { kind: "tools", toolCalls: parsed.toolCalls };
+    return {
+      kind: "tools",
+      toolCalls: parsed.toolCalls,
+      note: executedOnlyFirstNote(cutFabricated, droppedCalls),
+    };
   }
   return { kind: "text", text: fullText };
 }

@@ -41,6 +41,25 @@ export function rateLimitResponse(throttle: { current: number; max: number } | n
 }
 
 /**
+ * 429 for a turn M365 explicitly throttled (`result.value: "Throttled"`). M365
+ * names the scope (`PerUserThrottled`) but not the duration, so no
+ * Retry-After is invented.
+ */
+export function throttledResponse(result: { errorCode?: string; message?: string }): Response {
+  const scope = result.errorCode ? ` (${result.errorCode})` : "";
+
+  return jsonResponse(429, {
+    error: {
+      message: `M365 Copilot throttled this account${scope}: ${result.message ?? "too many requests"} ` +
+        "Retrying immediately does not help; starting many new conversations in a short time triggers it.",
+      type: "rate_limit_error",
+      code: "m365_throttled",
+      param: result.errorCode ?? null,
+    },
+  });
+}
+
+/**
  * 429 response for scheduler queue full (with Retry-After header).
  */
 export function schedulerBusyResponse(error: { message: string; retryAfterSeconds: number }): Response {

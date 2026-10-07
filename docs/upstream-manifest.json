@@ -661,15 +661,29 @@
       "sha": "4f6c95ff52c31ae03bf999f4fc130aca4bfd4548",
       "subject": "fix(tools): stop at a self-written <tool_response>, and say what ran",
       "status": "taken",
-      "reason": "Partly hand-ported 2026-10-06: truncateAtFabricatedToolResponse (tools.ts) applied in tool-path.ts before parsing. The only-the-first-call-ran note (session-pool pendingNote) is NOT ported yet; tracked in .scratch/upstream-absorb/issues/02.",
-      "evidence": "feat/upstream-ports; tools.test.ts, tool-path.contract.test.ts"
+      "reason": "Hand-ported 2026-10-06 in full: truncateAtFabricatedToolResponse (tools.ts) applied in tool-path.ts, plus executedOnlyFirstNote delivered once on the turn that carries the real tool result.",
+      "evidence": "feat/upstream-ports; tools.test.ts, tool-path.contract.test.ts, handler.test.ts"
     },
     {
       "sha": "1aaf580c134c7e816e1f883caeb28868cede0f17",
       "subject": "Merge pull request #32 from cramt/fix/fabricated-tool-response",
       "status": "taken",
-      "reason": "Merge of PR #32 (4f6c95f), partly hand-ported.",
-      "evidence": "feat/upstream-ports; tools.test.ts, tool-path.contract.test.ts"
+      "reason": "Merge of PR #32 (4f6c95f), hand-ported.",
+      "evidence": "feat/upstream-ports"
+    },
+    {
+      "sha": "b3bf1cab994376d23db563dbf935e376a76c1b3a",
+      "subject": "fix(handler): 429 on an explicitly Throttled turn instead of retrying",
+      "status": "taken",
+      "reason": "Hand-ported 2026-10-06: TurnResultFrame in schemas, result on CopilotStream, 429 code m365_throttled checked before the content check, throttled telemetry event, degradation backoff fed, no Retry-After invented.",
+      "evidence": "feat/upstream-ports; turn-result.test.ts, handler.test.ts"
+    },
+    {
+      "sha": "4618ec077df0195ac35ecc7b4081212fe3ac1840",
+      "subject": "Merge pull request #36 from cramt/fix/throttled-result-429",
+      "status": "taken",
+      "reason": "Merge of PR #36 (b3bf1ca), hand-ported.",
+      "evidence": "feat/upstream-ports"
     }
   ]
 }

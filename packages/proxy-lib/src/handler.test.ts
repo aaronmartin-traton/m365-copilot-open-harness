@@ -11,6 +11,7 @@ const scripted = {
   throttle: { current: 1, max: 600 } as { current: number; max: number } | null,
   fail: false,
   messageType: null as string | null,
+  result: null as { value: string; errorCode?: string; message?: string } | null,
   prompts: [] as string[],
 };
 
@@ -37,6 +38,7 @@ vi.mock("@m365-copilot/core", async (importActual) => {
         scores: null,
         turnCount: ++this.turnCount,
         turnState: "Completed",
+        result: scripted.result,
         async *[Symbol.asyncIterator]() { if (text) yield text; },
       };
     }
@@ -64,6 +66,35 @@ describe("handler deterministic boundaries", () => {
     expect(scripted.prompts[0]).toContain("task");
     expect(scripted.prompts[1]).toContain("follow-up");
     expect(scripted.prompts[1]).not.toContain("<system>");
+  });
+
+  it("prepends the only-the-first-call-ran note to the next tool result", async () => {
+    const tools = [{
+      type: "function" as const,
+      function: { name: "bash", description: "Run a command", parameters: { type: "object" as const, properties: { command: { type: "string" as const } }, required: ["command"] } },
+    }];
+    scripted.prompts.length = 0;
+    scripted.text = "```bash\nls\n```\n\n<tool_response>\nok\n</tool_response>\n\nFixed.";
+    const pool = new SessionPool();
+    const first = [{ role: "user", content: "task" }];
+    const toolCall = await handleChatCompletion(body(first, { conversation_id: "note-test", tools }), pool);
+    expect(toolCall.status).toBe(200);
+    scripted.text = "```bash\npwd\n```";
+    await handleChatCompletion(body([
+      ...first,
+      { role: "assistant", content: null, tool_calls: [{ id: "call-1", function: { name: "bash", arguments: "{}" } }] },
+      { role: "tool", tool_call_id: "call-1", content: "ok" },
+    ], { conversation_id: "note-test", tools }), pool);
+    expect(scripted.prompts[1]).toContain("only the first tool call in your previous reply was actually run");
+    expect(scripted.prompts[1]).toContain('<tool_response name="bash" call_id="call-1">');
+    // one turn only: a third turn must not repeat the note
+    await handleChatCompletion(body([
+      ...first,
+      { role: "assistant", content: null, tool_calls: [{ id: "call-1", function: { name: "bash", arguments: "{}" } }] },
+      { role: "tool", tool_call_id: "call-1", content: "ok" },
+      { role: "user", content: "next" },
+    ], { conversation_id: "note-test", tools }), pool);
+    expect(scripted.prompts[2]).not.toContain("only the first tool call in your previous reply");
   });
 
   it("sends Please continue when a continuation has no new content", async () => {
@@ -114,6 +145,39 @@ describe("handler deterministic boundaries", () => {
     } finally {
       emitSpy.mockRestore();
       scripted.messageType = null;
+      scripted.text = "answer";
+    }
+  });
+
+  it("answers an explicitly Throttled turn with 429 m365_throttled after ONE attempt", async () => {
+    scripted.text = "";
+    scripted.result = { value: "Throttled", errorCode: "PerUserThrottled", message: "Sorry, too many requests." };
+    scripted.prompts.length = 0;
+    const core = await import("@m365-copilot/core");
+    const emitSpy = vi.spyOn(core, "emitThrottleEvent");
+    try {
+      const response = await handleChatCompletion(body([{ role: "user", content: "task" }]), new SessionPool());
+      expect(response.status).toBe(429);
+      const json = await response.json();
+      expect(json.error).toMatchObject({ type: "rate_limit_error", code: "m365_throttled", param: "PerUserThrottled" });
+      expect(response.headers.get("Retry-After")).toBeNull();
+      expect(scripted.prompts).toHaveLength(1);
+      expect(emitSpy.mock.calls.map(([ev]) => ev.event)).toContain("throttled");
+    } finally {
+      emitSpy.mockRestore();
+      scripted.result = null;
+      scripted.text = "answer";
+    }
+  });
+
+  it("a Throttled result wins even if apology text arrived as content", async () => {
+    scripted.text = "I'm sorry, I can't help right now.";
+    scripted.result = { value: "Throttled" };
+    try {
+      const response = await handleChatCompletion(body([{ role: "user", content: "task" }]), new SessionPool());
+      expect(response.status).toBe(429);
+    } finally {
+      scripted.result = null;
       scripted.text = "answer";
     }
   });

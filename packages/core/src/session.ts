@@ -9,8 +9,9 @@ import {
   ThrottlingUpdate,
   CompletionFrame,
   CloseFrame,
+  TurnResultFrame,
 } from "./schemas.js";
-import { decodeJwt, getToneForModel, type CopilotStream, type CapturedImage } from "./copilot.js";
+import { decodeJwt, getToneForModel, type CopilotStream, type CapturedImage, type TurnResult } from "./copilot.js";
 import {
   parseActionConfirmation,
   buildResumeInvokeAction,
@@ -290,6 +291,7 @@ export class CopilotSession {
       const imagesByToken = new Map<string, CapturedImage>();
       let turnCountServer: number | null = null;
       let turnState: string | null = null;
+      let serverResult: TurnResult | null = null;
       // Native-action round-trip state (H-NATIVE-6). `baseArgs` is the sent chat
       // envelope's arguments[0], reused verbatim (minus `message`) to resume an
       // action. `sawAction` records that the model triggered a custom action this
@@ -403,6 +405,9 @@ export class CopilotSession {
         },
         get turnState() {
           return turnState;
+        },
+        get result() {
+          return serverResult;
         },
         get sawAction() {
           return sawAction;
@@ -762,8 +767,15 @@ export class CopilotSession {
         if (base.type === 2) {
           // Stream item — the FINAL state of the conversation, with authoritative
           // throttle/turnCount/scores. Mine it before closing.
-          const item = (raw as { item?: { messages?: any[]; throttling?: any; turnState?: string } }).item;
+          const item = (raw as { item?: { messages?: any[]; throttling?: any; turnState?: string; result?: unknown } }).item;
           if (item) {
+            const result = TurnResultFrame.safeParse(item.result);
+            if (result.success) {
+              serverResult = result.data;
+              if (result.data.value !== "Success") {
+                log.info(`Turn result: ${result.data.value}${result.data.errorCode ? ` (${result.data.errorCode})` : ""}`);
+              }
+            }
             if (item.turnState) turnState = item.turnState;
             if (item.throttling) {
               throttleInfo = { current: item.throttling.numUserMessagesInConversation, max: item.throttling.maxNumUserMessagesInConversation };

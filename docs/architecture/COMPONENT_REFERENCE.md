@@ -44,6 +44,13 @@ These modules are now separate from `handler.ts`.
 - It parses tool calls from the buffered response.
 - It applies the prose-document guard, reply→text conversion, and
   one-call-per-turn.
+- A `<tool_response>` the model wrote itself is a stop sequence: when a real
+  call precedes it, only the head is parsed (upstream #31).
+- When the proxy runs less than the model wrote (that cut, or batched calls
+  dropped by one-call-per-turn), the `tools` result carries an
+  `executedOnlyFirstNote()` correction. The handler prepends it to the next
+  tool result, once, so M365's server-side history cannot make the model
+  believe its invented results happened.
 - It gates fenced tool calls on the steering-attribution fingerprint
   (`M365_STEERING`).
 - It is a pure translator: no behavioral correction, no local-model intent

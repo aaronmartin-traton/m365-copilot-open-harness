@@ -85,6 +85,13 @@ export interface CapturedImage {
  * CopilotSession.chat (session.ts); async-iterate it for delta text and read
  * the getters for the turn's diagnostic metadata after it completes.
  */
+/** The server's verdict on one turn (final type:2 item `result`). */
+export interface TurnResult {
+  value: string;
+  errorCode?: string;
+  message?: string;
+}
+
 export interface CopilotStream {
   [Symbol.asyncIterator](): AsyncIterator<string>;
   fullText: string;
@@ -107,6 +114,12 @@ export interface CopilotStream {
   turnCount?: number | null;
   /** `Completed` etc. */
   turnState?: string | null;
+  /**
+   * The final type:2 item's `result`. Normally `{value: "Success"}`. When the
+   * account is rate-limited it is `{value: "Throttled", errorCode:
+   * "PerUserThrottled", message}` and the turn has no content frames.
+   */
+  result?: TurnResult | null;
   /** True if the model triggered a native custom action this turn (H-NATIVE-6). */
   sawAction?: boolean;
   /** Steering-ladder fingerprint (ticket 02): `unsteered` | `steered:channel=…`. */

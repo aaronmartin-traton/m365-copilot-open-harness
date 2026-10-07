@@ -19,7 +19,7 @@ import { SessionStateStore } from "./session-store.js";
 import { SessionPool, type ConversationState, type ConversationPruneSelector, type RemoteConversationPruner, type SessionPoolOptions } from "./session-pool.js";
 import { compileDelta, LOCAL_TOOL_REMINDER } from "./context-compiler.js";
 import { buildUsage } from "./usage-builder.js";
-import { jsonResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse } from "./response-helpers.js";
+import { jsonResponse, rateLimitResponse, schedulerBusyResponse, emptyResponseResponse, throttledResponse } from "./response-helpers.js";
 import { localMetaResponse, renderLocalCompletion } from "./local-response-helpers.js";
 import { OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
 import { renderImagesMarkdown } from "./image-renderer.js";
@@ -103,6 +103,11 @@ export async function handleChatCompletion(
       : "";
     if (delta.length > 0) {
       text = delta;
+      // Only a tool result is the thing the note corrects the model about.
+      if (conv.pendingNote && newMessages.some((m) => m.role === "tool")) {
+        text = `${conv.pendingNote}\n\n${delta}`;
+        log.info("Prepended the only-the-first-call-ran note (last reply was partly executed)");
+      }
       log.info(`Chat completion: model=${model}, routed=${routedModel}, tone=${tone}, stream=${body.stream}, messages=${body.messages.length}, new=${newMessages.length}, turn=${session.turnCount}, mode=delta, cid=${convId}`);
     } else {
       // No meaningful new content to send — nudge M365 to continue.
@@ -110,6 +115,8 @@ export async function handleChatCompletion(
       log.info(`Chat completion: model=${model}, routed=${routedModel}, tone=${tone}, stream=${body.stream}, messages=${body.messages.length}, turn=${session.turnCount}, mode=retry, cid=${convId}`);
     }
   }
+
+  conv.pendingNote = null; // one turn only: consumed above, or stale
 
   log.debug("Formatted prompt:", trunc(text, 1000));
 
@@ -205,6 +212,22 @@ export async function handleChatCompletion(
       });
       const drift = driftAlert();
       if (drift) log.info(`Drift alert: ${drift}`);
+
+      // M365 SAYS when it throttles: the final item's result is `Throttled` /
+      // `PerUserThrottled` (upstream b3bf1ca, #35). Checked BEFORE the content
+      // check so a BotConnection apology can never pass for an answer. Retrying
+      // only sends more turns into the throttle, so fail fast with a 429 and
+      // feed the degradation backoff.
+      if (copilotStream.result?.value === "Throttled") {
+        noteRequestOutcome(true, convId);
+        emitThrottleEvent({
+          ts: new Date().toISOString(),
+          event: "throttled",
+          convIdHash: hashConversationId(convId ?? "anon"),
+        });
+        log.info(`Upstream Throttled (${copilotStream.result.errorCode ?? "no errorCode"}) — 429, no retry`);
+        return { error: throttledResponse(copilotStream.result) };
+      }
 
       if (copilotStream.hasContent || fullText.length > 0) {
         noteRequestOutcome(false, convId); // clean response → degradation has lifted
@@ -328,7 +351,7 @@ export async function handleChatCompletion(
     // The upstream retry loop (runBuffered) is orchestration that stays here; the
     // parse/retry-on-confab/fallback/doc-guard/reply policy lives in tool-path.ts.
     // `text` is the mutable closure prompt runBuffered reads — set it per turn.
-    return produceToolPath(text, {
+    const result = await produceToolPath(text, {
       runTurn: async (prompt: string) => {
         text = prompt;
         return runBuffered();
@@ -339,6 +362,11 @@ export async function handleChatCompletion(
       tools: body.tools,
       steeringFingerprint: () => lastSteeringFingerprint,
     });
+    // When the reply was only partly executed, remember the correction for the
+    // turn that carries the real tool result.
+    if (result.kind === "tools" && result.note) conv.pendingNote = result.note;
+
+    return result;
   } else {
     // No tools — stream deltas live (onDelta) while buffering for the retry logic.
     const result = await runBuffered(onDelta);

@@ -123,3 +123,14 @@ export const JwtClaims = z.object({
   name: z.string().optional(),
   upn: z.string().optional(),
 });
+
+/** Final type:2 item `result` (e.g. `{value: "Throttled", errorCode: "PerUserThrottled"}`). */
+export const TurnResultFrame = z.object({
+  value: z.string(),
+  errorCode: z.string().optional().catch(undefined),
+  message: z.string().optional().catch(undefined),
+}).transform(({ value, errorCode, message }) => ({
+  value,
+  ...(errorCode !== undefined ? { errorCode } : {}),
+  ...(message !== undefined ? { message } : {}),
+}));
