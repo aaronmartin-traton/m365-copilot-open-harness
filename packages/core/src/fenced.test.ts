@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   deriveFencedSpec,
+  findFirstToolFence,
   renderFencedCall,
   parseFencedToolCalls,
   buildSpecMap,
@@ -401,5 +402,99 @@ describe("array and object params written as a YAML block (#50)", () => {
   it("leaves a string param's indented lines alone, as before", () => {
     const args = argsOf("```bash\n  echo indented\n```");
     expect(args.command).toBe("  echo indented");
+  });
+});
+describe("native call closer leaking into a fence (Opus)", () => {
+  const SCRIPT = "#!/bin/bash\nwc -l < data.txt | tr -d ' ' > count.txt";
+  function argsOf(text: string) {
+    const { calls, leftover } = parseFencedToolCalls(text, specs);
+    return { calls, leftover, args: calls[0] ? JSON.parse(calls[0].function.arguments) : null };
+  }
+
+  it("keeps </invoke> out of the file when the fence is closed too", () => {
+    const { args } = argsOf(`\`\`\`write_file\npath: count.sh\n\n${SCRIPT}\n</invoke>\n\`\`\``);
+    expect(args).toEqual({ path: "count.sh", content: SCRIPT });
+  });
+
+  it("…and with a stray zero-width line before the closing fence", () => {
+    const { args } = argsOf(`\`\`\`write_file\npath: count.sh\n\n${SCRIPT}\n</invoke>\n\u200c\n\`\`\``);
+    expect(args).toEqual({ path: "count.sh", content: SCRIPT });
+  });
+
+  it("accepts a fence that </invoke> ends instead of ```, stray symbol and all", () => {
+    const { calls, args, leftover } = argsOf(`\`\`\`write_file\npath: count.sh\n\n${SCRIPT}\n</invoke>\n∂`);
+    expect(calls).toHaveLength(1);
+    expect(args).toEqual({ path: "count.sh", content: SCRIPT });
+    expect(leftover.trim()).toBe("");
+  });
+
+  it("accepts a fence that the tool's own closing tag ends", () => {
+    const { args } = argsOf(`\`\`\`write_file\npath: count.sh\n\n${SCRIPT}\n</write_file>`);
+    expect(args).toEqual({ path: "count.sh", content: SCRIPT });
+  });
+
+  it("drops native <parameter> lines after the closer, unclosed fence (opus45-r5c relay)", () => {
+    const script = "#!/usr/bin/env bash\nwc -l < data.txt | tr -d ' ' > count.txt";
+    const { calls, args } = argsOf(`\`\`\`write_file\npath: count.sh\n\n${script}\n</invoke>\n<parameter name="path">count.sh</parameter>`);
+    expect(calls).toHaveLength(1);
+    expect(args).toEqual({ path: "count.sh", content: script });
+  });
+
+  it("…and inside a closed fence", () => {
+    const { args } = argsOf(`\`\`\`write_file\npath: count.sh\n\n${SCRIPT}\n</invoke>\n<parameter name="path">count.sh</parameter>\n</function_calls>\n\`\`\``);
+    expect(args).toEqual({ path: "count.sh", content: SCRIPT });
+  });
+
+  it("drops </parameter> lines BEFORE the closer too — they'd run as shell (opus45-r5c retag)", () => {
+    const command = "cat > count.sh <<'EOF'\n#!/bin/bash\nwc -l < data.txt | tr -d ' \\t' > count.txt\nEOF\nchmod +x count.sh\n./count.sh\ncat -A count.txt";
+    const { calls, args } = argsOf(`\`\`\`bash\n${command}\n</parameter>\n</invoke>\n</function_calls>`);
+    expect(calls).toHaveLength(1);
+    expect(args).toEqual({ command });
+  });
+
+  it("drops a bare trailing </parameter> — it was written into count.sh 3 times (round 1, r3)", () => {
+    const { args } = argsOf(`\`\`\`write_file\npath: count.sh\n\n${SCRIPT}\n</parameter>\n\`\`\``);
+    expect(args).toEqual({ path: "count.sh", content: SCRIPT });
+    const bash = argsOf("```bash\nchmod +x count.sh\ncat count.sh\n</parameter>\n```").args;
+    expect(bash).toEqual({ command: "chmod +x count.sh\ncat count.sh" });
+  });
+
+  it("keeps native-looking markup that real content follows", () => {
+    const { args } = argsOf("```write_file\npath: x.xml\n\n<a>\n</parameter>\n<b/>\n```");
+    expect(args.content).toBe("<a>\n</parameter>\n<b/>");
+  });
+
+  it("keeps a closer that real content follows", () => {
+    const content = "<x>\n</invoke>\necho done";
+    const { args } = argsOf(`\`\`\`write_file\npath: x.sh\n\n${content}\n\`\`\``);
+    expect(args.content).toBe(content);
+    expect(argsOf(`\`\`\`write_file\npath: x.sh\n\n${content}`).calls).toHaveLength(0);
+  });
+
+  it("keeps prose before an unclosed call as leftover", () => {
+    const { calls, leftover } = argsOf("Writing the script now.\n```bash\nls\n</invoke>");
+    expect(calls).toHaveLength(1);
+    expect(leftover.trim()).toBe("Writing the script now.");
+  });
+
+  it("does not accept an unclosed fence with no end marker — it may be truncated", () => {
+    expect(argsOf(`\`\`\`write_file\npath: count.sh\n\n${SCRIPT}`).calls).toHaveLength(0);
+  });
+
+  it("only strips a closer on the LAST line, never one inside the content", () => {
+    const content = "<a>\n</invoke>\n</a>";
+    const { args } = argsOf(`\`\`\`write_file\npath: x.xml\n\n${content}\n\`\`\``);
+    expect(args.content).toBe(content);
+  });
+
+  it("does not take another tool's closing tag as a closer", () => {
+    const content = "<p>\n</read_file>";
+    const { args } = argsOf(`\`\`\`write_file\npath: x.html\n\n${content}\n\`\`\``);
+    expect(args.content).toBe(content);
+  });
+
+  it("finds the unclosed call for findFirstToolFence too", () => {
+    const text = `\`\`\`bash\nls\n</invoke>`;
+    expect(findFirstToolFence(text, specs)).toEqual({ start: 0, end: text.length });
   });
 });

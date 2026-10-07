@@ -3,6 +3,7 @@ import {
   buildSpecMap,
   currentFramingVariant,
   deriveFencedSpec,
+  findFirstToolFence,
   formatFencedToolDefinitions,
   parseFencedToolCalls,
   renderFencedCall,
@@ -436,8 +437,19 @@ export function truncateAtFabricatedToolResponse(text: string, tools?: ToolDef[]
  * ≥2 fences AND (≥120 chars of surrounding prose OR ≥4 fences). A SINGLE action
  * is never reclassified regardless of prose, so the coding loop is untouched.
  */
-export function isProseDocument(parsed: ParseResult): boolean {
+export function isProseDocument(parsed: ParseResult, text?: string, tools?: ToolDef[]): boolean {
   if (!parsed.hasToolCalls || parsed.toolCalls.length < 2) return false;
+  // A reply that OPENS with a tool call is an action, whatever follows it
+  // (upstream 0b1538e, #33): a tool-calling model stops at its call, so
+  // everything M365 writes after it was written before the result existed.
+  // Judged as a whole, those tails made 34 of 42 guard verdicts in the upstream
+  // Sep 28 bench runs discard a correct first action. Documents announce
+  // themselves before their first fence, so the preamble decides.
+  if (text !== undefined && tools && tools.length > 0) {
+    const first = findFirstToolFence(text, buildSpecMap(tools));
+
+    if (first && !looksLikeDocumentPreamble(text.slice(0, first.start))) return false;
+  }
   const prose = parsed.textContent ? parsed.textContent.trim() : "";
   // Distinguish a coding-agent ACTION turn from a written DOCUMENT.
   //   ACTION  (execute it): a short preamble + a couple command fences, e.g. Claude's
@@ -449,6 +461,22 @@ export function isProseDocument(parsed: ParseResult): boolean {
   // Flag only documents. (Old heuristic was prose≥120, which ate Claude's preambles.)
   const hasMarkdownHeaders = /^#{1,6}\s/m.test(prose);
   return parsed.toolCalls.length >= 4 || hasMarkdownHeaders || prose.length >= 300;
+}
+
+/** Is the text before a reply's first tool call the opening of a written
+ *  document (a heading, example code, or a long intro) rather than a one-line
+ *  lead-in like "I'll inspect the files first."? */
+function looksLikeDocumentPreamble(preamble: string): boolean {
+  return /^#{1,6}\s/m.test(preamble) || preamble.includes("```") || preamble.trim().length >= 200;
+}
+
+/** The text a reply carries after its first tool call (trimmed), or "" — used
+ *  to tell the model its tail predates the call's result. */
+export function textAfterFirstToolCall(text: string, tools?: ToolDef[]): string {
+  if (!tools || tools.length === 0) return "";
+  const first = findFirstToolFence(text, buildSpecMap(tools));
+
+  return first ? text.slice(first.end).trim() : "";
 }
 
 export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {

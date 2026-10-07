@@ -417,6 +417,95 @@ ${toolsBlock(tools)}`;
 // Match a fenced block with an alphanumeric/underscore info-string. Non-greedy
 // body; the closing fence is a line that is exactly ``` (start of line).
 const FENCE_REGEX = /```([A-Za-z0-9_.-]+)[ \t]*\r?\n([\s\S]*?)\r?\n?```/g;
+const FENCE_OPEN_REGEX = /```([A-Za-z0-9_.-]+)[ \t]*\r?\n/g;
+
+// Claude Opus sometimes ends a fenced call the way its native function-calling
+// format ends one: a line `</parameter>`, `</invoke>` or `</write_file>` (the
+// tool's own name), or several of them, sometimes followed by more native markup
+// (`<parameter name="path">count.sh</parameter>`) or a stray symbol line. Then
+// either the closing ``` follows — and the markup used to be written into the
+// file, or run as the command's last line — or it never comes, and the call was
+// lost as prose (upstream Opus 4.5: 11 replies, b10b904). The trailing block is
+// dropped only when EVERY line of it is native markup or short junk and it holds
+// a closer, so a file that merely mentions `</invoke>` mid-way keeps it. Native
+// parameters are dropped, not applied: every one seen repeated a header the
+// fence already had.
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const NATIVE_TRAILER_LINE = String.raw`(?:<\/?(?:invoke|function_calls|parameter)\b[^\r\n]*|[^\p{L}\p{N}\r\n]{0,3})`;
+
+function nativeCloserRegex(name: string): RegExp {
+  return new RegExp(
+    String.raw`(?:\r?\n<\/?parameter\b[^\r\n]*)*\r?\n<\/(?:invoke|function_calls|parameter|${escapeRegExp(name)})>[ \t]*(?:\r?\n${NATIVE_TRAILER_LINE})*\s*$`,
+    "u",
+  );
+}
+
+/** The fence body without a trailing native-call closer line, or null if it has none. */
+function stripNativeCloser(inner: string, name: string): string | null {
+  const m = nativeCloserRegex(name).exec(inner);
+
+  return m ? inner.slice(0, m.index) : null;
+}
+
+/** A closed fence's body, minus a trailing native-call closer line. */
+function fenceInner(name: string, raw: string): string {
+  return stripNativeCloser(raw, name) ?? raw;
+}
+
+/**
+ * A tool fence that is never closed with ``` but ends in a native-call closer
+ * (see nativeCloserRegex). Only the last fence opening in the text, with no
+ * ``` after it, can be one.
+ */
+function findUnclosedToolFence(
+  text: string,
+  specs: Map<string, FencedToolSpec>,
+): { start: number; end: number; spec: FencedToolSpec; inner: string } | null {
+  let last: RegExpExecArray | null = null;
+  const re = new RegExp(FENCE_OPEN_REGEX.source, "g");
+
+  for (let m = re.exec(text); m !== null; m = re.exec(text)) last = m;
+
+  if (!last) return null;
+  const spec = specs.get(last[1]);
+
+  if (!spec) return null;
+  const bodyStart = last.index + last[0].length;
+  const tail = text.slice(bodyStart);
+
+  if (tail.includes("```")) return null; // closed: FENCE_REGEX's case
+  const inner = stripNativeCloser(tail, last[1]);
+
+  if (inner === null) return null; // no end marker: maybe a truncated reply
+
+  return { start: last.index, end: text.length, spec, inner };
+}
+
+/**
+ * Where the first fence that parses as a real tool call starts and ends — the
+ * same acceptance rule as parseFencedToolCalls — or null when there is none.
+ * Hand-ported from upstream 0b1538e (#33).
+ */
+export function findFirstToolFence(
+  text: string,
+  specs: Map<string, FencedToolSpec>,
+): { start: number; end: number } | null {
+  const re = new RegExp(FENCE_REGEX.source, "g");
+  let match: RegExpExecArray | null;
+
+  while ((match = re.exec(text)) !== null) {
+    const spec = specs.get(match[1]);
+
+    if (spec && parseFencedInner(spec, fenceInner(match[1], match[2]))) return { start: match.index, end: match.index + match[0].length };
+  }
+
+  const open = findUnclosedToolFence(text, specs);
+
+  if (open && parseFencedInner(open.spec, open.inner)) return { start: open.start, end: open.end };
+
+  return null;
+}
 const SEARCH_REPLACE_REGEX =
   /<{5,}\s*SEARCH\s*\r?\n([\s\S]*?)\r?\n={5,}\s*\r?\n([\s\S]*?)\r?\n>{5,}\s*REPLACE/;
 
@@ -560,7 +649,7 @@ export function parseFencedToolCalls(
   while ((match = re.exec(text)) !== null) {
     const spec = specs.get(match[1]);
     if (!spec) continue; // ```python illustration etc. — not a tool, leave in prose
-    const args = parseFencedInner(spec, match[2]);
+    const args = parseFencedInner(spec, fenceInner(match[1], match[2]));
     if (!args) continue;
     if (spec.name === "shell_command" && spec.bodyParam && /powershell/i.test(spec.description ?? "")) {
       const script = args[spec.bodyParam];
@@ -568,6 +657,16 @@ export function parseFencedToolCalls(
     }
     calls.push(makeCall(spec.name, args));
     leftover = leftover.replace(match[0], "");
+  }
+
+  if (calls.length === 0) {
+    const open = findUnclosedToolFence(text, specs);
+    const args = open && parseFencedInner(open.spec, open.inner);
+
+    if (open && args) {
+      calls.push(makeCall(open.spec.name, args));
+      leftover = text.slice(0, open.start);
+    }
   }
 
   return { calls, leftover };
