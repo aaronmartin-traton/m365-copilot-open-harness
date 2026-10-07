@@ -10,6 +10,7 @@ import {
   hashConversationId,
   type ProviderTurn,
   type ProviderUsage,
+  type ProviderUsageValue,
 } from "@m365-copilot/core";
 import { ChatCompletionRequest } from "./schemas.js";
 import { SchedulerBusyError } from "./scheduler.js";
@@ -30,6 +31,12 @@ const log = createLogger("handler");
 // The OpenAI-compatible request body shape accepted by the proxy.
 type ChatBody = z.infer<typeof ChatCompletionRequest>;
 
+/** The M365 steering-ladder fields in a ProviderTurn's usage. */
+interface M365Usage extends ProviderUsage {
+  system_fingerprint: string;
+  dea_score: number;
+}
+
 // --- Main handler ---
 
 /**
@@ -49,9 +56,7 @@ export async function handleChatCompletion(
 
   if (localMeta !== null) return renderLocalCompletion(body, localMeta);
 
-  const metadataSessionId = body.metadata && typeof body.metadata.session_id === "string"
-    ? body.metadata.session_id
-    : undefined;
+  const metadataSessionId = body.metadata?.session_id;
 
   const sessionKey = opts.sessionKey ?? body.conversation_id ?? metadataSessionId ?? body.user;
   const release = await pool.acquire(body.messages, sessionKey, opts.managedKey);
@@ -198,9 +203,10 @@ export async function handleChatCompletion(
 
       // `system_fingerprint` is emitted by the M365 steering ladder only, so it
       // is absent on every other backend.
-      const fingerprint = turn.usage?.system_fingerprint;
-      lastSteeringFingerprint = typeof fingerprint === "string" ? fingerprint : undefined;
-      const deaScore = turn.usage?.dea_score;
+      // SAFETY: M365Usage declares the two ladder fields the handler reads.
+      const usage = turn.usage as Partial<M365Usage> | undefined;
+      lastSteeringFingerprint = usage?.system_fingerprint;
+      const deaScore = usage?.dea_score;
 
       // Disengagement/dea-drift guard (ticket 03): observational sink keyed by
       // fingerprint bucket — alerts (log line) when steered turns drift above
@@ -208,7 +214,7 @@ export async function handleChatCompletion(
       recordDriftSample({
         fingerprint: lastSteeringFingerprint ?? "unsteered",
         disengaged: turn.stopReason === "refused",
-        deaScore: typeof deaScore === "number" ? deaScore : undefined,
+        deaScore,
         at: Date.now(),
       });
       const drift = driftAlert();

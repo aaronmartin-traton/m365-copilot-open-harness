@@ -32,7 +32,14 @@ function markUnavailable(reason: string): void {
   unavailableReason = reason;
 }
 
-export function getAgentAvailability() {
+/** The agent endpoint's availability report. */
+export interface AgentAvailability {
+  available: boolean;
+  retryAt: number | null;
+  reason: string | null;
+}
+
+export function getAgentAvailability(): AgentAvailability {
   return {
     available: Date.now() >= unavailableUntil,
     retryAt: unavailableUntil || null,
@@ -183,6 +190,8 @@ async function ppFetch(
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
       "x-ms-user-agent": "PVA-Portal/1.0.0 (Web; ReactNative: false)",
+      // SAFETY: callers pass plain string header maps; the spread
+      // only overrides the three defaults above.
       ...(options.headers as Record<string, string>),
     },
   });

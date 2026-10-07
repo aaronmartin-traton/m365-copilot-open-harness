@@ -19,6 +19,50 @@ export type Produced =
   | { kind: "text"; text: string }
   | { kind: "tools"; toolCalls: ParsedToolCall[] };
 
+/** A delta entry in one SSE chunk. */
+interface SseDelta {
+  role?: string;
+  content?: string | null;
+  tool_calls?: unknown[];
+}
+
+/** The error envelope an upstream failure rides inside the stream. */
+interface SseError {
+  message: string;
+  type: string;
+  code?: string;
+  param?: string;
+  [field: `x_${string}`]: number | string | boolean | null | undefined;
+}
+
+/** The choices array of one completion or chunk. */
+interface SseChoices {
+  index: number;
+  delta?: SseDelta | null;
+  message?: SseDelta;
+  finish_reason: string | null;
+}
+
+/** One SSE `chat.completion.chunk` payload. */
+interface SseChunk {
+  id: string;
+  object: string;
+  created: number;
+  model: string;
+  choices?: SseChoices[];
+  system_fingerprint?: string;
+  error?: SseError;
+  usage?: Usage;
+}
+
+/** OpenAI usage block. SAFETY: open by design — the producer decides which fields it carries. */
+export type Usage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  [field: `x_${string}`]: number | string | boolean | null;
+};
+
 export interface RenderResponseArgs {
   stream: boolean;
   /** Run one turn and return its result; onDelta forwards live text deltas (SSE only). */
@@ -26,7 +70,7 @@ export interface RenderResponseArgs {
   /** Whether tools are present — gates live delta passthrough (tool mode buffers). */
   hasTools: boolean;
   /** Build the usage block (called lazily so telemetry is captured by produce time). */
-  usage: () => Record<string, unknown>;
+  usage: () => Usage;
   /** Include the usage block in the final chunk (stream_options.include_usage). */
   includeUsage: boolean;
   completionId: string;
@@ -36,14 +80,20 @@ export interface RenderResponseArgs {
   fingerprint?: string;
 }
 
-const ErrorEnvelope = z.object({ error: z.record(z.string(), z.unknown()) });
+const ErrorEnvelope = z.object({
+  error: z.object({
+    message: z.string(),
+    type: z.string(),
+    code: z.string().optional(),
+  }).passthrough(),
+});
 
 /**
  * The producer's error object, parsed out of its response body. null when the
  * body isn't an envelope — never throws, or a non-JSON failure would be
  * swallowed by the stream's catch-all and the client would see a clean [DONE].
  */
-async function readErrorBody(resp: Response): Promise<Record<string, unknown> | null> {
+async function readErrorBody(resp: Response): Promise<SseError | null> {
   let body: unknown;
 
   try { body = JSON.parse(await resp.text()); }
@@ -51,7 +101,13 @@ async function readErrorBody(resp: Response): Promise<Record<string, unknown> | 
 
   const envelope = ErrorEnvelope.safeParse(body);
 
-  return envelope.success ? envelope.data.error : null;
+  if (!envelope.success) return null;
+
+  const { message, type, code, ...rest } = envelope.data.error;
+
+  // SAFETY: the envelope schema has validated message/type/code;
+  // the rest are provider extensions the client reads verbatim.
+  return { message, type, code, ...rest } as SseError;
 }
 
 /**
@@ -62,7 +118,7 @@ async function readErrorBody(resp: Response): Promise<Record<string, unknown> | 
  */
 export async function renderResponse(args: RenderResponseArgs): Promise<Response> {
   const { stream, produce, hasTools, usage, includeUsage, completionId, created, model, fingerprint } = args;
-  const fp = (extra: Record<string, unknown> = {}) => (fingerprint ? { ...extra, system_fingerprint: fingerprint } : extra);
+  const fp = <T extends SseChunk>(extra: T): T => (fingerprint ? { ...extra, system_fingerprint: fingerprint } : extra);
 
   if (!stream) {
     const p = await produce();
@@ -95,8 +151,8 @@ export async function renderResponse(args: RenderResponseArgs): Promise<Response
   return sseResponse(new ReadableStream({
     async start(controller) {
       const enc = new TextEncoder();
-      const send = (obj: unknown) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
-      const base = fp({ id: completionId, object: "chat.completion.chunk", created, model });
+      const send = (obj: SseChunk) => controller.enqueue(enc.encode(`data: ${JSON.stringify(obj)}\n\n`));
+      const base: SseChunk = fp({ id: completionId, object: "chat.completion.chunk", created, model });
       send({ ...base, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
       const hb = setInterval(() => { try { controller.enqueue(enc.encode(": keepalive\n\n")); } catch {} }, 15000);
 
@@ -132,7 +188,12 @@ export async function renderResponse(args: RenderResponseArgs): Promise<Response
         } else if (p.kind === "tools") {
           p.toolCalls.forEach((tc, i) =>
             send({ ...base, choices: [{ index: 0, delta: { tool_calls: [{ index: i, id: tc.id, type: "function", function: { name: tc.function.name, arguments: tc.function.arguments } }] }, finish_reason: null }] }));
-          send({ ...base, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }], ...(includeUsage ? { usage: usage() } : {}) });
+          // SAFETY: SseChunk is open by design; the terminal chunk carries only base fields.
+          const terminal = { ...base, choices: [{ index: 0, delta: {}, finish_reason: "tool_calls" }] } as SseChunk;
+
+          if (includeUsage) terminal.usage = usage();
+
+          send(terminal);
         } else {
           // Emit only what wasn't already streamed live: the whole text if nothing was
           // (tool-mode prose fallback, or a fully-buffered turn), or just the tail when
@@ -144,7 +205,12 @@ export async function renderResponse(args: RenderResponseArgs): Promise<Response
           if (!p.text.startsWith(sent)) log.info(`Streamed prefix diverged from final text (sent ${sent.length}, final ${p.text.length} chars) — not re-sending to avoid duplication`);
 
           if (remainder) send({ ...base, choices: [{ index: 0, delta: { content: remainder }, finish_reason: null }] });
-          send({ ...base, choices: [{ index: 0, delta: {}, finish_reason: outputFinishReason(p.text) }], ...(includeUsage ? { usage: usage() } : {}) });
+          // SAFETY: SseChunk is open by design; the terminal chunk carries only base fields.
+          const terminal = { ...base, choices: [{ index: 0, delta: {}, finish_reason: outputFinishReason(p.text) }] } as SseChunk;
+
+          if (includeUsage) terminal.usage = usage();
+
+          send(terminal);
         }
       } catch {
         // client likely disconnected mid-emit — nothing more to do

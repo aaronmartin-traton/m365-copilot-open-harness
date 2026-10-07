@@ -1,4 +1,5 @@
 import {
+  type AgentAvailability,
   type ModelSessionOptions,
   getDegradationBackoffState,
   getAgentAvailability,
@@ -6,6 +7,7 @@ import {
   getThrottleEventCounts,
 } from "@m365-copilot/core";
 import { activeBackend, type BackendDescriptor } from "./backends.js";
+import { type SchedulerStats } from "./scheduler.js";
 import { handleChatCompletion } from "./handler.js";
 import { SessionPool } from "./session-pool.js";
 import { ChatCompletionRequest } from "./schemas.js";
@@ -95,14 +97,40 @@ export {
 } from "@m365-copilot/core";
 
 
-export function buildHealthPayload(pool?: SessionPool, reaper?: { lastRunAt: number | null; pruned: number; failed: number; disabled?: boolean }) {
-  const backoff = getDegradationBackoffState();
+export interface HealthReaper {
+  lastRunAt: number | null;
+  pruned: number;
+  failed: number;
+  disabled?: boolean;
+}
 
-  return {
+/** The health endpoint's payload. */
+interface HealthPayload {
+  backend: string;
+  status: "ok";
+  activeSessions?: number;
+  persistedSessions?: number;
+  scheduler?: SchedulerStats;
+  reaper?: HealthReaper;
+  backoff: {
+    active: boolean;
+    until: number | null;
+    level: number;
+    recentEmptyConversations: number;
+    telemetry: Record<string, number>;
+  };
+  temporaryChat: boolean;
+  toolModel: string | null;
+  agent: AgentAvailability;
+}
+
+export function buildHealthPayload(pool?: SessionPool, reaper?: HealthReaper): HealthPayload {
+  const backoff = getDegradationBackoffState();
+  const poolDiagnostics = pool?.diagnostics();
+
+  const payload: HealthPayload = {
     backend: activeBackend().id,
-    status: "ok" as const,
-    ...(pool ? pool.diagnostics() : {}),
-    ...(reaper ? { reaper } : {}),
+    status: "ok",
     backoff: {
       active: isDegradationBackoff(),
       until: backoff.backoffUntil,
@@ -114,11 +142,35 @@ export function buildHealthPayload(pool?: SessionPool, reaper?: { lastRunAt: num
     toolModel: process.env.M365_TOOL_MODEL?.trim() || null,
     agent: getAgentAvailability(),
   };
+
+  if (poolDiagnostics) {
+    payload.activeSessions = poolDiagnostics.activeSessions;
+    payload.persistedSessions = poolDiagnostics.persistedSessions;
+    payload.scheduler = poolDiagnostics.scheduler;
+  }
+
+  if (reaper) payload.reaper = reaper;
+
+  return payload;
 }
 
 
-/** Build the OpenAI-compatible `GET /v1/models` payload for the active backend. */
-export function buildModelsPayload(backend: BackendDescriptor = activeBackend()) {
+/** The OpenAI-compatible `GET /v1/models` payload. */
+interface ModelsPayload {
+  object: string;
+  data: {
+    id: string;
+    object: string;
+    created: number;
+    owned_by: string;
+    context_window: number;
+    max_context_length: number;
+    max_input_tokens: number;
+    max_output_tokens: number;
+  }[];
+}
+
+export function buildModelsPayload(backend: BackendDescriptor = activeBackend()): ModelsPayload {
   const created = Math.floor(Date.now() / 1000);
 
   return {
@@ -145,11 +197,11 @@ export function buildModelsPayload(backend: BackendDescriptor = activeBackend())
 
 // --- CORS (permissive, matches the previous Hono `cors()` default) ---
 
-const CORS_HEADERS: Record<string, string> = {
+const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-M365-Session-Key",
-};
+} as const;
 
 function withCors(res: Response): Response {
   for (const [k, v] of Object.entries(CORS_HEADERS)) res.headers.set(k, v);
@@ -157,7 +209,12 @@ function withCors(res: Response): Response {
   return res;
 }
 
-function json(status: number, body: unknown): Response {
+/** A JSON error envelope. */
+interface JsonErrorBody {
+  error: { message: string; type: string };
+}
+
+function json(status: number, body: HealthPayload | ModelsPayload | JsonErrorBody): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },

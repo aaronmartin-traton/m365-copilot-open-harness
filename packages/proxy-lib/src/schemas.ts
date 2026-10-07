@@ -79,5 +79,8 @@ export const ChatCompletionRequest = z.object({
   /** Optional continuity hints used by local clients; never sent to M365. */
   conversation_id: z.string().optional(),
   user: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.object({
+    request_type: z.string().optional(),
+    session_id: z.string().optional(),
+  }).passthrough().optional(),
 });

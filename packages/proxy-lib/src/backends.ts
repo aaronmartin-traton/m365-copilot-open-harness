@@ -94,6 +94,7 @@ export function parseBackendId(value: string | undefined): BackendId {
     throw new Error(`Unknown PROVIDER "${value}" — expected one of: ${Object.keys(BACKENDS).join(", ")}`);
   }
 
+  // SAFETY: the membership test above proves value is a BACKENDS key.
   return value as BackendId;
 }
 
