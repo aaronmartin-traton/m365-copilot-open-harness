@@ -1,35 +1,61 @@
-import { describe, expect, it } from "vitest";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 
 /**
- * `M365_LOG_FILE` / `M365_FRAME_DIR` are resolved against the config dir, the
- * same way upstream f881913 does it, so a bench sweep can point one proxy at
- * its own archive. The module reads env at import time, so this re-implements
- * the two lines rather than importing them under a mutated env.
+ * `M365_LOG_FILE` / `M365_FRAME_DIR` are read at import time, so each
+ * case re-imports the real module under a mutated env and restores it
+ * after. Asserting against a re-implementation of the two `resolve`
+ * lines would pass even if log.ts resolved against `cwd()`.
  */
-function resolveConfig(env: string | undefined, fallback: string): string {
-  return resolve(join(homedir(), ".config", "opencode-m365"), env || fallback);
+async function loadLogModule(env: Record<string, string | undefined>) {
+  const previous = {
+    M365_LOG_FILE: process.env.M365_LOG_FILE,
+    M365_FRAME_DIR: process.env.M365_FRAME_DIR,
+  };
+
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+
+  vi.resetModules();
+
+  const mod = await import("./log.js");
+
+  for (const [key, value] of Object.entries(previous)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+
+  return mod;
 }
 
+const CONFIG = join(homedir(), ".config", "opencode-m365");
+
 describe("log/frame directory overrides", () => {
-  it("defaults inside the config dir", () => {
-    expect(resolveConfig(undefined, "debug.log")).toBe(resolve(homedir(), ".config/opencode-m365/debug.log"));
-    expect(resolveConfig(undefined, "frames")).toBe(resolve(homedir(), ".config/opencode-m365/frames"));
+  afterEach(() => {
+    vi.resetModules();
   });
 
-  it("resolves a relative override against the config dir", () => {
-    expect(resolveConfig("sweep-a/debug.log", "debug.log")).toBe(resolve(homedir(), ".config/opencode-m365/sweep-a/debug.log"));
+  it("defaults inside the config dir", async () => {
+    const log = await loadLogModule({});
+
+    expect(log.LOG_PATH).toBe(resolve(CONFIG, "debug.log"));
+    expect(log.FRAME_DIR).toBe(resolve(CONFIG, "frames"));
   });
 
-  it("takes an absolute override as is", () => {
+  it("resolves a relative override against the config dir", async () => {
+    const log = await loadLogModule({ M365_LOG_FILE: "sweep-a/debug.log", M365_FRAME_DIR: "sweep-a/frames" });
+
+    expect(log.LOG_PATH).toBe(resolve(CONFIG, "sweep-a/debug.log"));
+    expect(log.FRAME_DIR).toBe(resolve(CONFIG, "sweep-a/frames"));
+  });
+
+  it("takes an absolute override as is", async () => {
     const abs = "/tmp/opencode/frames";
-    expect(resolveConfig(abs, "frames")).toBe(abs);
-    expect(isAbsolute(resolveConfig(abs, "frames"))).toBe(true);
-  });
+    const log = await loadLogModule({ M365_FRAME_DIR: abs });
 
-  it("keeps the log directory beside the log file", () => {
-    const file = resolveConfig("sweep-a/nested/debug.log", "debug.log");
-    expect(dirname(file)).toBe(resolve(homedir(), ".config/opencode-m365/sweep-a/nested"));
+    expect(log.FRAME_DIR).toBe(abs);
   });
 });
