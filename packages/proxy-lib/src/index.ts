@@ -123,19 +123,23 @@ export function buildModelsPayload(backend: BackendDescriptor = activeBackend())
 
   return {
     object: "list",
-    data: backend.listModels().map((id) => ({
-      id,
-      object: "model",
-      created,
-      owned_by: backend.ownedBy,
-      // Non-standard but widely-read by OpenAI-compatible harnesses. Several
-      // aliases because clients disagree on the key name. Unknown keys are
-      // ignored by strict clients.
-      context_window: backend.contextWindowTokens,
-      max_context_length: backend.contextWindowTokens,
-      max_input_tokens: backend.contextWindowTokens,
-      max_output_tokens: backend.maxOutputTokens,
-    })),
+    data: backend.listModels().map((id) => {
+      const contextWindow = backend.contextWindowFor(id);
+
+      return {
+        id,
+        object: "model",
+        created,
+        owned_by: backend.ownedBy,
+        // Non-standard but widely-read by OpenAI-compatible harnesses. Several
+        // aliases because clients disagree on the key name. Unknown keys are
+        // ignored by strict clients.
+        context_window: contextWindow,
+        max_context_length: contextWindow,
+        max_input_tokens: contextWindow,
+        max_output_tokens: backend.maxOutputTokens,
+      };
+    }),
   };
 }
 

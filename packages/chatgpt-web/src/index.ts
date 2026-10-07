@@ -33,6 +33,7 @@ import {
 } from "./browser.js";
 import {
   CHATGPT_WEB_MODELS,
+  chatGptWebContextWindow,
   chatGptWebModelNames,
   describeChatGptModel,
   type ChatGptWebModel,
@@ -227,20 +228,11 @@ export class ChatGptWebProvider implements ModelProvider {
   }
 }
 
-/** Model ids this backend accepts. */
-export function listChatGptWebModels(): string[] {
-  return chatGptWebModelNames();
-}
-
-/** Every model this backend can advertise, with its context window. */
-export function chatGptWebCatalog(): Array<ChatGptWebModel> {
-  return Object.values(CHATGPT_WEB_MODELS);
-}
-
 export {
   ChatGptBrowserSession,
   chatGptProfileDir,
   chatGptWebModelNames,
+  chatGptWebContextWindow,
   CHATGPT_WEB_MODELS,
   describeChatGptModel,
 };

@@ -53,8 +53,6 @@ export {
   decodeJwt,
   getToneForModel,
   getAvailableModels,
-  m365StopReason,
-  m365UsageFields,
   type CopilotStream,
 } from "./copilot.js";
 
@@ -65,7 +63,6 @@ export {
   type ProviderStopReason,
   type ProviderUsage,
   type ProviderUsageValue,
-  type TurnResult,
 } from "./provider.js";
 
 export {

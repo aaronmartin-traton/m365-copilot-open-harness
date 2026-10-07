@@ -13,7 +13,7 @@
  * answered.
  *
  * Context windows are the figures upstream reports for Plus Medium/High (90k)
- * and for the experimental 3x context (270k), plus a 10% compaction reserve.
+ * and for the experimental 3x context (270k).
  */
 
 export interface ChatGptWebModel {
@@ -23,21 +23,18 @@ export interface ChatGptWebModel {
   label: string;
   /** Context window advertised to harnesses on `/v1/models`. */
   contextWindow: number;
-  /** Fraction of the window the planner leaves free for auto-compaction. */
-  compactionReserve: number;
 }
 
+/** Plus Medium/High window, and the experimental 3x context lane. */
 const MEASURED_WINDOW = 90_000;
 
 const MEASURED_WINDOW_3X = 270_000;
-
-const RESERVE = 0.1;
 
 const model = (
   id: string,
   label: string,
   contextWindow: number = MEASURED_WINDOW,
-): ChatGptWebModel => ({ id, label, contextWindow, compactionReserve: RESERVE });
+): ChatGptWebModel => ({ id, label, contextWindow });
 
 export const CHATGPT_WEB_MODELS = {
   "chatgpt-web/luna": model("chatgpt-web/luna", "GPT-5.6 Luna (Web)"),
@@ -52,6 +49,11 @@ const MODEL_BY_SLUG = new Map<string, ChatGptWebModel>(Object.entries(CHATGPT_WE
 
 export function chatGptWebModelNames(): string[] {
   return Object.keys(CHATGPT_WEB_MODELS);
+}
+
+/** The window to advertise for `id`; unknown slugs get the lane default. */
+export function chatGptWebContextWindow(id: string): number {
+  return MODEL_BY_SLUG.get(id)?.contextWindow ?? MEASURED_WINDOW;
 }
 
 /**

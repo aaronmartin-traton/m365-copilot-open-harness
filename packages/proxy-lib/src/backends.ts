@@ -7,7 +7,8 @@
  * exactly as before.
  *
  * The ChatGPT Web lane is a browser-driven, ToS-constrained fallback:
- * it is opt-in by configuration, never by accident.
+ * it is opt-in by configuration, never by accident — which is why an
+ * unrecognized value throws instead of quietly running M365.
  */
 
 import {
@@ -19,6 +20,7 @@ import {
 } from "@m365-copilot/core";
 import {
   ChatGptWebProvider,
+  chatGptWebContextWindow,
   chatGptWebModelNames,
 } from "@m365-copilot/chatgpt-web";
 
@@ -30,8 +32,10 @@ export interface BackendDescriptor {
   ownedBy: string;
   /** Models to advertise on `GET /v1/models`. */
   listModels(): string[];
-  /** Context/output hints for harnesses. Advertised only. */
-  contextWindowTokens: number;
+  /** Per-model context window; defaults to `contextWindowTokens` when
+   *  the lane measures one window for every slug it serves. */
+  contextWindowFor(id: string): number;
+  /** Output ceiling for harnesses. Advertised only. */
   maxOutputTokens: number;
   /** The single seam `SessionPool` uses to build a conversation session. */
   createSession(options: ModelSessionOptions): ModelProvider;
@@ -46,11 +50,13 @@ export interface BackendDescriptor {
 
 const DEFAULT_CONTEXT_WINDOW = 1_000_000;
 
+const m365ContextWindow = () => Number(process.env.M365_CONTEXT_WINDOW) || DEFAULT_CONTEXT_WINDOW;
+
 const M365_BACKEND: BackendDescriptor = {
   id: "m365",
   ownedBy: "microsoft",
   listModels: getAvailableModels,
-  contextWindowTokens: Number(process.env.M365_CONTEXT_WINDOW) || DEFAULT_CONTEXT_WINDOW,
+  contextWindowFor: m365ContextWindow,
   maxOutputTokens: Number(process.env.M365_MAX_OUTPUT_TOKENS) || DEFAULT_CONTEXT_WINDOW,
   createSession: (options) => new ModelSession(options),
   deleteConversation: async (ids) => {
@@ -63,11 +69,11 @@ const CHATGPT_WEB_BACKEND: BackendDescriptor = {
   id: "chatgpt-web",
   ownedBy: "chatgpt-web",
   listModels: chatGptWebModelNames,
-  // Measured ChatGPT Plus Medium/High window
-  // (packages/chatgpt-web/src/models.ts); advertised only, ChatGPT compacts
-  // its own context. No `deleteConversation`: the idle reaper must not call the
-  // M365 web API with a chatgpt.com conversation.
-  contextWindowTokens: Number(process.env.CHATGPT_WEB_CONTEXT_WINDOW) || 90_000,
+  // Per-model measured windows (packages/chatgpt-web/src/models.ts);
+  // advertised only — ChatGPT compacts its own context. No
+  // `deleteConversation`: the idle reaper must not call the M365 web
+  // API with a chatgpt.com conversation.
+  contextWindowFor: chatGptWebContextWindow,
   maxOutputTokens: Number(process.env.CHATGPT_WEB_MAX_OUTPUT_TOKENS) || DEFAULT_CONTEXT_WINDOW,
   createSession: (options) => new ChatGptWebProvider(options),
 };
@@ -77,10 +83,18 @@ const BACKENDS: Record<BackendId, BackendDescriptor> = {
   "chatgpt-web": CHATGPT_WEB_BACKEND,
 };
 
-/** Parse a backend id, treating an unset/unknown value as the M365 default. */
+/** The configured backend id. An unset `PROVIDER` is the M365 default
+ *  the proxy was built on; a set-but-unknown one is a typo, and
+ *  silently running the quota-bearing M365 lane instead of the opt-in
+ *  browser lane is exactly the accident the lane is gated against. */
 export function parseBackendId(value: string | undefined): BackendId {
-  // SAFETY: guarded by the `in` check above, so `value` is a key of BACKENDS.
-  return value && value in BACKENDS ? (value as BackendId) : "m365";
+  if (!value) return "m365";
+
+  if (!(value in BACKENDS)) {
+    throw new Error(`Unknown PROVIDER "${value}" — expected one of: ${Object.keys(BACKENDS).join(", ")}`);
+  }
+
+  return value as BackendId;
 }
 
 /** The configured backend. */

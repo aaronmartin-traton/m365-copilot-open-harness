@@ -1,11 +1,9 @@
 /**
- * Local response helpers for special cases where M365 Copilot isn't called.
- *
- * These handle: metadata responses, read-only fallback tool calls,
- * and locally-rendered completions.
+ * Local response helpers for requests that never reach a backend: metadata-only
+ * (title generation) and locally-rendered completions.
  */
 
-import { getMessageContent, type Message, type ToolDef } from "@m365-copilot/core";
+import { getMessageContent } from "@m365-copilot/core";
 import { ChatCompletionRequest } from "./schemas.js";
 import type { z } from "zod/v4";
 import { jsonResponse, sseResponse } from "./response-helpers.js";
@@ -31,82 +29,6 @@ export function localMetaResponse(body: ChatBody): string | null {
   if (!explicit && !knownPrompt) return null;
 
   return '{"title":"New conversation"}';
-}
-
-/**
- * In read-only mode, detect when the user is asking for a safe read operation
- * and synthesize the corresponding tool call directly (without sending to M365).
- */
-export function readOnlyFallbackToolCall(
-  body: { messages: Message[]; tools?: ToolDef[] },
-  assistantText: string,
-): { id: string; type: "function"; function: { name: string; arguments: string } } | null {
-  const tools = body.tools ?? [];
-
-  if (tools.length === 0) return null;
-  let lastUserIndex = -1;
-
-  for (let index = body.messages.length - 1; index >= 0; index--) {
-    if (body.messages[index].role === "user") { lastUserIndex = index; break; }
-  }
-
-  if (lastUserIndex < 0 || body.messages.slice(lastUserIndex + 1).some((message) => message.role === "tool")) return null;
-
-  const userText = getMessageContent(body.messages[lastUserIndex]).trim().toLowerCase();
-
-  const staleSandbox = /\/mnt\/(?:data|workspace)|no (?:user )?files uploaded|nothing uploaded/i.test(assistantText) ||
-    ((assistantText.match(/(?:input|output|working)\//gi)?.length ?? 0) >= 2 && /empty|upload/i.test(assistantText));
-
-  const asksPwd = /^(?:pwd|where am i|current directory|working directory)[?.!\s]*$/.test(userText);
-  const asksGit = /\bgit status\b|^repo(?:sitory)? status[?.!\s]*$/.test(userText);
-
-  const asksFiles = /\b(?:list|show|what|which)\b[\w\s'",:.-]{0,50}\bfiles\b/.test(userText) ||
-    /^(?:ls|dir|tree)(?:\s|$)/.test(userText) || (staleSandbox && /files|workspace|repo/.test(userText));
-
-  if (!asksPwd && !asksGit && !asksFiles) return null;
-
-  if (asksFiles) {
-    const glob = tools.find((tool: ToolDef) => /^(?:glob|find_files|list_files)$/i.test(tool.function.name));
-
-    if (glob) {
-      const properties = Object.keys(glob.function.parameters?.properties ?? {});
-
-      const key = properties.find((name) => /^(?:pattern|glob)$/i.test(name)) ??
-        properties.find((name) => /^path$/i.test(name));
-
-      if (key) return makeDirectToolCall(glob.function.name, { [key]: key.toLowerCase() === "path" ? "." : "**/*" });
-    }
-  }
-
-  const shell = tools.find((tool: ToolDef) => /^(?:bash|sh|shell|shell_command|run|exec|command|run_command|execute_command)$/i.test(tool.function.name));
-
-  if (!shell) return null;
-  const properties = Object.keys(shell.function.parameters?.properties ?? {});
-  const commandKey = properties.find((name) => /^(?:command|cmd|script|input)$/i.test(name));
-
-  if (!commandKey) return null;
-  const powershell = /powershell/i.test(shell.function.description ?? "");
-
-  const command = asksPwd
-    ? (powershell ? "Get-Location" : "pwd")
-    : asksGit
-      ? "git status --short"
-      : powershell
-        ? "Get-ChildItem -Recurse -File | Select-Object -First 200 -ExpandProperty FullName"
-        : "find . -maxdepth 3 -type f | sort | sed -n '1,200p'";
-
-  return makeDirectToolCall(shell.function.name, { [commandKey]: command });
-}
-
-/**
- * Create a tool call object with a generated ID.
- */
-export function makeDirectToolCall(name: string, args: Record<string, unknown>) {
-  return {
-    id: `call_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`,
-    type: "function" as const,
-    function: { name, arguments: JSON.stringify(args) },
-  };
 }
 
 /**

@@ -1,7 +1,5 @@
 import { JwtClaims } from "./schemas.js";
-import type { ProviderStopReason, ProviderTurn, ProviderUsage, ProviderUsageValue, TurnResult } from "./provider.js";
-
-export type { TurnResult };
+import type { ProviderStopReason, ProviderTurn, ProviderUsage, ProviderUsageValue } from "./provider.js";
 
 // Model name → tone mapping.
 // The server VALIDATES tones (an unknown tone errors with "Failed to invoke

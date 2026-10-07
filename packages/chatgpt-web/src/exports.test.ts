@@ -7,8 +7,7 @@ describe("@m365-copilot/chatgpt-web public surface (built dist)", () => {
     "ChatGptBrowserSession",
     "chatGptProfileDir",
     "chatGptWebModelNames",
-    "chatGptWebCatalog",
-    "listChatGptWebModels",
+    "chatGptWebContextWindow",
     "describeChatGptModel",
     "CHATGPT_WEB_MODELS",
   ])("exports %s", (name) => {

@@ -10,8 +10,8 @@ import {
   CloseFrame,
   TurnResultFrame,
 } from "./schemas.js";
-import { decodeJwt, getToneForModel, m365StopReason, m365UsageFields, type CopilotStream, type TurnResult } from "./copilot.js";
-import type { ProviderImage } from "./provider.js";
+import { decodeJwt, getToneForModel, m365StopReason, m365UsageFields, type CopilotStream } from "./copilot.js";
+import type { ProviderImage, TurnResult } from "./provider.js";
 import {
   parseActionConfirmation,
   buildResumeInvokeAction,
@@ -65,6 +65,7 @@ const IMAGE_GEN_OPTIONS_SETS = [
 // per-request NDJSON file under ~/.config/opencode-m365/frames/. Cheap to run
 // in production; gives us forensic data when M365 starts emitting new fields.
 const DUMP_FRAMES = !!process.env.M365_DUMP_FRAMES;
+
 function dumpFrame(requestId: string, parsed: unknown, direction: "recv" | "send") {
   if (!DUMP_FRAMES) return;
 
@@ -176,28 +177,50 @@ export function cursorMessageId(j: string | undefined): string | null {
  * separated by a blank line (they are separate bubbles in the real client).
  */
 export class TurnTextComposer {
+  /** Key for deltas that arrived before any frame named a message. */
+  private static readonly UNNAMED = "";
+
   private texts = new Map<string, string>();
   private target: string | null = null;
 
   /** A cursor frame: subsequent deltas extend message `id`. */
   cursor(id: string): void {
+    this.adopt(TurnTextComposer.UNNAMED, id);
     this.target = id;
   }
 
   /** A full-text snapshot of one message. Before any cursor has been seen, the
    *  snapshot's message also becomes the delta target (older frame shapes). */
   snapshot(id: string | undefined, text: string): void {
-    const key = id ?? this.target ?? "";
+    const key = id ?? this.target ?? TurnTextComposer.UNNAMED;
+
+    this.adopt(TurnTextComposer.UNNAMED, key);
 
     if (this.target === null) this.target = key;
+
     this.texts.set(key, foldStreamText(this.texts.get(key) ?? "", text).answer);
   }
 
   /** A token delta for the message the cursor last named. */
   delta(text: string): void {
-    const key = this.target ?? "";
+    const key = this.target ?? TurnTextComposer.UNNAMED;
 
     this.texts.set(key, (this.texts.get(key) ?? "") + text);
+  }
+
+  /**
+   * Move text that arrived before anything named a message onto `to`. Left in
+   * place it would compose as its own bubble: the real message's head appears
+   * twice, and the fragment's unclosed fence swallows the next one, so the
+   * turn parses as a corrupted call.
+   */
+  private adopt(from: string, to: string): void {
+    const prefix = this.texts.get(from);
+
+    if (prefix === undefined) return;
+
+    this.texts.delete(from);
+    this.texts.set(to, foldStreamText(prefix, this.texts.get(to) ?? "").answer);
   }
 
   get text(): string {
@@ -890,14 +913,18 @@ export class CopilotSession {
           // Stream item — the FINAL state of the conversation, with authoritative
           // throttle/turnCount/scores. Mine it before closing.
           const item = (raw as { item?: { messages?: any[]; throttling?: any; turnState?: string; result?: unknown } }).item;
+
           if (item) {
             const result = TurnResultFrame.safeParse(item.result);
+
             if (result.success) {
               serverResult = result.data;
+
               if (result.data.value !== "Success") {
                 log.info(`Turn result: ${result.data.value}${result.data.errorCode ? ` (${result.data.errorCode})` : ""}`);
               }
             }
+
             if (item.turnState) turnState = item.turnState;
 
             if (item.throttling) {
@@ -961,6 +988,7 @@ export class CopilotSession {
               const cursorId = cursorMessageId(msgUpdate.data.cursor?.j);
 
               if (cursorId) composer.cursor(cursorId);
+
               for (const m of msgUpdate.data.messages) {
                 if (maybeInterceptHostedCommand(m)) continue;
 
