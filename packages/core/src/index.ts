@@ -104,6 +104,7 @@ export {
   looksLikeHallucinatedCompletion,
   looksLikeRemoteArtifactCompletion,
   isProseDocument,
+  truncateAtFabricatedToolResponse,
   type Message,
   type ToolDef,
   type ToolFunction,

@@ -262,3 +262,21 @@ describe("produceToolPath contract — batching and mixed output", () => {
     expect(runTurn).toHaveBeenCalledOnce();
   });
 });
+
+describe("produceToolPath contract — self-written <tool_response> stop sequence", () => {
+  it("keeps the real call at the head and drops the invented tail", async () => {
+    const text = "```bash\nls\n```\n\n<tool_response>\na.py\n</tool_response>\n\n```bash\ncat a.py\n```\n\nDone, all fixed.";
+    const runTurn = fakeTurn(text);
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "tools");
+    expect(r.toolCalls).toHaveLength(1);
+    expect(JSON.parse(r.toolCalls[0].function.arguments)).toEqual({ command: "ls" });
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("leaves prose that mentions <tool_response> as text", async () => {
+    const prose = "Tool output arrives in a <tool_response> block, which I then read.";
+    const runTurn = fakeTurn(prose);
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "text");
+    expect(r.text).toBe(prose);
+  });
+});

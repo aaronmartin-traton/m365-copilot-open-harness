@@ -10,6 +10,7 @@
 import {
   parseToolCalls,
   isProseDocument,
+  truncateAtFabricatedToolResponse,
   trunc,
   createLogger,
   type Message,
@@ -70,6 +71,15 @@ export async function produceToolPath(
   let fullText = initial.fullText;
 
   log.debug("Raw response (tool mode):", trunc(fullText, 1000));
+
+  // Stop sequence: a <tool_response> the model wrote itself is invented. When a
+  // real call precedes it, keep only that head (upstream #31).
+  const cut = truncateAtFabricatedToolResponse(fullText, tools);
+
+  if (cut !== fullText) {
+    log.info(`Self-written <tool_response> found after a tool call; dropped ${fullText.length - cut.length} fabricated chars`);
+    fullText = cut;
+  }
   let parsed = parseToolCalls(fullText, tools);
   log.info(`Parse result: hasToolCalls=${parsed.hasToolCalls}, count=${parsed.toolCalls.length}`);
   // Document guard: the shell-routing parser turns every ```bash block into a

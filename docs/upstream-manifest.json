@@ -656,6 +656,20 @@
       "status": "taken",
       "reason": "Merge of PR #51 (5912b24), hand-ported.",
       "evidence": "feat/upstream-ports"
+    },
+    {
+      "sha": "4f6c95ff52c31ae03bf999f4fc130aca4bfd4548",
+      "subject": "fix(tools): stop at a self-written <tool_response>, and say what ran",
+      "status": "taken",
+      "reason": "Partly hand-ported 2026-10-06: truncateAtFabricatedToolResponse (tools.ts) applied in tool-path.ts before parsing. The only-the-first-call-ran note (session-pool pendingNote) is NOT ported yet; tracked in .scratch/upstream-absorb/issues/02.",
+      "evidence": "feat/upstream-ports; tools.test.ts, tool-path.contract.test.ts"
+    },
+    {
+      "sha": "1aaf580c134c7e816e1f883caeb28868cede0f17",
+      "subject": "Merge pull request #32 from cramt/fix/fabricated-tool-response",
+      "status": "taken",
+      "reason": "Merge of PR #32 (4f6c95f), partly hand-ported.",
+      "evidence": "feat/upstream-ports; tools.test.ts, tool-path.contract.test.ts"
     }
   ]
 }
