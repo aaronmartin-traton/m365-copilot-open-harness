@@ -47,7 +47,7 @@ export {
   type CanaryVerdict,
 } from "./steering.js";
 
-export { getOrCreateAgent, getAgentAvailability } from "./agent.js";
+export { getOrCreateAgent, getAgentAvailability, environmentUrlFromName } from "./agent.js";
 
 export {
   decodeJwt,

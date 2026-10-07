@@ -4,7 +4,7 @@
 // Usage: M365_NO_INTERACTIVE=1 node scripts/listbots-probe.mjs
 process.env.M365_DEBUG = process.env.M365_DEBUG ?? "1";
 
-import { getTokenForScope } from "../packages/core/dist/index.mjs";
+import { getTokenForScope, environmentUrlFromName } from "../packages/core/dist/index.mjs";
 
 const POWERPLATFORM_SCOPES = ["https://api.powerplatform.com/.default"];
 const BAP_SCOPES = ["https://api.bap.microsoft.com/.default"];
@@ -27,12 +27,7 @@ const envRes = await fetch(
   { headers: { Authorization: `Bearer ${bapToken}` } },
 );
 const env = await envRes.json();
-const envId = env.name.replace(/^Default-/i, "").replace(/-/g, "").toLowerCase();
-const base = `.df.environment.api.powerplatform.com`;
-const candidates = [
-  `https://default${envId}${base}`,
-  `https://default${envId.slice(0, -2)}${base}`,
-];
+const candidates = [environmentUrlFromName(env.name)];
 
 let envUrl = candidates[0];
 for (const url of candidates) {

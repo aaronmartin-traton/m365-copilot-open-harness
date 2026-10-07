@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { getTokenForScope } from "../packages/core/dist/index.mjs";
+import { getTokenForScope, environmentUrlFromName } from "../packages/core/dist/index.mjs";
 
 process.env.M365_DEBUG = process.env.M365_DEBUG ?? "1";
 
@@ -27,11 +27,7 @@ if (!bapToken || !ppToken) { console.log("[probe] no tokens"); process.exit(1); 
 // env URL
 const envRes = await fetch(`${BAP_API}/providers/Microsoft.BusinessAppPlatform/environments/~default?api-version=2023-06-01`, { headers: { Authorization: `Bearer ${bapToken}` } });
 const env = await envRes.json();
-const envId = env.name.replace(/^Default-/i, "").replace(/-/g, "").toLowerCase();
-const base = `.df.environment.api.powerplatform.com`;
-let envUrl = `https://default${envId}${base}`;
-const probe = await fetch(`${envUrl}/copilotstudio/minimalBots/api?${API}`, { method: "HEAD", headers: { Authorization: `Bearer ${ppToken}` } }).catch(() => null);
-if (!probe || !probe.ok) envUrl = `https://default${envId.slice(0, -2)}${base}`;
+const envUrl = environmentUrlFromName(env.name);
 console.log(`[probe] envUrl=${envUrl}`);
 
 // botId from cache

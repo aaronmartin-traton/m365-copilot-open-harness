@@ -7,7 +7,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getTokenForScope, getToken, decodeJwt } from "../packages/core/dist/index.mjs";
+import { getTokenForScope, getToken, decodeJwt, environmentUrlFromName } from "../packages/core/dist/index.mjs";
 
 const TS = new Date().toISOString().replace(/[:.]/g, "-");
 const OUT = join(process.cwd(), "scripts", "usage-endpoint-out", TS);
@@ -32,11 +32,7 @@ if (bap) {
     { headers: { Authorization: `Bearer ${bap}` } },
   );
   const env = await er.json();
-  const envId = env.name.replace(/^Default-/i, "").replace(/-/g, "").toLowerCase();
-  const candidates = [
-    `https://default${envId}.df.environment.api.powerplatform.com`,
-    `https://default${envId.slice(0, -2)}.df.environment.api.powerplatform.com`,
-  ];
+  const candidates = [environmentUrlFromName(env.name)];
   for (const c of candidates) {
     const p = await fetch(`${c}/copilotstudio/minimalBots/api?api-version=2022-03-01-preview`, { method: "HEAD", headers: { Authorization: `Bearer ${pp}` } }).catch(() => null);
     if (p) { envUrl = c; break; }

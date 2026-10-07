@@ -84,6 +84,29 @@ The runtime returns the real result in a <tool_response> block — treat it as g
 When the message has no <tools> block, respond normally as a helpful assistant in natural language.`;
 }
 
+/**
+ * Derive the Power Platform environment host from a BAP environment name
+ * (e.g. "Default-00000000-0000-4000-8000-000000000000"). Pure — no network.
+ *
+ * The host is `default<envId minus last 2 chars>.<last 2 chars>.environment…`.
+ * The old code hardcoded `.df.`, which only resolves for IDs ending in "df".
+ * Hand-ported from upstream 6a1a12c / d7c6d80 (found by @FreemindTrader, #8;
+ * confirmed live upstream: for an ID ending "df" both forms reach the same
+ * host, for any other ending the hardcoded form does not resolve).
+ */
+export function environmentUrlFromName(envName: string): string {
+  const envId = envName
+    .replace(/^Default-/i, "")
+    .replace(/-/g, "")
+    .toLowerCase();
+
+  if (envId.length < 3) {
+    throw new Error(`Unexpected Power Platform environment ID: ${envId}`);
+  }
+
+  return `https://default${envId.slice(0, -2)}.${envId.slice(-2)}.environment.api.powerplatform.com`;
+}
+
 async function getEnvironmentUrl(bapToken: string, ppToken: string): Promise<string> {
   // Query BAP API to discover the default environment
   const res = await fetch(
@@ -100,41 +123,20 @@ async function getEnvironmentUrl(bapToken: string, ppToken: string): Promise<str
   }
 
   const envName = z.object({ name: z.string().min(1) }).parse(await res.json()).name;
-  const envId = envName
-    .replace(/^Default-/i, "")
-    .replace(/-/g, "")
-    .toLowerCase();
+  const url = environmentUrlFromName(envName);
 
-  // Microsoft constructs the subdomain as "default{envId}" but DNS resolution
-  // requires finding the correct label. Try the full ID first, fall back to
-  // progressively shorter versions if DNS doesn't resolve.
-  const base = `.df.environment.api.powerplatform.com`;
-  const candidates = [
-    `https://default${envId}${base}`,
-    `https://default${envId.slice(0, -2)}${base}`, // some tenants truncate last 2 chars
-  ];
-
-  for (const url of candidates) {
-    try {
-      const probe = await fetch(
-        `${url}/copilotstudio/minimalBots/api?api-version=2022-03-01-preview`,
-        {
-          method: "HEAD",
-          headers: { Authorization: `Bearer ${ppToken}` },
-        },
-      );
-      // Any response (even 401/403) means the host resolved
-      log.info(`Resolved environment URL: ${url}`);
-      return url;
-    } catch {
-      log.info(`Environment URL candidate failed: ${url}`);
-    }
+  try {
+    // Any response (even 401/403) means the host resolved; only DNS matters here.
+    await fetch(`${url}/copilotstudio/minimalBots/api?api-version=2022-03-01-preview`, {
+      method: "HEAD",
+      headers: { Authorization: `Bearer ${ppToken}` },
+    });
+    log.info(`Resolved environment URL: ${url}`);
+  } catch {
+    log.info(`Environment URL did not resolve, using it anyway: ${url}`);
   }
 
-  // Last resort: return the full version
-  const fallback = candidates[0];
-  log.info(`Using fallback environment URL: ${fallback}`);
-  return fallback;
+  return url;
 }
 
 interface CachedAgent {

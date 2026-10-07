@@ -11,7 +11,7 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getTokenForScope, getToken, decodeJwt } from "../packages/core/dist/index.mjs";
+import { getTokenForScope, getToken, decodeJwt, environmentUrlFromName } from "../packages/core/dist/index.mjs";
 import { buildBrowserHeaders, classifyResult, normalizeResult, errorResult, pickWinners } from "./_endpoint-hunt-v2-lib.mjs";
 
 const TS = new Date().toISOString().replace(/[:.]/g, "-");
@@ -37,11 +37,7 @@ if (bap) {
     { headers: { Authorization: `Bearer ${bap}` } },
   );
   const env = await er.json();
-  const envId = env.name.replace(/^Default-/i, "").replace(/-/g, "").toLowerCase();
-  const envCandidates = [
-    `https://default${envId}.df.environment.api.powerplatform.com`,
-    `https://default${envId.slice(0, -2)}.df.environment.api.powerplatform.com`,
-  ];
+  const envCandidates = [environmentUrlFromName(env.name)];
   for (const c of envCandidates) {
     const p = await fetch(`${c}/copilotstudio/minimalBots/api?api-version=2022-03-01-preview`, { method: "HEAD", headers: { Authorization: `Bearer ${pp}` } }).catch(() => null);
     if (p) { envUrl = c; break; }

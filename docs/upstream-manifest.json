@@ -632,9 +632,30 @@
     {
       "sha": "d7c6d8080bf2bb769c1949c2dfbe60bb7ca929c3",
       "subject": "fix(agent): derive the Power Platform host from both DNS labels",
-      "status": "superseded",
-      "reason": "Power Platform host derived from both DNS labels: two-candidate probe present in agent.ts.",
-      "evidence": "audit: AuditRest (file evidence)"
+      "status": "taken",
+      "reason": "Hand-ported 2026-10-06 as environmentUrlFromName in agent.ts. Corrected: the earlier superseded verdict was wrong (our two candidates both hardcoded .df.).",
+      "evidence": "feat/upstream-ports; packages/core/src/agent.test.ts"
+    },
+    {
+      "sha": "6a1a12cad0876cd12e19ce7ea48c4b354fb7b11b",
+      "subject": "fix(scripts): use core's env-URL derivation in Power Platform probes",
+      "status": "taken",
+      "reason": "Hand-ported 2026-10-06: environmentUrlFromName exported from core; the five probe scripts use it instead of the .df. copy.",
+      "evidence": "feat/upstream-ports"
+    },
+    {
+      "sha": "5912b244f5a9ac6b4ee863d91a85ebbe587893ba",
+      "subject": "fix(tools): read YAML block lists in array/object tool params, and name tool results on follow-up turns",
+      "status": "taken",
+      "reason": "Hand-ported 2026-10-06: YAML block + inline JSON array/object params (core/src/yaml-block.ts) and tool-result names from tool_call_id in compileDelta. Old empty-block fallback stays a string, not [].",
+      "evidence": "feat/upstream-ports; fenced.test.ts, context-compiler.test.ts"
+    },
+    {
+      "sha": "8ace0f1489c618ebeafb2595f68c9ea7dda728af",
+      "subject": "Merge pull request #51 from cramt/fix/fenced-yaml-edit-lists",
+      "status": "taken",
+      "reason": "Merge of PR #51 (5912b24), hand-ported.",
+      "evidence": "feat/upstream-ports"
     }
   ]
 }
