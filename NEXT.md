@@ -1,85 +1,51 @@
 # NEXT.md — M365 Copilot Proxy
-> Snapshot as of 2026-08-14. The latest dated session entry below supersedes
-> earlier carry-over plans where they conflict.
+> Current state. Only live work belongs here; shipped history is in Git and the
+> `.scratch/` tickets, which carry their own evidence.
 
 **Start a new session here:** read
 `docs/agents/working-methodology.md` (startup sequence + operating rules +
 current mission), then `docs/agents/session-workflow.md` (operating manual),
 then `CONTEXT.md` (vocabulary).
 
-## 2026-08-11 session carry-over (live M365 investigation)
+## Open work
 
-Big finding: **custom-instructions is a proven, no-approval, durable injection
-channel** — saved instructions apply to raw agent-less WS turns by default (the
-`add_custom_instructions` flag is NOT required). Write via the CDP
-Settings→Personalization textarea using the **native value-setter +
-input/change events** (React); `tab.fill('')` or synthetic `new Event('input')`
-alone leave Save disabled (silent no-op — first A1 save and clear both failed
-this way). See `docs/research/2026-08-11-m365-injection-ideation.md` (the
-ADHD+GLM cross-check) and `docs/agents/m365-ui-investigation.md` (runbook).
+All three are **human-gated** — they need a live M365 window or an interactive
+browser, so no autonomous session can close them.
 
-- **User wants a possible Copilot plan upgrade** — the durable-memory slot
-  (injection idea 2) is license-gated on Basic; if the plan is upgraded to one
-  with Copilot Memory authoring enabled, re-test H8.14 (mailbox write → recall)
-  — the memory channel could become viable.
-- **Injection ladder (ticket 02, ready-for-agent):** primary channel is now
-  textarea custom-instructions (proven). Memory-plugin + Graph/Mail channels
-  dropped (dead on Basic). Build the `set_custom_instruction` helper + the
-  `system_fingerprint: steered/unsteered` contract.
-- **Agent/App store** has more to explore (parked): "Create agent" self-service
-  surface + per-app Add/Install gates live in detail views, not the browse
-  view. Next session can resume at the store tab.
-- Browser processes all ended cleanly (m365-cdp exit-13 was the browser-close +
-  `await new Promise(()=>{})` unsettled-await script bug — benign; CDP 9222
-  DOWN now). Note: `_profile-cdp.mjs`'s hold-promise should handle context-close
-  for a clean exit next time.
+1. **Small tool-caller bake-off + repair bench**
+   (`.scratch/small-toolcaller/issues/01-repair-pass.md`, items 1 and 4). The
+   offline work landed; what remains is picking the model on frozen fixtures and
+   benching `M365_TOOL_REPAIR=1` against the
+   `simplify-tool-path-2026-08-14T04-19-13` scorecard.
+2. **Retired-tone probe** (`scripts/tone-retirement-probe.mjs`, 7 tones, 1
+   message each, sequential). Upstream claims M365 now rejects `Gpt_Quick`,
+   `Gpt_Reasoning` and the `Gpt_5_x_Quick` family. We are not taking that
+   mapping on their word — our own probe recorded `Gpt_5_6_Chat` as registered
+   but dead. Run the probe, then decide (`.scratch/upstream-absorb/issues/02`
+   item 3).
+3. **ChatGPT Web live lane** (`.scratch/chatgpt-web-backend/issues/03`). Sign in
+   headed into `CHATGPT_WEB_PROFILE`, sanity-check selectors against live DOM,
+   then `bench --label chatgpt-web-01`. Account-action risk is real — read the
+   ticket's notes first.
 
-## 2026-08-11 — history scrub (PII audit + rewrite)
+**Unblocked, whenever someone wants it:** the `relay` / `relay_batch` framing
+A/B on the bench, before any default is changed (`.scratch/upstream-absorb/issues/02`
+item 8).
 
-PII audit found personal identifiers and machine topology in the working
-tree and in git history (corporate email in commit metadata + docs, machine
-usernames, LAN IPs/paths, a session ID). Fixed in two passes:
+**Filed, awaiting review:** `.scratch/agent-lessons/issues/01` (AGENTS.md must
+warn about the `merge.ours.driver` data-loss hazard) and `02` (lint has a ~301
+baseline and is not a gate).
 
-- **Tree scrub:** 20 edits across 10 files (docs + scratch tickets) —
-  genericized emails, usernames, machine paths, the LAN remote URL, and
-  internal IPs. Committed.
-- **History rewrite:** two `git-filter-repo` passes (mailmap for the
-  corporate-email identity + replace-text for content strings). All 11
-  target strings verified at 0 hits across all refs. Identities now: the
-  upstream author (public upstream) + the GitHub no-reply address only.
-- **Published:** `origin/main` + `origin/feat/fenced-shell-routing`
-  force-pushed. GitHub may still serve pre-rewrite SHAs by direct URL until
-  GC (accepted — let GitHub GC purge them).
+## Repo state
 
-**Carry-over:**
-
-- Backup of the full pre-rewrite history:
-  `../m365-copilot-proxy-pre-rewrite.bundle` (relative to the repo).
-- Rewrite rules kept for re-runs: `.git/filter-mailmap`,
-  `.git/filter-replace.txt`.
-- **the remote + clones are still pre-rewrite.** Reconcile next session
-  (local machine: fetch origin, rebase local work, re-scrub local doc copies; do
-  NOT merge stale LAN branches into GitHub-bound work).
-- The rewrite changed every fork-internal commit SHA. SHA references in the
-  evidence docs (hypotheses.md, overnight-log.md, .scratch tickets, research
-  digest) now point at pre-rewrite commits — reconcile opportunistically.
-- Keep docs PII-free going forward: no machine usernames, corporate emails,
-  internal IPs, or personal session IDs in committed prose.
-
-## Next session plan
-
-1. ~~**Auth into M365 on this PC**~~ DONE 2026-08-10 — interactive login
-   completed (playwright path; run under `node` on this PC, see
-   `docs/agents/m365-auth-workflow.md` → *PC environment notes*);
-   `msal-cache.json` present.
-2. ~~**Verify auth**~~ DONE — `M365_DEBUG=1 bun scripts/proxy-verify.mjs
-   --agent --multiturn` passed end to end (real tool loop; 8H verifier on
-   LM Studio with `M365_INTENT_VERIFIER_MODEL=bonsai-27b`).
-3. **Live tests** — attestation-gate end-to-end smoke (register →
-   AUTHORIZED → tool result accepted) incl. the proof-header re-verification
-   the local machine smoke predates — STILL PENDING, local machine task.
-4. ~~**Implementation**~~ DONE — ponytail item 6 (CdpClient → playwright)
-   landed; review-triage items 1–2 fixed; tickets closed.
+- `main` is current and green: 448 unit tests, `bun run typecheck` clean on all
+  four packages, root `tsc --noEmit` clean, upstream absorb gate `OK`.
+- `feat/tool-repair`, `feat/chatgpt-web-backend`, `fix/merge-driver-scope` and
+  `feat/upstream-ports` are all merged into `main` and can be deleted.
+- `main` is 24 commits ahead of `origin/main` — not pushed. Force-push needs a
+  human (see PC environment facts).
+- The throttle gate stays open pending real-use data; the nine August events
+  were stress-test artifacts.
 
 ## PC environment facts (2026-08-10)
 
@@ -115,79 +81,6 @@ evidence verbatim. They are out of scope for this pass. The
 writing-for-agents levers apply to AGENTS.md (2026-08-10).
 `docs/agents/working-methodology.md` is locally implementer startup playbook.
 
-## Current baseline
-
-- The **8H fail-closed verifier** remains the approved production baseline.
-  Only an `EXECUTE` verdict can authorize execution. The default is on unless
-  `M365_INTENT_VERIFIER=0`.
-- Safety is proven on the frozen held-out corpus. Latency remains the
-  architectural constraint.
-- **Client-attested execution** is the chosen low-latency direction. It is
-  opt-in (`M365_CLIENT_ATTESTATION=1` + request headers). It never replaces
-  the 8H baseline. See `.scratch/client-attested-execution/spec.md` and
-  tickets `01-attestation-gate.md` / `02-reference-adapters.md`.
-- Use `git status -sb`, `git branch -vv`, and `git worktree list` for all
-  current checkout, branch, and push state. Do not rely on this snapshot for
-  volatile Git facts.
-
-## Verifier-latency bake-off
-
-- Ticket 01 rejected the Bonsai-27B thinking-off logprob scorer. Its
-  tokenizer-aware variants produced unsafe false positives.
-- Ticket 02 added the `chat_template_kwargs` contract to the verifier request.
-- Ticket 03 screened direct-answer candidates on DEV only and closed
-  **rejected**. Five candidates produced an unsafe false positive on
-  `ambiguous-002`. Ministral-3-3B avoided unsafe output but failed selective
-  accuracy. The existing Qwen3.5-4B evidence also fails accuracy.
-- No candidate was frozen. Ticket 04, the one-time held-out gate, is
-  ineligible and MUST NOT run.
-- Evidence: `experiments/tool-decision/execution-intent/results/03-dev-screen/`,
-  `docs/hypotheses.md` §§18–24, and
-  `.scratch/verifier-latency-bakeoff/issues/`.
-
-## Client-attested execution (opt-in, in progress)
-
-The chosen direction solves the latency problem. The trusted local harness
-(pi / OMP / Codex) attests one exact command before the proxy can execute it.
-This replaces a slower local model making the same decision. The 8H baseline
-stays the default. This path is explicitly opt-in.
-
-- **Gate**: `POST /v1/attestations` (loopback-only). Payload:
-  `{client, tool, tool_call_id, command_sha256, ts, nonce}`. Signature header
-  `X-M365-Attestation-Sig` = HMAC-SHA256 over the payload lines. Single use,
-  60 s expiry, registry caps at 1000 entries with rolling prune of
-  expired/terminal candidates.
-- **Enablers**: `M365_CLIENT_ATTESTATION=1` + shared `M365_ATTESTATION_SECRET`.
-  Request headers `X-M365-Execution-Gate: attestation-v1`,
-  `X-M365-Attestation-Client: pi|omp|codex`, AND
-  `X-M365-Attestation-Proof: HMAC(secret, "attestation-v1\n"+client)` hex
-  (generate with `bun client-adapters/attestation-helper.mjs --proof <client>`).
-  Without proof the gate headers are ignored and the request stays on the 8H
-  path. Adapter helper additionally needs
-  `M365_ATTESTATION_URL=http://127.0.0.1:<port>`.
-- **Adapters**: `client-adapters/` — `pi-attestation-gate.ts`,
-  `omp-attestation-gate.ts`, `codex-hooks.json` (PreToolUse approve|block),
-  `attestation-helper.mjs` (+ `--proof` CLI).
-- **Implementation state**: tickets 01 (gate) and 02 (adapters) resolved,
-  unit-tested. Committed on `main` and merged to the local machine. Adversarial
-  review 2026-08-09 found no blockers; fixed two SHOULD-FIXes:
-  proof-of-secret required to strip 8H (bare headers no longer opt in), and
-  tool results with never-emitted ids are denied 409 (fail closed; pool-emitted
-  8H ids still pass). Two-pass validation so a 409 does not burn earlier
-  candidates.
-- **Documentation**: the full wire contract (payload, HMAC construction, state
-  machine, failure modes, worked example) is in `docs/m365-copilot-api.md` §11
-  *Client-attested execution (opt-in)*. Adapter setup lives in
-  `client-adapters/README.md` (cross-referenced, not duplicated).
-- **Next**: manual end-to-end smoke test of the attestation loop (register →
-  AUTHORIZED → tool result accepted) through a real harness. The PC is
-  auth-blocked (no `msal-cache.json`, no recorded login; the telemetry that
-  looked like live traffic is unit-test pollution — traced 2026-08-10,
-  see `docs/agents/m365-auth-workflow.md`). A human must complete the
-  interactive login to unblock live steps on the local machine. The local machine live-smoke
-  passed 2026-08-09 before the proof-header change — the proof header must
-  be re-verified live when the local machine is next available.
-
 ## New surface — `/v1/images/generations` (2026-08-09)
 
 - OpenAI-compatible image generation backed by M365's GraphicArt path.
@@ -203,21 +96,6 @@ stays the default. This path is explicitly opt-in.
   `close` only; same fix applied to the chat route), silent n-cap → schema
   rejection, whitespace prompts trimmed.
 - Test count 287 passed / 3 skipped (was 254 at session start).
-
-## Next slice
-
-1. Select a genuinely different latency direction. It MUST retain the frozen
-   fail-closed contract and the DEV gate order: zero unsafe false positives,
-   selective accuracy at least 0.95, then latency.
-2. Do not retry rejected candidates on held-out. Screen any new candidate on
-   the 28-case DEV corpus first. Freeze one survivor before the single
-   32-case held-out run.
-3. Review the broader local machine-preparation history on the LAN remote before
-   merging it into locally branch or pushing it to GitHub. It includes work
-   outside the bake-off evidence.
-4. M365 live probes, including the custom-instructions probe, remain
-   standby-only. They need explicit user authorization. Keep all M365 work
-   sequential and thread-conserving.
 
 ## Laptop / pane recovery runbook (2026-08-09, collab relay outage)
 
@@ -256,411 +134,11 @@ local machine. When the panes reconnect:
 - Every local-model response MUST identity-guard the echoed model. Screen
   models one local server at a time. Keep GGUF weights and local hash manifests
   out of Git.
-- Normal code verification: `bun run build`, `bun test`, and the applicable
-  package typecheck. Live M365 verification uses quota and needs explicit
+- Normal code verification: `bun run build`, `bun run test:unit`, and
+  `bun run typecheck`. Live M365 verification uses quota and needs explicit
   approval.
+- `bun run lint` is not a gate: ~301 pre-existing findings. Lint the files you
+  touched (`bunx oxlint <paths>`). See `.scratch/agent-lessons/issues/02`.
 - The repository is public. Run the secret scan and preserve the pre-push
   hook at each egress point.
  
-## 2026-08-12 session wrap-up
-
-Shipped on the local machine checkout:
-
-- Steering injection ladder and honest-degrade fingerprint.
-- Output-boundary attribution gate and drift guard.
-- Nested distribution-shadow cleanup and dead-export removal.
-- Resolved research-ticket status reconciliation.
-- Persistent browser-profile migration for live probes; no plaintext
-  password/MFA/TOTP automation remains in those scripts.
-- Feature planning artifacts committed by feature.
-- Verification: `bun run test:unit` passed 346 tests with 3 skipped.
-- Authentication migration verification: all changed probe scripts passed
-  `node --check`; silent login smoke passed with a cached token.
-
-- Steering cleanup now exposes only the proven textarea channel. The former
-  `custom-instr` fallback was removed because it never wrote its payload or
-  passed it to the canary; old state files with that channel degrade to
-  `unsteered`.
-
-Laptop sanitized mirror:
-- Fresh-history mirror remains private/local-only with no remote and no push.
-- H8.1 code-interpreter live probe passed with the SHA-256 oracle.
-- H8.2 declarative-agent probe remains unresolved because both Power Platform
-  environment host candidates failed DNS resolution before the WebSocket turn.
-
-Carry-over:
-
-- The PC checkout is clean. Session work is on the LAN sync branch
-  (`sync/session-2026-08-12`) for the local machine reconcile: fetch it, rebase
-  local machine-local work, re-scrub local machine-local doc copies.
-- Do not start more live M365 threads until the H8.2 DNS environment is
-  resolvable. Keep live probes sequential and observe the thread cooldown.
-- Attestation proof-header smoke: DONE on the local machine (see the addendum below).
-  A local machine re-run is optional.
-
-### 2026-08-12 addendum (late session, PC)
-
-- **Attestation proof-header smoke: DONE on the local machine, ALL PASS.** See
-  `.scratch/client-attested-execution/issues/01-attestation-gate.md` comments
-  and `scripts/attestation-live-smoke.mjs`. The checks cover: allow, single-use
-  replay deny, result accepted through a real M365 tool loop, fabricated id
-  409, no-proof stays fail-closed on 8H. The local machine smoke is optional now.
-- **Found + fixed a pre-existing crash: the proxy died on ANY request error
-  under Bun** (a plain 404 killed the process). Nitro's internal
-  `callHook(...).catch(...)` callers return `undefined` when zero hooks are
-  registered. Under Bun even sync no-op hooks return `undefined` (no
-  `console.createTask`), so the `.catch` threw inside the error path. The
-  uncaughtException then exited the process. Fix:
-  `packages/proxy/plugins/error-hook.ts` registers async no-op hooks for
-  error/request/beforeResponse/afterResponse/close + an error logger.
-  Verification: 404s return 404, `/health` and `/v1/models` return 200, the
-  process survives repeated erroring requests. This is why live runs on the local machine
-  had been flaky. The same fix applies to any Bun-hosted instance.
-- Capture-path migration ticket reconciled: already shipped (persistent
-  profile), status flipped to resolved with evidence.
-- PC session work pushed to a sync branch on the the remote for the local machine
-  reconcile. Secret scan clean at egress.
-
-## 2026-08-14 session — simplify-tool-path merged
-
-PR #1 merged the `simplify-tool-path` runtime pivot and Ticket #03
-classification/doc-sync work into `main`.
-
-- **Shipped:** `produceToolPath()` is a deterministic M365 text → OpenAI
-  translator. In-turn confabulation/hallucination/remote-artifact retries,
-  the local 8H intent-verifier gate, client-attestation gate, read-only
-  fallback inference, semantic fail-closed 502, and orphaned
-  `force-prompts.ts` are removed from the runtime path.
-- **Preserved:** fenced tool parsing, prose-document protection, reply
-  conversion, one-call-per-turn, and steering attribution.
-- **Ticket #03:** 21 research tickets moved under
-  `.scratch/research/issues/`; 9 pivot-conflicting tickets marked `wontfix`;
-  7 product/protocol tickets remain in place.
-- **Verification before merge:** `bun run build` green; `bun run test:unit`
-  → 341 passed / 3 skipped; `tsc --noEmit -p packages/proxy-lib` clean.
-- **Benchmark:** rerun clean on 2026-08-14 with Docker's Linux engine up.
-  `scripts/bench/run.mjs --label simplify-tool-path --repeat 1` →
-  **SOLVED 6/10 (60%)**, outcomes `SOLVED=6 GAVE_UP_PROSE=4`, avg
-  tool-calls/task 1.4, **24 M365 messages, zero ERRORs**. Scorecard:
-  `scripts/bench/out/simplify-tool-path-2026-08-14T04-19-13-654Z.json`.
-  All 6 solves were real tool loops with objective verifier passes
-  (fizzbuzz, fix-bug, find-needle, count-lines, ec-bugfix, ec-plain).
-  The 4 failures are turn-1 canned refusals (`tools=0, msgs=1`) on the
-  disengage-prone `edit-config`/`ec-*` family — the exact class the pivot
-  deliberately unmasked by removing in-turn retries (§12.11 showed the old
-  retry silently recovered these; the harness now owns retry policy).
-  The earlier Docker-blocked run
-  (`simplify-tool-path-2026-08-14T02-55-02-507Z.json`, `ERROR=10`,
-  `M365 messages spent: 0`) stays on disk for audit but is NOT model
-  evidence.
-- **Worktree:** `main` is checked out. The only untracked file is the
-  temporary `.scratch/_commit_msg.txt` and must be removed before the next
-  commit. Use `git status -sb`, `git branch -vv`, and `git worktree list` for
-  volatile Git state.
-- **Next action:** none required for the pivot — the deferred benchmark is
-  now delivered (clean 60% single run). A `--repeat 3` variance run is
-  OPTIONAL: the bench has no cooldown, so 30 fresh back-to-back threads sit
-  at the F13 thread-rate degradation onset (~120/hr vs ~128/hr onset), and
-  there is no pre-pivot scorecard in `scripts/bench/out/` to compare it
-  against. Only run it if a comparison target is wanted, on a rested
-  account, with pacing. Local wrap-up commits (`58de0fe` and the NEXT.md
-  update) are unpushed; pushing `origin/main` needs explicit user
-  authorization.
-- **Open PRs:** none known after PR #1 merge. Confirm with `gh pr list` when
-  GitHub is reachable.
-
-## 2026-08-14 post-benchmark code-review fix pass
-
-Two-axis review (`reviewer` agents) of `git diff 050c010...HEAD` found and
-fixed four defects introduced by the pivot; two gaps are acknowledged as
-out-of-scope (rebuilding deleted coverage).
-
-**Fixed:**
-- `packages/proxy-lib/src/tool-path.ts` — removed a dead `jsonResponse` import left after the 502-detector deletion (the diff's mandated clean cutover).
-- `packages/proxy-lib/src/handler.ts` — restored 2-space indent inside the `try` block (57-58) after the attestation block removal (no formatter in repo to catch it).
-- `docs/tool-calling.md` — corrected the "preserved as research artifacts under `attestation.ts`" claim: `force-prompts.ts` was deleted outright; the confab/hallucination classifiers live in `@m365-copilot/core` `tools.ts`, not `attestation.ts`.
-- `docs/m365-copilot-api.md` §11 — marked the attestation control plane *superseded from the runtime* and corrected the live-behavior claims (no 8H path on requests, no header forwarding / fail-closed 409 → research artifact only). AGENTS.md: protocol doc is source of truth and must track behavior.
-
-**Acknowledged gap (not fixed):**
-- `packages/proxy-lib/src/tool-path.contract.test.ts` has zero `M365_STEERING` coverage — the 4 steering-gate tests from the deleted `tool-path.test.ts` were not re-implemented. The steering code is kept and still wired (handler.ts), just unguarded. Out of scope per the pivot spec (it deleted the file as a whole); ticketed separately for a future pass. Ticket: `.scratch/simplify-tool-path/issues/02-contract-suite.md`.
-
-**Verification after fixes:** `bun run build` green; `tsc --noEmit -p packages/proxy-lib` clean; `bun run test:unit` → 341 passed / 3 skipped (unchanged).
-
-**Local commit** (docs + proxy-lib clean-up) is unpushed; pushing `origin/main` needs explicit user authorization. (SHA changes with each amend; the next session should read `git log --oneline -5` for the current tip.)
-
-## Safe-to-clear verdict for 2026-08-14 session
-
-✅ **Yes.** The merged pivot code is verified (build, 341 unit tests, tsc);
-the deferred benchmark delivered a clean 60% single run with real tool loops;
-the post-benchmark code review found 4 defects, all fixed and re-verified
-(341 passed / 3 skipped); publish-prep audit is clean (push-range content +
-identity + full-tree secret scan). No session-started process remains (the
-proxy was stopped; the four `bun.exe` processes are pre-existing
-google-workspace MCP infra). The unpushed local commits (`58de0fe`, `7e49e40`,
-and the fix-pass commit) are a deliberate hold for user authorization, not
-unfinished repository changes.
-
-## 2026-08-14 session carry-over (Nemotron 3.5 Lightning research)
-
-**What was done:**
-- Corrected hardware specs across 6 research docs + hypotheses §17:
-  local machine is the local machine (RTX PRO Blackwell 8 GB), not RTX 5060.
-- Surveyed HuggingFace for Nemotron 3.5 Lightning variants: no smaller
-  native sibling exists. Key find: **REAP-20B expert-pruned variant**
-  (sleepyeldrazi, 128→77 experts, 19.87B total / 3B active, **11.5 GB
-  IQ4_NL GGUF**). Full research note at
-  `docs/research/notes/nemotron-3.5-lightning-variants.md`.
-- Verified community reports (Reddit, NVIDIA forum, X): DSpark +15.6%/
-  53% acceptance, ~65 tok/s on M5 Pro, 80/100 tool-eval vs Qwen3.6-35B's
-  100/100, good agent execution but weak coding.
-- ChatGPT consensus: REAP-20B ranked #1 for the fallback lane; full
-  Lightning secondary.
-- Linked the candidate into `.scratch/fallback-lane-telemetry/spec.md`.
-
-**Carry-over:**
-- Committed on `main`, pushed to `lan sync/nemotron-research-2026-08-14`.
-  Secret scan clean. Not pushed to `origin/main`.
-- Next step when local machine is available: download the REAP-20B IQ4_NL GGUF
-  from `sleepyeldrazi/Nemotron-3.5-Lightning-30B-A3B-REAP-20B-LoRA-IQ4NL`
-  and run against the Qwen3-Coder-30B-A3B baseline in the two-stage bake-off.
-- No session-started processes remain (browser tab closed).
-
-## 2026-08-19 — Toolchain migration
-- Node deps: `bun install` refresh on the existing bun.lock (no package-lock.json present). Verify with `bun run test` if the suite is run.
-
-## 2026-08-21 autonomous session — contract suite + research + hygiene
-
-- **Contract-suite gap closed** (`b2c5295`): the `M365_STEERING`
-  zero-coverage gap from the 2026-08-14 review is resolved in
-  `packages/proxy-lib/src/tool-path.contract.test.ts` — 4 restored gate
-  tests + multi-tool batch preservation, mixed reply+real-tool, and a
-  genuine unterminated-fence fixture. Suite now 20 tests, all green.
-  Supersedes the "acknowledged gap" note in the 2026-08-14 section above.
-- **Full suite:** build green; `bun run test:unit` → **349 passed /
-  3 skipped** (baseline was 341/3; delta = exactly the 8 new tests).
-- **Research:** Nemotron note §7/§7.1 addendum (Qwen3.8-27B released and
-  is a DeltaNet-hybrid, unsloth GGUF confirmed; official Muse Glimmer
-  GGUF + DFlash drafter exist; REAP-20B unchanged alpha). Fallback-lane
-  candidate table revised to four candidates; REAP download stays ON HOLD
-  until the bake-off lane actually opens.
-- **Repo hygiene:** local branches deleted (fully merged into the sync
-  branch): `adopt-proxy-improvements`, `adopt-upstream-2026-08`,
-  `feat/fenced-shell-routing` (origin copy untouched). Kept with reasons:
-  `chore/session-wrapup-2026-08-07`, `review/*` LAN branches, local
-  `main` — unverifiable merge status post-history-rewrite.
-- **LAN sync:** `sync/nemotron-research-2026-08-14` pushed to `lan`
-  (fast-forward through `3cbd653`), secret-scan clean. NOT pushed to
-  `origin` — still requires explicit user authorization.
-- **PC env fact:** use `bun x`, not `bunx` (no bunx shim on this box).
-- **Telemetry status:** no `throttle-telemetry.ndjson` on the local machine; the
-  fallback-lane decision gate has zero data. Needs real proxy usage.
-- Run artifacts (charter, progress, deferred, icebox, report) are in the
-  git-ignored `.autonomous/` directory on this machine only.
-
-**Next actions:** (1) user authorization for origin push of the sync
-branch; (2) local machine reconcile per the runbook above; (3) real proxy usage
-so throttle telemetry accumulates; (4) optional fresh reviewer pass on
-`eb86ca9^..HEAD` (the 2026-08-21 subagent pass timed out mid-review;
-critical claims were verified directly instead).
-
-## 2026-08-21 (later) — upstream drift audit + absorption plan
-
-- Upstream `cramt/m365-copilot-proxy` measured: **93 commits ahead** of
-  merge-base `19c35a1`. Fetched to local ref `upstream-scratch/main`.
-- 3-scout audit verdict: the August adoption pass already absorbed nearly
-  everything (auth interactive sign-in, race-timer, M365_LOG_STDOUT,
-  backoff, never-delete-agents, Windows fences, Power Platform DNS fix —
-  all SUPERSEDED). Worth taking: ~9 commits (developer-role normalization
-  TAKE; streaming x2, hallucination patterns, code-interpreter opt-out,
-  image-gen trio ADAPT). Details in
-  `.scratch/upstream-absorb/issues/01-declared-ownership-fork.md`.
-- Architecture decision ("declared-ownership fork", from a 5-frame/30-idea
-  ideation): .gitattributes ownership list + docs/upstream-manifest.yaml
-  ledger + scripts/upstream-absorb.mjs gate + .gitattributes merge=ours on
-  owned paths. Ticket 01 has the full work items. Rejected: submodule/
-  vendored-upstream, build-time AST rewrite, upstream history rewrite,
-  union-FS overlays.
-- Origin push of sync branch DONE this session (user authorized);
-  origin/main still at 7e37d1b (11 behind our tip).
-
-**Next actions:** execute ticket `.scratch/upstream-absorb/issues/01-declared-ownership-fork.md`; local machine reconcile; throttle-telemetry usage decision unchanged.
-
-## 2026-08-21 (evening) — ticket 01 executed: declared-ownership fork live
-
-- Shipped: `.gitattributes` (ownership policy), `.gitattributes` (merge=ours
-  on owned paths), `scripts/upstream-absorb.mjs` (fetch+classify+gate,
-  positive/negative tested), `docs/upstream-manifest.json` (all 93 upstream
-  commits dispositioned: 16 superseded / 30 skipped / 1 rejected
-  [`9c48bd3` CI-on-chat-path, F23 conflict] / 46 bulk-reviewed).
-- **Zero cherry-picks needed**: every scout TAKE/ADAPT candidate verified
-  already-present (developer role, streaming early-flush/incremental,
-  hallucination patterns, image orientation/scheduler/quota). Ticket 01 has
-  the corrected table. Scout lesson: verify abbreviated SHAs with
-  `git cat-file -t` — 3 of 7 were tree objects.
-- Validation: build green; suite 349 passed / 3 skipped (= baseline);
-  gate exit 0.
-- Upstream remote now configured: `upstream` → cramt/m365-copilot-proxy.
-
-**Next actions unchanged:** local machine reconcile; throttle-telemetry usage
-decision; future waves start with `bun scripts/upstream-absorb.mjs`.
-
-## 2026-08-21 (night) — LAPTOP RECONCILE DONE (via collab agent on WHQPC)
-
-- Laptop adopted rewritten history: checked out
-  `sync/nemotron-research-2026-08-14` at origin (LAN) tip `8de7466`.
-  Verified: build green, tests 349 passed / 3 skipped (= PC baseline).
-- Laptop-only AGENTS.md section ("## Git workflow") grafted onto the new
-  branch working copy; skip-worktree re-set. Backup:
-  `~/m365-reconcile-backup/AGENTS.local machine-asof-2026-08-21.md`.
-- Old local machine `main` untouched at `0f39a4e` (pre-rewrite archive until
-  cleanup approved). Journal mod stashed (`pre-reconcile journal`), plus an
-  AGENTS-section stash; both disposable after a soak period.
-- Content check: old main's docs/hypotheses.md + .scratch/ are strict
-  subsets of the new branch — nothing lost. Doc re-scrub satisfied by
-  adoption (new branch carries the post-rewrite scrubbed copies).
-- Coordination ran over Herdr collab (guest WHQPC, lane freepool
-  deepseek-v4-flash); ssh outage mid-run forced an omp resume + /join
-  replay — recovered cleanly.
-- Telemetry note: local machine `~/.config/opencode-m365/throttle-telemetry.ndjson`
-  holds 9 events — enough to open the fallback-lane decision gate if any
-  are real throttle episodes (user call, see .scratch/fallback-lane-telemetry/spec.md).
-
-**Unlocked:** `.autonomous/ICEBOX.md` branch-cleanup candidates
-(`chore/session-wrapup-2026-08-07`, `review/lan-bakeoff-disposition`,
-`review/local machine-preparation`) are now deletable pending user approval.
-**Still open:** origin/main fast-forward decision; throttle-gate review;
-ICEBOX deletions.
-
-## 2026-08-21 (late night) — clone cleaned; absorb-gate regex fix
-
-- Laptop local copy minimized under collab coordination: deleted pre-rewrite
-  `main` (centrally archived as LAN `archive/main` = `351fcaa`, verified
-  before deletion) and `backup/pre-m365-only-2026-08-12`; dropped the 3
-  reconcile-era stashes (contents backed up / grafted); fetch --prune both
-  remotes; `git gc --prune=now`. Kept: `image-upload` branch (UNMERGED,
-  2 commits: interactive M365 tool bridge + confab F12.12 catch - dead-end
-  experiment candidates, deletion deferred to user), and 2 ancient stashes.
-- FreshReviewer pass on `eb86ca9^..HEAD`: correct overall; one latent bug
-  FIXED - upstream-absorb.mjs glob→regex translation now escapes
-  metacharacters and orders ** vs * via sentinel (deep-path patterns like
-  `scripts/bench/**` matched only one level before). Unit-checked against 7
-  path cases; gate exit 0.
-
-## 2026-08-21 (wrap) — ICEBOX resolved; image-upload verdict
-
-- Parked branches preserved then deleted: pushed
-  `chore/session-wrapup-2026-08-07`, `review/lan-bakeoff-disposition`,
-  `review/local machine-preparation` to LAN under their own refs (they hold real
-  8H-gate/bakeoff/local machine-prep evidence, none ancestor of archive/main),
-  then deleted locally. Local branch list is clean; LAN is the archive.
-  PC local `main` remains the only stale ref (resolves at origin/main ff).
-- Laptop `image-upload` branch verdict (Main-inspected, agent stalled):
-  b2fae56 confab F12.12 catch = SUPERSEDED by tools.ts:295-298 +
-  tools.test.ts:298; ce4b14b interactive M365 tool bridge = obsoleted by
-  the no-native-tool-calling decision. Recommendation: deletable next time
-  the local machine repo is touched; left in place pending user approval.
-- FreshReviewer finding (glob regex escaping/ordering) fixed in 382ae40.
-
-## 2026-08-21 (end) — image-upload preserved & deleted; GitHub fast-forwarded
-
-- Laptop `image-upload` deleted per user call ("feature wanted sometime"):
-  tip ce4b14b pushed to LAN, then its live WORKTREE turned out to hold
-  uncommitted work - captured as commit 7e41065 (4 files, +93, incl. two
-  UNTRACKED images.ts files) and pushed before teardown. Central ref:
-  `lan/image-upload` @ 7e41065. Restore: git fetch lan image-upload.
-- Future-capability note: interactive M365 tool bridge lives only on
-  `image-upload`; revisit when native/interactive calling reopens (needs
-  Copilot Studio license decision - see AGENTS.md dead-end note).
-- origin/main fast-forwarded 7e37d1b..84c2d32 (secret-scan clean), user
-  authorized. Local main repointed to 84c2d32 tracking origin/main - no
-  stale refs left on the local machine. LAN main untouched (the egress check stands).
-
-## 2026-08-24 — mission pivot: small tool-caller within 8 GB (docs realigned)
-
-- Hardware ground truth (nvidia-smi via local machine agent): RTX PRO 1000
-  Blackwell Laptop GPU, **8151 MiB**. The "24 GB" in the model-refresh note
-  was wrong; header corrected.
-- New operative research: `docs/research/notes/local machine-small-toolcaller-2026-08.md`
-  — small function-calling specialist to repair Copilot's tool-call
-  failures, co-resident on the 8 GB GPU. Top pick Watt-Tool-8B (~6 GB,
-  Apache); zero-download controls already on device (Nemotron3-Nano-4B,
-  LFM2.5-8B-A1B). Integration plan: env-gated repair pass after parse,
-  reusing intent-verifier plumbing patterns.
-- Realigned: nemotron note superseded-banner + VOID next-step;
-  session-workflow/working-methodology/pc-implementer verifier rows updated
-  to "retired from runtime"; fallback-lane spec points at the new shortlist.
-  New ticket: `.scratch/small-toolcaller/issues/01-repair-pass.md`.
-- Bake-off DEFERRED until user opens it. Telemetry gate stays open (all 9
-  events were Aug 9-10 stress-test artifacts).
-
-**Next actions:** (1) user opens bake-off → run ticket 01 work item 1;
-(2) implement repair pass behind flag; (3) local machine leftover worktree folder
-deletion when OneDrive releases it.
-
-## 2026-08-24 (wrap) — session state at clear
-
-- Tip `70e687b` on all refs: origin/main, origin/sync/…2014,
-  lan/sync/…2014, local branch + local main. Tree clean.
-- Operative direction: small tool-caller repair pass (ticket
-  `.scratch/small-toolcaller/issues/01-repair-pass.md`, open). Research:
-  `local machine-small-toolcaller-2026-08.md` + `small-toolcaller-deep-dive-2026-08.md`.
-  LFM2.5-8B-A1B = primary zero-download control (documented FC; lfm1.0
-  license check for non-private use). Watt-Tool-8B top download pick
-  (official BFCL entry via gorilla PR #847). Avoid MXFP4 quants on this
-  Blackwell GPU (llama.cpp #19662).
-- Laptop: reconciled, cleaned, collab guest online via omp join in tab
-  "local machine" (w1F:p2 here / wH-side pc pane wH:p4 relays results). Leftover
-  dir `…\LocalDev\m365-copilot-proxy-image-upload` awaits manual delete
-  when OneDrive unlocks.
-- Throttle gate: open pending real-use data (9 events were stress-test
-  artifacts). lan/main frozen pre-rewrite (archive/main preserves lineage);
-  force-push denied by policy.
-- Harvest run this wrap; drift clean.
-
-**Next actions:** (1) user opens bake-off → ticket 01 work item 1;
-(2) implement repair pass behind M365_TOOL_REPAIR flag; (3) document the
-proven cross-machine herdr/collab topology in docs/agents/session-workflow.md §3.
-
-## 2026-10-06 — autonomous session: branches integrated, upstream wave absorbed
-
-Everything below is merged into `main` (tip `2047def`). `feat/tool-repair`,
-`feat/chatgpt-web-backend` and `fix/merge-driver-scope` are merged and can be
-deleted; `feat/upstream-ports` == `main`.
-
-**Data-loss hazard found and fixed.** A persistent `merge.ours.driver=true` in
-`.git/config` made `.gitattributes` resolve every OWNED path to our side on
-*internal* merges, rebases and stash applications — a clean-looking
-`Auto-merging tool-path.ts` that silently dropped the incoming change. It is now
-scoped to the upstream merge command only (`.gitattributes`, `scripts/upstream-absorb.mjs`),
-and the local registration was removed. **Check `git config --get
-merge.ours.driver` before any merge.**
-
-**Shipped offline:**
-- Small tool-caller repair pass, default off (`M365_TOOL_REPAIR=1`).
-- `429 m365_throttled` when M365 says so (`result.value: "Throttled"`), no
-  retry, degradation backoff fed, `throttled` telemetry event.
-- A self-written `<tool_response>` is a stop sequence, plus the
-  `executedOnlyFirstNote()` correction for partly-executed replies.
-- A reply that OPENS with a tool call is an action, not a document (the guard was
-  discarding 34 of 42 correct first actions upstream).
-- Multi-message turns assemble per message (`TurnTextComposer`) — Claude's fence
-  was losing its opening backticks.
-- YAML-block / inline-JSON array+object params; Opus native `</invoke>` trailers
-  stripped; Power Platform host derived from both DNS labels.
-- `M365_LOG_FILE` / `M365_FRAME_DIR`; `bun run typecheck`; clean root `tsc --noEmit`.
-
-**Upstream wave closed:** 56 commits triaged, all recorded in
-`docs/upstream-manifest.json` (`bun scripts/upstream-absorb.mjs` → OK). 8 hand-ports
-landed, the rest rejected/skipped with reasons. Deliberately NOT taken: the
-retired-Quick-tone remapping (unverified — probe ready at
-`scripts/tone-retirement-probe.mjs`), `relay_batch` as a default, and every
-paid-scenario/fallback re-send (they are behavioral retries).
-
-**Still human-gated:** the small-model bake-off + repair bench, the retired-tone
-probe, and ChatGPT Web live validation (interactive sign-in).
-
-**Next actions:** (1) user opens the live window → run
-`scripts/tone-retirement-probe.mjs`, then the bake-off and
-`bench --label small-toolcaller-repair`; (2) bench `relay`/`relay_batch` framing
-A/B before any default changes; (3) ChatGPT Web sign-in → `bench --label
-chatgpt-web-01`.
