@@ -24,6 +24,7 @@ import { localMetaResponse, renderLocalCompletion } from "./local-response-helpe
 import { OUTPUT_CHAR_CEILING } from "./output-ceiling.js";
 import { renderImagesMarkdown } from "./image-renderer.js";
 import { produceToolPath } from "./tool-path.js";
+import { getToolRepair } from "./tool-repair.js";
 import { renderResponse, type Produced } from "./response-renderer.js";
 import { driftAlert, recordDriftSample } from "./drift-guard.js";
 import type { z } from "zod/v4";
@@ -338,6 +339,7 @@ export async function handleChatCompletion(
       messages: body.messages,
       tools: body.tools,
       steeringFingerprint: () => lastSteeringFingerprint,
+      repair: getToolRepair() ?? undefined,
     });
   } else {
     // No tools — stream deltas live (onDelta) while buffering for the retry logic.

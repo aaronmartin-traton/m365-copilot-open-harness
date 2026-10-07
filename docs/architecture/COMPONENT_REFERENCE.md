@@ -48,7 +48,21 @@ These modules are now separate from `handler.ts`.
   (`M365_STEERING`).
 - It is a pure translator: no behavioral correction, no local-model intent
   verifier, no attestation gate. The consuming harness owns retry/policy.
-- The handler injects `runTurn`, `markSent`, and `registerToolCalls`.
+- The one opt-in exception is the repair pass (`M365_TOOL_REPAIR=1`, default
+  off). When no tool call parses and a failure detector fires, it asks a
+  small local model for one fenced call. It never sends an extra M365 turn.
+  Any repair error keeps the original text.
+- The handler injects `runTurn`, `markSent`, `registerToolCalls`, and
+  `repair`.
+
+**tool-repair.ts** - Small tool-caller repair pass
+- `getToolRepair()` returns null unless `M365_TOOL_REPAIR=1`.
+- It calls an OpenAI-compatible endpoint (`M365_TOOL_REPAIR_ENDPOINT`,
+  default LM Studio on `127.0.0.1:1234`) with model
+  `M365_TOOL_REPAIR_MODEL` (default `watt-tool-8b`).
+- It fails closed (returns null) on timeout (`M365_TOOL_REPAIR_TIMEOUT_MS`,
+  default 30 s), HTTP or network error, invalid JSON, a model-identity
+  mismatch, or a `NONE` answer. Calls are serialized one at a time.
 
 **response-renderer.ts** - Response rendering
 - `renderResponse()` makes the final Response.
@@ -92,6 +106,7 @@ handler.ts
   ├── output-ceiling.ts
   ├── image-renderer.ts
   ├── tool-path.ts
+  ├── tool-repair.ts
   ├── response-renderer.ts
   └── packages/core
 ```

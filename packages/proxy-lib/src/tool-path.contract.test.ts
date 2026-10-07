@@ -262,3 +262,60 @@ describe("produceToolPath contract — batching and mixed output", () => {
     expect(runTurn).toHaveBeenCalledOnce();
   });
 });
+
+describe("produceToolPath contract — small tool-caller repair pass", () => {
+  const CONFAB = "I can't access the files in the repository. Please paste the contents of package.json.";
+
+  it("no repair dep: confabulation stays text (flag off is byte-identical)", async () => {
+    const runTurn = fakeTurn(CONFAB);
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn)), "text");
+    expect(r.text).toBe(CONFAB);
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("repaired fence on a detected failure routes to tools, without a second M365 turn", async () => {
+    const runTurn = fakeTurn(CONFAB);
+    const repair = vi.fn().mockResolvedValue("```bash\ncat package.json\n```");
+    const deps = depsLike(runTurn, { repair, messages: [{ role: "user", content: "show package.json" }] });
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "tools");
+    expect(JSON.parse(r.toolCalls[0].function.arguments)).toEqual({ command: "cat package.json" });
+    expect(repair).toHaveBeenCalledOnce();
+    expect(repair.mock.calls[0][0]).toMatchObject({ request: "show package.json", response: CONFAB });
+    expect(deps.registerToolCalls).toHaveBeenCalledOnce();
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+
+  it("repaired batch still collapses to one call", async () => {
+    const runTurn = fakeTurn(CONFAB);
+    const repair = vi.fn().mockResolvedValue("```bash\necho 1\n```\n```bash\necho 2\n```");
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn, { repair })), "tools");
+    expect(r.toolCalls).toHaveLength(1);
+  });
+
+  it("repair is not consulted for ordinary prose", async () => {
+    const runTurn = fakeTurn("The hostname is web-prod-01.");
+    const repair = vi.fn();
+    narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn, { repair })), "text");
+    expect(repair).not.toHaveBeenCalled();
+  });
+
+  it("repair is not consulted when a tool call already parsed", async () => {
+    const runTurn = fakeTurn("```bash\nls\n```");
+    const repair = vi.fn();
+    narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn, { repair })), "tools");
+    expect(repair).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["null (endpoint down / NONE)", () => Promise.resolve(null)],
+    ["a throw", () => Promise.reject(new Error("boom"))],
+    ["prose with no fence", () => Promise.resolve("You should run cat package.json")],
+  ])("repair returning %s fails closed to the original text", async (_label, impl) => {
+    const runTurn = fakeTurn(CONFAB);
+    const deps = depsLike(runTurn, { repair: vi.fn().mockImplementation(impl) });
+    const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "text");
+    expect(r.text).toBe(CONFAB);
+    expect(deps.registerToolCalls).not.toHaveBeenCalled();
+    expect(runTurn).toHaveBeenCalledOnce();
+  });
+});

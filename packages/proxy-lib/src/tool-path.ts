@@ -10,12 +10,18 @@
 import {
   parseToolCalls,
   isProseDocument,
+  looksLikeConfabulation,
+  looksLikeHallucinatedCompletion,
+  looksLikeRemoteArtifactCompletion,
+  getMessageContent,
   trunc,
   createLogger,
   type Message,
   type ToolDef,
   type ParsedToolCall,
+  type ParseResult,
 } from "@m365-copilot/core";
+import type { ToolRepair } from "./tool-repair.js";
 
 const log = createLogger("tool-path");
 
@@ -45,6 +51,56 @@ export interface ToolPathDeps {
    * to raw text. Omit => legacy routing, byte-for-byte.
    */
   steeringFingerprint?: () => string | undefined;
+  /**
+   * Small tool-caller repair pass (`M365_TOOL_REPAIR=1`, see tool-repair.ts).
+   * Called at most once per turn, only when the parse found no tool call and a
+   * failure detector fired. Omit => no repair, byte-for-byte.
+   */
+  repair?: ToolRepair;
+}
+
+/** Prose shapes where M365 should have acted but did not. */
+function looksLikeFailedAction(text: string): boolean {
+  return looksLikeConfabulation(text) ||
+    looksLikeHallucinatedCompletion(text) ||
+    looksLikeRemoteArtifactCompletion(text);
+}
+
+/**
+ * Ask the repair model for one fenced call and re-parse it. Any non-tool or
+ * document-shaped repair keeps the original parse (fail-closed to text).
+ */
+async function tryRepair(
+  repair: ToolRepair,
+  fullText: string,
+  messages: Message[],
+  tools: ToolDef[],
+  original: ParseResult,
+): Promise<ParseResult> {
+  const last = messages[messages.length - 1];
+  const request = last ? getMessageContent(last) : "";
+  let repaired: string | null;
+
+  try {
+    repaired = await repair({ request, response: fullText, tools });
+  } catch (err) {
+    log.info(`Tool repair threw, keeping text: ${err instanceof Error ? err.message : String(err)}`);
+
+    return original;
+  }
+
+  if (!repaired) return original;
+  const parsed = parseToolCalls(repaired, tools);
+
+  if (!parsed.hasToolCalls || isProseDocument(parsed)) {
+    log.info("Tool repair output carried no usable tool call, keeping text");
+
+    return original;
+  }
+
+  log.info(`Tool repair produced ${parsed.toolCalls.length} call(s): ${parsed.toolCalls[0].function.name}`);
+
+  return parsed;
 }
 
 export type ToolPathResult =
@@ -80,6 +136,8 @@ export async function produceToolPath(
   if (isProseDocument(parsed)) {
     log.info(`Response is a prose document (${parsed.toolCalls.length} embedded fences), returning as text instead of executing`);
     parsed = { hasToolCalls: false, toolCalls: [], textContent: fullText };
+  } else if (!parsed.hasToolCalls && deps.repair && tools?.length && looksLikeFailedAction(fullText)) {
+    parsed = await tryRepair(deps.repair, fullText, messages, tools, parsed);
   }
 
   // Fail-closed: if model mixed text with tool calls, strip text and re-prompt once.
