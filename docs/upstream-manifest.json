@@ -684,6 +684,34 @@
       "status": "taken",
       "reason": "Merge of PR #36 (b3bf1ca), hand-ported.",
       "evidence": "feat/upstream-ports"
+    },
+    {
+      "sha": "0b1538ea6e305488fb8e54f0bcc2583ac5e702d4",
+      "subject": "fix(tools): a reply that opens with a tool call is an action",
+      "status": "taken",
+      "reason": "Hand-ported 2026-10-06 in full: findFirstToolFence + the opens-with-a-call rule in isProseDocument(parsed, text, tools), textAfterFirstToolCall, and the speculative-tail variant of executedOnlyFirstNote.",
+      "evidence": "feat/upstream-ports; fenced.test.ts, tools.test.ts, tool-path.contract.test.ts"
+    },
+    {
+      "sha": "dc681fab91642f86e382f8a3479273a0e8bb2f07",
+      "subject": "Merge pull request #34 from cramt/fix/document-guard-opening-action",
+      "status": "taken",
+      "reason": "Merge of PR #34 (0b1538ea), hand-ported.",
+      "evidence": "feat/upstream-ports; fenced.test.ts, tools.test.ts, tool-path.contract.test.ts"
+    },
+    {
+      "sha": "b10b9041d87d350d11e5c9f2de174d98597fa150",
+      "subject": "feat(models): add claude-opus-4.5, move Opus to the tool agent, and fix message efficiency",
+      "status": "taken",
+      "reason": "PART hand-ported 2026-10-06: only the parser — native </invoke>/</parameter> trailers are stripped and an unclosed fence ending in one is accepted. Rejected: relay_batch framing (needs its own bench A/B, ticket 02 item 8), the Claude_Opus default flip, scenario routing, M365_OPUS_FALLBACK_MODEL re-sends (behavioral retries), and the priority-access subsystem.",
+      "evidence": "feat/upstream-ports; fenced.test.ts, tools.test.ts, tool-path.contract.test.ts"
+    },
+    {
+      "sha": "7233da52781ec59f1cc10abd646fd0c26beba714",
+      "subject": "Merge pull request #48 from cramt/feat/opus-4.5",
+      "status": "taken",
+      "reason": "Merge of PR #48 (b10b9041), parser part only.",
+      "evidence": "feat/upstream-ports; fenced.test.ts, tools.test.ts, tool-path.contract.test.ts"
     }
   ]
 }
