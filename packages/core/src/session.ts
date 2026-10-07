@@ -66,7 +66,12 @@ const IMAGE_GEN_OPTIONS_SETS = [
 // in production; gives us forensic data when M365 starts emitting new fields.
 const DUMP_FRAMES = !!process.env.M365_DUMP_FRAMES;
 
-function dumpFrame(requestId: string, parsed: unknown, direction: "recv" | "send") {
+/** A SignalR frame, as received or sent, for per-request forensics. */
+interface SignalRFrame {
+  [field: string]: unknown;
+}
+
+function dumpFrame(requestId: string, parsed: SignalRFrame, direction: "recv" | "send") {
   if (!DUMP_FRAMES) return;
 
   try {
@@ -124,6 +129,12 @@ const VARIANTS = [
   "Agt_bizchat_enableGpt5ForHelix",
 ].join(",");
 
+/** The result of folding one delta into the streamed answer. */
+interface FoldedText {
+  answer: string;
+  emit: string | null;
+}
+
 /**
  * Fold one incoming piece of streamed text — a token DeltaUpdate (passed as
  * `answer + writeAtCursor`) or a full-text MessageUpdate snapshot — into the
@@ -143,7 +154,7 @@ const VARIANTS = [
 export function foldStreamText(
   answer: string,
   next: string,
-): { answer: string; emit: string | null } {
+): FoldedText {
   if (next.length <= answer.length) return { answer, emit: null };
 
   if (next.startsWith(answer)) return { answer: next, emit: next.slice(answer.length) };
@@ -417,7 +428,8 @@ export class CopilotSession {
         if (waiting) {
           const w = waiting;
           waiting = null;
-          w.resolve({ value: undefined as any, done: true });
+          // SAFETY: done:true carries no value; undefined is the contract.
+          w.resolve({ value: undefined as unknown as string, done: true });
         }
       };
 
@@ -445,18 +457,30 @@ export class CopilotSession {
         if (r.emit) onDelta(r.emit);
       };
 
+      /** One progress frame from the image-generation stream. */
+      interface ImageProgress {
+        contentGenerationProgressList?: unknown;
+        ImageReferenceUrls?: unknown;
+        fileToken?: unknown;
+        pollUrl?: unknown;
+        size?: unknown;
+        orientation?: unknown;
+        status?: unknown;
+      }
+
       const captureImages = (message: unknown) => {
         if (!message || typeof message !== "object" || !("contentGenerationProgressList" in message)) return;
-        const list = message.contentGenerationProgressList;
+        const list = (message as ImageProgress).contentGenerationProgressList;
 
         if (!Array.isArray(list)) return;
 
         for (const entry of list) {
           if (!entry || typeof entry !== "object" || !("ImageReferenceUrls" in entry)) continue;
-          const urls = entry.ImageReferenceUrls;
+          // SAFETY: ImageProgress declares every field read below.
+          const record = entry as ImageProgress & { ImageReferenceUrls?: unknown };
+          const urls = record.ImageReferenceUrls;
 
           if (!Array.isArray(urls) || urls.length === 0 || typeof urls[0] !== "string") continue;
-          const record = entry as Record<string, unknown>;
           const key = typeof record.fileToken === "string" ? record.fileToken : urls[0];
           const status = typeof record.status === "number" ? record.status : 0;
           const previous = imagesByToken.get(key);
@@ -528,19 +552,24 @@ export class CopilotSession {
           return steeringFingerprint;
         },
 
-        [Symbol.asyncIterator]() {
+        [Symbol.asyncIterator](): AsyncIterator<string> {
           return {
             next(): Promise<IteratorResult<string>> {
               // Drain buffered deltas BEFORE surfacing done/error, so a fast turn
               // that finished before iteration began still yields all its text.
               if (queue.length > 0) {
-                return Promise.resolve({ value: queue.shift()!, done: false });
+                const value = queue.shift();
+
+                if (value !== undefined) {
+                  return Promise.resolve({ value, done: false });
+                }
               }
 
               if (streamError) return Promise.reject(streamError);
 
               if (streamDone) {
-                return Promise.resolve({ value: undefined as any, done: true });
+                // SAFETY: done:true carries no value; undefined is the contract.
+                return Promise.resolve({ value: undefined as unknown as string, done: true });
               }
 
               return new Promise((res, rej) => {
@@ -647,7 +676,9 @@ export class CopilotSession {
             continue;
           }
 
-          dumpFrame(requestId, parsed, "recv");
+          if (parsed === null || typeof parsed !== "object") continue;
+
+          dumpFrame(requestId, parsed as SignalRFrame, "recv");
 
           if (!handshakeDone) {
             handshakeDone = true;
