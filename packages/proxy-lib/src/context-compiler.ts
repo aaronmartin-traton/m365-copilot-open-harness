@@ -6,6 +6,12 @@ export interface DeltaContextInput {
   messages: Message[];
   taskAnchor: string;
   hasTools: boolean;
+  /**
+   * The whole request. A tool message names its call only by `tool_call_id`
+   * (pi sends no `name`), so the name comes from the assistant `tool_calls`
+   * that issued it. Defaults to `messages`.
+   */
+  history?: Message[];
 }
 
 /**
@@ -14,7 +20,13 @@ export interface DeltaContextInput {
  * with `formatMessages` directly — M365 is stateful, so after the first turn
  * only the new messages are sent.
  */
-export function compileDelta({ messages, taskAnchor, hasTools }: DeltaContextInput): string {
+export function compileDelta({ messages, taskAnchor, hasTools, history = messages }: DeltaContextInput): string {
+  const callNames = new Map<string, string>();
+  for (const message of history) {
+    for (const call of message.role === "assistant" ? message.tool_calls ?? [] : []) {
+      if (call.id) callNames.set(call.id, call.function.name);
+    }
+  }
   const parts: string[] = hasTools
     ? [LOCAL_TOOL_REMINDER, `<task_anchor>${taskAnchor.slice(0, 3_000)}</task_anchor>`]
     : [];
@@ -22,7 +34,7 @@ export function compileDelta({ messages, taskAnchor, hasTools }: DeltaContextInp
     if (message.role === "assistant") {
       continue;
     } else if (message.role === "tool") {
-      const name = message.name || "unknown";
+      const name = message.name || (message.tool_call_id && callNames.get(message.tool_call_id)) || "unknown";
       const callId = message.tool_call_id || "?";
       parts.push(`<tool_response name="${name}" call_id="${callId}">\n${boundedToolResult(getMessageContent(message))}\n</tool_response>`);
     } else if (message.role !== "system") {

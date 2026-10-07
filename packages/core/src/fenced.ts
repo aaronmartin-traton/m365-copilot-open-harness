@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { createLogger } from "./log.js";
+import { parseInlineJsonValue, parseYamlBlockValue, yamlBlockEnd } from "./yaml-block.js";
 import type { ParsedToolCall, ToolDef } from "./tools.js";
 
 const log = createLogger("fenced");
@@ -471,6 +472,9 @@ function parseHeaderScalar(type: string | undefined, value: string): unknown | u
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
   }
+  if (type === "array" || type === "object") {
+    return parseInlineJsonValue(value, type) ?? value;
+  }
   return value;
 }
 
@@ -488,7 +492,19 @@ function parseFencedInner(spec: FencedToolSpec, inner: string): Record<string, u
       if (line.trim() === "") { i++; break; }
       const m = line.match(/^([A-Za-z0-9_]+):[ \t]?(.*)$/);
       if (m && spec.headerParams.includes(m[1])) {
-        const value = parseHeaderScalar(spec.paramTypes[m[1]], m[2]);
+        const type = spec.paramTypes[m[1]];
+        // An array/object param may hold an indented YAML block under an empty
+        // `key:` line (upstream #50, see yaml-block.ts).
+        if (m[2].trim() === "" && (type === "array" || type === "object")) {
+          const end = yamlBlockEnd(lines, i + 1, type === "array");
+          const block = end > i + 1 ? parseYamlBlockValue(lines.slice(i + 1, end), type) : undefined;
+          if (block !== undefined) {
+            args[m[1]] = block;
+            i = end - 1;
+            continue;
+          }
+        }
+        const value = parseHeaderScalar(type, m[2]);
         if (value === undefined) {
           log.error(`tool "${spec.name}" has invalid ${spec.paramTypes[m[1]]} header "${m[1]}"`);
           return null;

@@ -99,7 +99,7 @@ export async function handleChatCompletion(
     const taskAnchor = firstUser ? getMessageContent(firstUser) : "";
     const newMessages = body.messages.slice(conv.sentMessageCount);
     const delta = newMessages.length > 0
-      ? compileDelta({ messages: newMessages, taskAnchor, hasTools: !!hasTools })
+      ? compileDelta({ messages: newMessages, taskAnchor, hasTools: !!hasTools, history: body.messages })
       : "";
     if (delta.length > 0) {
       text = delta;

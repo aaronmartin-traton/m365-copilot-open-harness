@@ -40,4 +40,20 @@ describe("compileDelta", () => {
     expect(output.length).toBeLessThan(big.length + 400);
     expect(output).toContain("[tool output truncated:");
   });
+
+  it("names a tool result from the issuing assistant tool_call when the message has no name", () => {
+    const history = [
+      { role: "user", content: "fix it" },
+      { role: "assistant", content: null, tool_calls: [{ id: "call-7", function: { name: "edit", arguments: "{}" } }] },
+      { role: "tool", tool_call_id: "call-7", content: "applied" },
+      { role: "tool", tool_call_id: "call-missing", content: "orphan" },
+    ];
+
+    const output = compileDelta({ messages: history.slice(2), taskAnchor: "t", hasTools: false, history });
+
+    expect(output).toBe([
+      '<tool_response name="edit" call_id="call-7">\napplied\n</tool_response>',
+      '<tool_response name="unknown" call_id="call-missing">\norphan\n</tool_response>',
+    ].join("\n\n"));
+  });
 });
