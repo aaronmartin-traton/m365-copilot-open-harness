@@ -20,7 +20,10 @@ const indentOf = (line: string): number => line.length - line.trimStart().length
 
 const DASH = /^-([ \t]|$)/;
 
-const YAML_KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s:#'"-][^:]*?):(?:[ \t]+(.*)|[ \t]*)$/;
+// A plain key may not start with a flow indicator: `{oldText: "a", …}` is a flow
+// mapping, not a key named "{oldText". Quoted keys are matched by the first two
+// alternatives, so nothing readable is lost.
+const YAML_KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s:#'"{\[][^:]*?):(?:[ \t]+(.*)|[ \t]*)$/;
 
 class YamlSubsetError extends Error {}
 
@@ -206,12 +209,12 @@ function parseYamlScalar(raw: string): unknown {
 
   if (s.length >= 2 && s.startsWith("'") && s.endsWith("'")) return s.slice(1, -1).replace(/''/g, "'");
 
+  // Flow-shaped but unreadable as JSON: a YAML flow mapping/sequence is outside
+  // this subset, and keeping the raw text would hand the harness a corrupted
+  // value (a mapping keyed "{oldText") that passes every required-param check.
+  // Fail closed instead — the caller drops the block and keeps its old reading.
   if ((s.startsWith("[") && s.endsWith("]")) || (s.startsWith("{") && s.endsWith("}"))) {
-    try {
-      return JSON.parse(s);
-    } catch {
-      // not JSON — keep it as text
-    }
+    return JSON.parse(s);
   }
 
   return s;

@@ -127,27 +127,41 @@ export class ChatGptBrowserSession {
         return browser.launchPersistentContext(dir, contextOptions);
       });
 
-    this.context = await launch(chatGptProfileDir());
-    this.page = this.context.pages()[0] ?? (await this.context.newPage());
-    await this.page.goto(`${this.origin}/`, { waitUntil: "domcontentloaded" });
+    const context = await launch(chatGptProfileDir());
+    const page = context.pages()[0] ?? (await context.newPage());
 
-    if (await isChallengePage(this.page)) {
-      throw new Error(
-        `ChatGPT served an anti-bot challenge instead of the app (title=${JSON.stringify(
-          await this.page.title(),
-        )}). Run headed (CHATGPT_WEB_HEADLESS unset) and sign in interactively.`,
-      );
+    try {
+      await page.goto(`${this.origin}/`, { waitUntil: "domcontentloaded" });
+
+      if (await isChallengePage(page)) {
+        throw new Error(
+          `ChatGPT served an anti-bot challenge instead of the app (title=${JSON.stringify(
+            await page.title(),
+          )}). Run headed (CHATGPT_WEB_HEADLESS unset) and sign in interactively.`,
+        );
+      }
+
+      if (!(await isSignedIn(page))) {
+        throw new Error(
+          `No ChatGPT composer at ${this.origin} — sign in interactively in the profile at ${chatGptProfileDir()}`,
+        );
+      }
+    } catch (err) {
+      // Close before rethrowing: the profile's ProcessSingleton lock stays held by a
+      // live context, which would block the very recovery the message recommends.
+      // Nothing is cached, so the next call relaunches from scratch.
+      await context.close().catch(() => {});
+
+      throw err;
     }
 
-    if (!(await isSignedIn(this.page))) {
-      throw new Error(
-        `No ChatGPT composer at ${this.origin} — sign in interactively in the profile at ${chatGptProfileDir()}`,
-      );
-    }
-
+    // Cached only once the page is known good — a half-open page would otherwise be
+    // handed to every later turn until the process restarts.
+    this.context = context;
+    this.page = page;
     log.info(`ChatGPT session ready at ${this.origin}`);
 
-    return this.page;
+    return page;
   }
 
   /** Start a fresh conversation so no prior history is in context. */
@@ -194,8 +208,11 @@ export class ChatGptBrowserSession {
 
     for (;;) {
       if (signal?.aborted) {
-        // Mirror the UI's Stop control so the turn ends instead of dangling.
-        await page.locator(`[data-turn-key="${turnKey}"] button`).first().click().catch(() => {});
+        // Stop lives on the composer, not on the turn: the buttons inside a turn
+        // container are Copy and Share (see tests/fixtures/), so clicking there
+        // copies the partial reply and leaves generation running. No stop button
+        // rendered means the turn already settled.
+        await page.locator('button[data-testid="stop-button"]').first().click().catch(() => {});
         throw Object.assign(new Error("ChatGPT turn aborted"), { name: "AbortError" });
       }
 

@@ -448,6 +448,7 @@ ${toolsBlock(tools)}`;
 // Match a fenced block with an alphanumeric/underscore info-string. Non-greedy
 // body; the closing fence is a line that is exactly ``` (start of line).
 const FENCE_REGEX = /```([A-Za-z0-9_.-]+)[ \t]*\r?\n([\s\S]*?)\r?\n?```/g;
+
 const FENCE_OPEN_REGEX = /```([A-Za-z0-9_.-]+)[ \t]*\r?\n/g;
 
 // Claude Opus sometimes ends a fenced call the way its native function-calling
@@ -537,6 +538,7 @@ export function findFirstToolFence(
 
   return null;
 }
+
 const SEARCH_REPLACE_REGEX =
   /<{5,}\s*SEARCH\s*\r?\n([\s\S]*?)\r?\n={5,}\s*\r?\n([\s\S]*?)\r?\n>{5,}\s*REPLACE/;
 
@@ -606,9 +608,12 @@ function parseHeaderScalar(type: string | undefined, value: string): unknown | u
 
     return Number.isFinite(parsed) ? parsed : undefined;
   }
-  if (type === "array" || type === "object") {
-    return parseInlineJsonValue(value, type) ?? value;
-  }
+
+  // An array/object header must be JSON. Falling back to the raw string would hand
+  // the harness a value of the wrong shape that still clears the required-param
+  // check; undefined drops the block instead (the caller's "unreadable" path).
+  if (type === "array" || type === "object") return parseInlineJsonValue(value, type);
+
   return value;
 }
 
@@ -631,18 +636,22 @@ function parseFencedInner(spec: FencedToolSpec, inner: string): Record<string, u
 
       if (m && spec.headerParams.includes(m[1])) {
         const type = spec.paramTypes[m[1]];
+
         // An array/object param may hold an indented YAML block under an empty
         // `key:` line (upstream #50, see yaml-block.ts).
         if (m[2].trim() === "" && (type === "array" || type === "object")) {
           const end = yamlBlockEnd(lines, i + 1, type === "array");
           const block = end > i + 1 ? parseYamlBlockValue(lines.slice(i + 1, end), type) : undefined;
+
           if (block !== undefined) {
             args[m[1]] = block;
             i = end - 1;
             continue;
           }
         }
+
         const value = parseHeaderScalar(type, m[2]);
+
         if (value === undefined) {
           log.error(`tool "${spec.name}" has invalid ${spec.paramTypes[m[1]]} header "${m[1]}"`);
 
@@ -711,6 +720,7 @@ export function parseFencedToolCalls(
 
     if (!spec) continue; // ```python illustration etc. — not a tool, leave in prose
     const args = parseFencedInner(spec, fenceInner(match[1], match[2]));
+
     if (!args) continue;
 
     if (spec.name === "shell_command" && spec.bodyParam && /powershell/i.test(spec.description ?? "")) {

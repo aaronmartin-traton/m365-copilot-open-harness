@@ -334,6 +334,7 @@ describe("formatFencedToolDefinitions", () => {
     expect(out).toContain("PRIMARY JOB");
   });
 });
+
 describe("array and object params written as a YAML block (#50)", () => {
   // pi's `edit` tool: the tools block shows it as `edits: <edits>`.
   const piEdit: ToolDef = {
@@ -351,14 +352,18 @@ describe("array and object params written as a YAML block (#50)", () => {
       },
     },
   };
+
   const opts: ToolDef = {
     type: "function",
     function: { name: "configure", parameters: { type: "object", properties: { target: { type: "string" }, options: { type: "object" } } } },
   };
+
   const piSpecs = buildSpecMap([piEdit, opts, bash]);
+
   const argsOf = (text: string) => {
     const { calls } = parseFencedToolCalls(text, piSpecs);
     expect(calls).toHaveLength(1);
+
     return JSON.parse(calls[0].function.arguments);
   };
 
@@ -405,9 +410,21 @@ describe("array and object params written as a YAML block (#50)", () => {
     expect(args).toEqual({ options: { mode: "fast", retries: "3" }, target: "prod" });
   });
 
-  it("falls back to the old reading when the block isn't YAML it can read", () => {
-    const args = argsOf("```edit\npath: a.py\nedits:\n  - oldText: x\n        newText: misaligned\n```");
-    expect(args.edits).toBe("");
+  it("drops the call when the block isn't YAML it can read, keeping the text", () => {
+    const { calls, leftover } = parseFencedToolCalls(
+      "```edit\npath: a.py\nedits:\n  - oldText: x\n        newText: misaligned\n```",
+      piSpecs,
+    );
+    expect(calls).toHaveLength(0);
+    expect(leftover).toContain("misaligned");
+  });
+
+  it("drops the call rather than reading a YAML flow mapping as text", () => {
+    const { calls } = parseFencedToolCalls(
+      '```edit\npath: a.py\nedits:\n  - {oldText: "x", newText: "y"}\n```',
+      piSpecs,
+    );
+    expect(calls).toHaveLength(0);
   });
 
   it("leaves a string param's indented lines alone, as before", () => {
@@ -415,10 +432,13 @@ describe("array and object params written as a YAML block (#50)", () => {
     expect(args.command).toBe("  echo indented");
   });
 });
+
 describe("native call closer leaking into a fence (Opus)", () => {
   const SCRIPT = "#!/bin/bash\nwc -l < data.txt | tr -d ' ' > count.txt";
+
   function argsOf(text: string) {
     const { calls, leftover } = parseFencedToolCalls(text, specs);
+
     return { calls, leftover, args: calls[0] ? JSON.parse(calls[0].function.arguments) : null };
   }
 
