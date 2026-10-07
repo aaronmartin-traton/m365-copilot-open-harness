@@ -1,7 +1,6 @@
 import WebSocket from "ws";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import {
   SignalRHandshakeResponse,
   DeltaUpdate,
@@ -18,7 +17,7 @@ import {
   shouldAutoConfirm,
   ACTION_ALLOWED_MESSAGE_TYPES,
 } from "./native-actions.js";
-import { createLogger, trunc } from "./log.js";
+import { createLogger, trunc, FRAME_DIR } from "./log.js";
 import { prepareImageAttachments, type ImageInput } from "./images.js";
 import { ensureSteered, type SteeringFingerprint } from "./steering.js";
 
@@ -63,13 +62,12 @@ const IMAGE_GEN_OPTIONS_SETS = [
 // per-request NDJSON file under ~/.config/opencode-m365/frames/. Cheap to run
 // in production; gives us forensic data when M365 starts emitting new fields.
 const DUMP_FRAMES = !!process.env.M365_DUMP_FRAMES;
-const DUMP_DIR = join(homedir(), ".config", "opencode-m365", "frames");
 function dumpFrame(requestId: string, parsed: unknown, direction: "recv" | "send") {
   if (!DUMP_FRAMES) return;
   try {
-    mkdirSync(DUMP_DIR, { recursive: true });
+    mkdirSync(FRAME_DIR, { recursive: true });
     appendFileSync(
-      join(DUMP_DIR, `${requestId}.ndjson`),
+      join(FRAME_DIR, `${requestId}.ndjson`),
       JSON.stringify({ t: Date.now(), dir: direction, frame: parsed }) + "\n",
     );
   } catch {

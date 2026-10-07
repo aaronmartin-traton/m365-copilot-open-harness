@@ -712,6 +712,34 @@
       "status": "taken",
       "reason": "Merge of PR #48 (b10b9041), parser part only.",
       "evidence": "feat/upstream-ports; fenced.test.ts, tools.test.ts, tool-path.contract.test.ts"
+    },
+    {
+      "sha": "f881913d128940a5a618ea9ed0fee7979e371c43",
+      "subject": "feat(log): M365_LOG_FILE and M365_FRAME_DIR, sweeps write straight into the archive",
+      "status": "taken",
+      "reason": "Taken (log/frame half): M365_LOG_FILE + M365_FRAME_DIR resolve against the config dir in log.ts; session.ts writes frames to FRAME_DIR. Bench/sweep script hunks rejected (scripts/bench is local-only).",
+      "evidence": "feat/upstream-ports"
+    },
+    {
+      "sha": "a1ffd53542dacc7f0dd6517f92c3e791bc98156a",
+      "subject": "Merge pull request #59 from cramt/feat/log-frames-location",
+      "status": "taken",
+      "reason": "Merge of PR #59 (f881913d1), log half taken.",
+      "evidence": "feat/upstream-ports"
+    },
+    {
+      "sha": "f9f956d6b0084a9b0e51b857c8bc47fd71b13531",
+      "subject": "fix(types): annotate the mixed tool arrays, keep Nitro's files out of the root program",
+      "status": "taken",
+      "reason": "Taken (root tsconfig half): a bare `tsc --noEmit` at the repo root is now clean and excludes Nitro output and test files, matching the per-package programs. The ToolDef[] test annotations land opportunistically.",
+      "evidence": "feat/upstream-ports"
+    },
+    {
+      "sha": "fe721d1aff16bf7849d1a9be7fd6ab32c1a96904",
+      "subject": "build: declare @types/node in core and proxy-lib instead of inheriting it",
+      "status": "superseded",
+      "reason": "Superseded: @types/node is already a workspace devDependency (root ^26, core ^22) and every program sets types:[node]. No lockfile churn needed.",
+      "evidence": "feat/upstream-ports"
     }
   ]
 }
