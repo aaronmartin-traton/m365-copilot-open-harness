@@ -33,10 +33,23 @@ function die(code, msg) {
 
 // --- setup ---------------------------------------------------------------
 
+// The `merge=ours` driver must be scoped to the upstream merge command only
+// (`git -c merge.ours.driver=true merge upstream/main`). A persistent
+// registration also fires on internal merges, rebases, cherry-picks and stash
+// pops, silently discarding our own changes to every owned path.
+let persistentDriver = "";
 try {
-  sh(`git config merge.ours.driver true`); // needed by .gitattributes merge=ours
+  persistentDriver = sh("git config --local --get merge.ours.driver");
 } catch {
-  /* read-only checkout: .gitattributes will error at merge time, not now */
+  persistentDriver = "";
+}
+if (persistentDriver && !jsonOut) {
+  console.error(
+    "warning: merge.ours.driver is registered persistently in .git/config. It silently drops\n" +
+      "  our own changes to owned paths on internal merges/rebases/stash pops. Remove it:\n" +
+      "    git config --unset merge.ours.driver\n" +
+      "  and merge upstream with: git -c merge.ours.driver=true merge upstream/main",
+  );
 }
 
 let hasRemote = false;
