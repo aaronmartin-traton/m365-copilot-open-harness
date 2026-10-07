@@ -740,6 +740,20 @@
       "status": "superseded",
       "reason": "Superseded: @types/node is already a workspace devDependency (root ^26, core ^22) and every program sets types:[node]. No lockfile churn needed.",
       "evidence": "feat/upstream-ports"
+    },
+    {
+      "sha": "70d2e2b7d2bce9abe39fabdbe92b52d5248fad33",
+      "subject": "fix(session): assemble multi-message replies per message",
+      "status": "taken",
+      "reason": "Hand-ported 2026-10-06 in full: cursorMessageId + TurnTextComposer; session.ts composes text per bot message instead of folding into one string. Multi-message turns were losing the head of every message after the first, so a Claude tool fence lost its opening backticks (#29).",
+      "evidence": "feat/upstream-ports; session.test.ts"
+    },
+    {
+      "sha": "168ce6ba5e86039369e69e5a6c6f784ea1d2b8bf",
+      "subject": "Merge pull request #30 from cramt/fix/multi-message-turns",
+      "status": "taken",
+      "reason": "Merge of PR #30 (70d2e2b), hand-ported.",
+      "evidence": "feat/upstream-ports"
     }
   ]
 }
