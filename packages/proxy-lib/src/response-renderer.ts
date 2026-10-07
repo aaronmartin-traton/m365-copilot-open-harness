@@ -6,6 +6,7 @@
  * M365.
  */
 
+import { z } from "zod";
 import { createLogger, type ParsedToolCall } from "@m365-copilot/core";
 import { jsonResponse, sseResponse } from "./response-helpers.js";
 import { outputFinishReason } from "./output-ceiling.js";
@@ -33,6 +34,24 @@ export interface RenderResponseArgs {
   model: string;
   /** Steering-ladder fingerprint (ticket 02); omitted from the body when unset. */
   fingerprint?: string;
+}
+
+const ErrorEnvelope = z.object({ error: z.record(z.string(), z.unknown()) });
+
+/**
+ * The producer's error object, parsed out of its response body. null when the
+ * body isn't an envelope — never throws, or a non-JSON failure would be
+ * swallowed by the stream's catch-all and the client would see a clean [DONE].
+ */
+async function readErrorBody(resp: Response): Promise<Record<string, unknown> | null> {
+  let body: unknown;
+
+  try { body = JSON.parse(await resp.text()); }
+  catch { return null; }
+
+  const envelope = ErrorEnvelope.safeParse(body);
+
+  return envelope.success ? envelope.data.error : null;
 }
 
 /**
@@ -103,12 +122,13 @@ export async function renderResponse(args: RenderResponseArgs): Promise<Response
 
       try {
         if (p.kind === "error") {
-          let message = "upstream error";
+          // HTTP 200 is already committed, so the failure has to ride inside the
+          // stream. Forward the producer's error object verbatim: `type`/`code` are
+          // what tell a client to back off (rate_limit_error / m365_throttled,
+          // m365_queue_full) instead of retrying into the same throttle.
+          const error = await readErrorBody(p.resp);
 
-          try { message = (JSON.parse(await p.resp.text())?.error?.message) || message; } catch {}
-
-          // HTTP 200 is already committed, so surface the failure as an in-stream error chunk.
-          send({ ...base, error: { message, type: "upstream_error" } });
+          send({ ...base, error: error ?? { message: "upstream error", type: "upstream_error" } });
         } else if (p.kind === "tools") {
           p.toolCalls.forEach((tc, i) =>
             send({ ...base, choices: [{ index: 0, delta: { tool_calls: [{ index: i, id: tc.id, type: "function", function: { name: tc.function.name, arguments: tc.function.arguments } }] }, finish_reason: null }] }));

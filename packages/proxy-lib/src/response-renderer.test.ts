@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderResponse, type RenderResponseArgs } from "./response-renderer.js";
-import { jsonResponse } from "./response-helpers.js";
+import { jsonResponse, throttledResponse } from "./response-helpers.js";
 import { outputFinishReason } from "./output-ceiling.js";
 import type { ParsedToolCall } from "@m365-copilot/core";
 
@@ -232,21 +232,28 @@ describe("renderResponse streaming", () => {
     expect(a.usage).not.toHaveBeenCalled();
   });
 
-  it("turns a produced error into an in-stream error event after HTTP 200", async () => {
-    const errResp = jsonResponse(502, { error: { message: "upstream exploded", type: "whatever" } });
-
+  it("forwards the producer's error object so a throttle stays machine-readable", async () => {
+    const throttled = { errorCode: "PerUserThrottled", message: "slow down" };
     const a = args({
       stream: true,
-      produce: vi.fn(async () => ({ kind: "error" as const, resp: errResp })),
+      produce: vi.fn(async () => ({ kind: "error" as const, resp: throttledResponse(throttled) })),
     });
 
     const resp = await renderResponse(a);
     expect(resp.status).toBe(200);
-    const { text, events } = await readSSE(resp);
+    const { events } = await readSSE(resp);
     const errEvent = events.find((e) => e.error != null);
-    expect(errEvent?.error.message).toBe("upstream exploded");
-    expect(errEvent?.error.type).toBe("upstream_error");
-    expect(text.trimEnd().endsWith("data: [DONE]")).toBe(true);
+    expect(errEvent?.error).toMatchObject({ type: "rate_limit_error", code: "m365_throttled", param: "PerUserThrottled" });
+  });
+
+  it("falls back to a generic in-stream error when the body is not an envelope", async () => {
+    const a = args({
+      stream: true,
+      produce: vi.fn(async () => ({ kind: "error" as const, resp: new Response("not json") })),
+    });
+
+    const { events } = await readSSE(await renderResponse(a));
+    expect(events.find((e) => e.error != null)?.error).toEqual({ message: "upstream error", type: "upstream_error" });
   });
 
   it("turns a thrown produce error into an in-stream upstream error", async () => {
