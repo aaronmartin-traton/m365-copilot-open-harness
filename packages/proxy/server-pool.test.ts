@@ -18,7 +18,7 @@ describe("automatic reaper process wiring", () => {
     delete process.env.M365_WEB_PRUNE_PROVEN;
     process.env.M365_SESSION_TTL_MINUTES = "0";
     vi.resetModules();
-    const module = await import("./server-pool.ts");
+    const module = await import("./server-pool.js");
     await expect(module.runReaper()).resolves.toEqual({ pruned: 0, failed: 0 });
     expect(module.reaperHealth()).toMatchObject({ disabled: true, pruned: 0, failed: 0 });
   }, 15_000);
@@ -27,7 +27,7 @@ describe("automatic reaper process wiring", () => {
     process.env.M365_WEB_PRUNE_PROVEN = "1";
     process.env.M365_SESSION_TTL_MINUTES = "0";
     vi.resetModules();
-    const module = await import("./server-pool.ts");
+    const module = await import("./server-pool.js");
     await expect(module.runReaper()).resolves.toEqual({ pruned: 0, failed: 0 });
     expect(module.reaperHealth()).toMatchObject({ disabled: false, pruned: 0, failed: 0 });
     expect(module.reaperHealth().lastRunAt).toEqual(expect.any(Number));
