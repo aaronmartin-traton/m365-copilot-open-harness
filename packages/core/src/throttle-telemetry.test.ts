@@ -29,6 +29,7 @@ afterEach(() => {
 
 const fileLines = (): string[] => {
   const p = process.env.M365_THROTTLE_TELEMETRY_FILE!;
+
   return existsSync(p) ? readFileSync(p, "utf8").trim().split("\n").filter(Boolean) : [];
 };
 
@@ -52,6 +53,7 @@ describe("throttle telemetry — NDJSON emission", () => {
       { ts: "4", event: "disengaged", framing: "softened", retryOutcome: "softened-retry" },
       { ts: "5", event: "at-limit", current: 600, max: 600 },
     ];
+
     for (const e of events) emitThrottleEvent(e);
     const counts = getThrottleEventCounts();
     expect(counts).toEqual({
@@ -110,6 +112,7 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
   async function fresh() {
     const { noteRequestOutcome } = await import("./auth-recovery.js");
     const telemetry = await import("./throttle-telemetry.js");
+
     return { noteRequestOutcome, counts: () => telemetry.getThrottleEventCounts() };
   }
 
@@ -132,9 +135,11 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
     noteRequestOutcome(true, "conv-c"); // 3 distinct empties → threshold met
     expect(counts()["backoff-enter"]).toBe(1);
     expect(counts()["empty-throttle"]).toBe(3);
+
     const enter = fileLines()
       .map((l) => JSON.parse(l) as ThrottleEvent)
       .find((e) => e.event === "backoff-enter")!;
+
     expect(enter.level).toBe(1);
     expect(enter.backoffUntil).toBeGreaterThan(Date.now());
   });
@@ -146,9 +151,11 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
     noteRequestOutcome(true, "conv-c"); // enter
     expect(counts()["backoff-exit"]).toBe(0);
     noteRequestOutcome(false, "conv-a"); // clean response lifts backoff
+
     const exit = fileLines()
       .map((l) => JSON.parse(l) as ThrottleEvent)
       .find((e) => e.event === "backoff-exit");
+
     expect(exit).toBeDefined();
     // Back-to-back calls lift within the same millisecond window; the assertion
     // that matters is the event fired exactly once with a sane (>= 0) duration.
@@ -168,9 +175,11 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
     // elapsed window must emit the exit without any clean response.
     await new Promise((resolve) => setTimeout(resolve, 2_000));
     noteRequestOutcome(true, "conv-d");
+
     const exit = fileLines()
       .map((l) => JSON.parse(l) as ThrottleEvent)
       .find((e) => e.event === "backoff-exit");
+
     expect(exit).toBeDefined();
     expect(exit!.durationMs).toBeLessThanOrEqual(2_000); // capped at window end
     expect(counts()["backoff-exit"]).toBe(1);

@@ -53,10 +53,20 @@ export {
   decodeJwt,
   getToneForModel,
   getAvailableModels,
+  m365StopReason,
+  m365UsageFields,
   type CopilotStream,
-  type CapturedImage,
-  type TurnResult,
 } from "./copilot.js";
+
+export {
+  type ModelProvider,
+  type ProviderTurn,
+  type ProviderImage,
+  type ProviderStopReason,
+  type ProviderUsage,
+  type ProviderUsageValue,
+  type TurnResult,
+} from "./provider.js";
 
 export {
   CopilotSession,
@@ -64,6 +74,7 @@ export {
   type NativeActionConfig,
   type ChatTurnOptions,
 } from "./session.js";
+
 export {
   generateImage,
   fetchImageBytes,
@@ -136,6 +147,7 @@ export {
   type CoworkProbeOptions,
   type CoworkProbeResult,
 } from "./cowork.js";
+
 export { decodeSocketPacket, type CoworkSocketPacket } from "./cowork-protocol.js";
 
 export {

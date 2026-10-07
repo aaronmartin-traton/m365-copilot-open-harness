@@ -7,19 +7,20 @@
 
 import { createHash } from "node:crypto";
 import { createLogger } from "@m365-copilot/core";
-import { ModelSession, type ModelSessionOptions } from "@m365-copilot/core";
+import { ModelSession, type ModelProvider, type ModelSessionOptions } from "@m365-copilot/core";
 import { RequestScheduler, type ScheduleOptions, type SchedulerStats } from "./scheduler.js";
 import { SessionStateStore } from "./session-store.js";
 
 const log = createLogger("session-pool");
 
 const MAX_IDLE_MS = Number(process.env.M365_SESSION_MEMORY_TTL_MS ?? 30 * 60 * 1000);
+
 const DEFAULT_PRUNE_RETRY_MS = 15 * 60 * 1000;
 
 export interface ConversationState {
   key: string;
   persistent: boolean;
-  session: ModelSession;
+  session: ModelProvider;
   sentMessageCount: number;
   lastAccessedAt: number;
   /**
@@ -43,6 +44,13 @@ export interface SessionPoolOptions {
   remotePruner?: RemoteConversationPruner;
   now?: () => number;
   pruneRetryMs?: number;
+  /**
+   * Builds the backend session for each conversation. Defaults to the M365
+   * `ModelSession`; pass a factory returning another `ModelProvider` to run
+   * every conversation on a different backend. This is the single injection
+   * point — nothing else in the pool knows which backend it is driving.
+   */
+  createSession?: (options: ModelSessionOptions) => ModelProvider;
 }
 
 export class SessionPool {
@@ -50,6 +58,7 @@ export class SessionPool {
   private toolCallConversations = new Map<string, string>();
   private gates = new Map<string, Promise<void>>();
   private sessionOptions: ModelSessionOptions;
+  private createSession: (options: ModelSessionOptions) => ModelProvider;
   private scheduler: RequestScheduler;
   private stateStore: SessionStateStore;
   private remotePruner?: RemoteConversationPruner;
@@ -58,6 +67,7 @@ export class SessionPool {
 
   constructor(sessionOptions: ModelSessionOptions = {}, options: SessionPoolOptions = {}) {
     this.sessionOptions = sessionOptions;
+    this.createSession = options.createSession ?? ((o) => new ModelSession(o));
     this.scheduler = options.scheduler ?? new RequestScheduler();
     this.stateStore = options.stateStore ?? new SessionStateStore();
     this.remotePruner = options.remotePruner;
@@ -73,9 +83,12 @@ export class SessionPool {
     let release!: () => void;
     const current = new Promise<void>((resolve) => { release = resolve; });
     this.gates.set(key, current);
+
     if (previous) await previous;
+
     return () => {
       release();
+
       if (this.gates.get(key) === current) this.gates.delete(key);
     };
   }
@@ -84,6 +97,7 @@ export class SessionPool {
     const key = managedKey ?? this.managedKey(messages, explicitKey);
     const persistent = managedKey !== undefined || !!explicitKey?.trim();
     const existing = this.conversations.get(key);
+
     if (existing) {
       if (messages.length < existing.sentMessageCount) {
         log.info(`Conversation ${key}: messages shrunk (${messages.length} < ${existing.sentMessageCount}), rotating M365 conversation`);
@@ -91,14 +105,17 @@ export class SessionPool {
         existing.sentMessageCount = 0;
         existing.pendingNote = null;
       }
+
       return existing;
     }
+
     const persisted = persistent ? this.stateStore.get(key) : undefined;
     log.info(`${persisted ? "Restoring" : "New"} ${persistent ? "keyed" : "ephemeral"} conversation ${key}, ${this.conversations.size} active`);
+
     const state: ConversationState = {
       key,
       persistent,
-      session: new ModelSession({
+      session: this.createSession({
         ...this.sessionOptions,
         ...(persisted?.restorable ? {
           sessionId: persisted.sessionId,
@@ -110,7 +127,9 @@ export class SessionPool {
       lastAccessedAt: persisted?.lastAccessedAt ?? this.now(),
       pendingNote: null,
     };
+
     this.conversations.set(key, state);
+
     return state;
   }
 
@@ -135,6 +154,7 @@ export class SessionPool {
   /** True iff this proxy emitted the tool-call id (any conversation, not pruned). */
   knowsToolCallId(toolCallId: string): boolean {
     const key = this.toolCallConversations.get(toolCallId);
+
     return key !== undefined && this.conversations.has(key);
   }
 
@@ -154,49 +174,66 @@ export class SessionPool {
     const key = "sessionKey" in selector
       ? this.fingerprint(selector.sessionKey)
       : this.conversationsForConversationId(selector.conversationId);
+
     if (!key) return null;
+
     return this.withKey(key, async () => {
       const state = this.conversations.get(key);
       const persisted = this.stateStore.get(key);
       const conversationId = state?.session.conversationId ?? persisted?.conversationId;
       const sessionId = state?.session.sessionId ?? persisted?.sessionId;
+
       if (!conversationId || !sessionId) return null;
+
       if (!this.remotePruner) throw new Error("remote_prune_unavailable");
+
       try {
         await this.scheduler.schedule({ newConversation: false, maintenance: true }, () =>
           this.remotePruner!({ sessionId, conversationId }));
       } catch (error) {
         const current = this.stateStore.get(key);
+
         if (current) this.stateStore.set(key, { ...current, nextPruneAttemptAt: this.now() + this.pruneRetryMs });
         throw error;
       }
+
       this.conversations.delete(key);
+
       for (const [callId, conversationKey] of this.toolCallConversations) {
         if (conversationKey === key) this.toolCallConversations.delete(callId);
       }
+
       this.stateStore.deleteConversation(key);
+
       return { deleted: true as const, conversationId };
     });
   }
 
   async reapIdle(): Promise<{ pruned: number; failed: number }> {
     const minutes = Number(process.env.M365_SESSION_TTL_MINUTES ?? Number.NaN);
+
     if (!Number.isFinite(minutes) || minutes <= 0) return { pruned: 0, failed: 0 };
     const cutoff = this.now() - minutes * 60_000;
     let pruned = 0;
     let failed = 0;
+
     for (const [key, state] of this.stateStore.entries()) {
       if (state.lastAccessedAt > cutoff || (state.nextPruneAttemptAt !== null && state.nextPruneAttemptAt > this.now())) continue;
+
       if (this.gates.has(key)) continue;
+
       try {
         const result = await this.prune({ conversationId: state.conversationId });
+
         if (result) pruned++;
       } catch {
         failed++;
         const current = this.stateStore.get(key);
+
         if (current) this.stateStore.set(key, { ...current, nextPruneAttemptAt: this.now() + this.pruneRetryMs });
       }
     }
+
     return { pruned, failed };
   }
 
@@ -217,11 +254,14 @@ export class SessionPool {
     let release!: () => void;
     const current = new Promise<void>((resolve) => { release = resolve; });
     this.gates.set(key, current);
+
     if (previous) await previous;
+
     try {
       return await task();
     } finally {
       release();
+
       if (this.gates.get(key) === current) this.gates.delete(key);
     }
   }
@@ -229,7 +269,9 @@ export class SessionPool {
   private managedKey(messages: Array<{ role: string; tool_calls?: Array<{ id: string }> }>, explicitKey?: string): string {
     this.evictStale();
     const normalizedKey = explicitKey?.trim();
+
     if (normalizedKey) return this.fingerprint(normalizedKey);
+
     return this.linkedConversationKey(messages) ?? `ephemeral-${crypto.randomUUID()}`;
   }
 
@@ -241,26 +283,32 @@ export class SessionPool {
     for (const [key, state] of this.conversations) {
       if (state.session.conversationId === conversationId) return key;
     }
+
     return this.stateStore.findByConversationId(conversationId)?.[0];
   }
 
   private linkedConversationKey(messages: Array<{ role: string; tool_calls?: Array<{ id: string }> }>): string | undefined {
     for (let index = messages.length - 1; index >= 0; index--) {
       const calls = messages[index].role === "assistant" ? messages[index].tool_calls : undefined;
+
       for (const call of calls ?? []) {
         const key = this.toolCallConversations.get(call.id);
+
         if (key && this.conversations.has(key)) return key;
       }
     }
+
     return undefined;
   }
 
   private evictStale(): void {
     const cutoff = this.now() - MAX_IDLE_MS;
+
     for (const [key, state] of this.conversations) {
       if (this.gates.has(key) || cutoff <= state.lastAccessedAt) continue;
       log.info(`Evicting idle in-memory conversation ${key}`);
       this.conversations.delete(key);
+
       for (const [callId, conversationKey] of this.toolCallConversations) {
         if (conversationKey === key) this.toolCallConversations.delete(callId);
       }

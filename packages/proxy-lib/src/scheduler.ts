@@ -73,10 +73,13 @@ export class RequestScheduler {
   schedule<T>(options: ScheduleOptions, task: () => Promise<T>): Promise<T> {
     if (options.signal?.aborted) return Promise.reject(abortError());
     this.refillTokens();
+
     const canStartImmediately = this.active < this.maxConcurrency && this.queue.length === 0 &&
       (!options.newConversation || this.tokens >= 1);
+
     if (!canStartImmediately && this.queue.length >= this.maxQueueLength) {
       this.rejected++;
+
       return Promise.reject(new SchedulerBusyError("M365 upstream queue is full", this.retryAfterSeconds()));
     }
 
@@ -90,16 +93,20 @@ export class RequestScheduler {
         resolve,
         reject,
       };
+
       if (options.signal) {
         const onAbort = () => {
           const index = this.queue.indexOf(entry as QueueEntry<unknown>);
+
           if (index >= 0) this.queue.splice(index, 1);
           reject(abortError());
           this.pump();
         };
+
         options.signal.addEventListener("abort", onAbort, { once: true });
         entry.removeAbort = () => options.signal?.removeEventListener("abort", onAbort);
       }
+
       this.queue.push(entry as QueueEntry<unknown>);
       this.pump();
     });
@@ -124,30 +131,39 @@ export class RequestScheduler {
       clearTimeout(this.wakeTimer);
       this.wakeTimer = null;
     }
+
     this.refillTokens();
 
     while (this.active < this.maxConcurrency && this.queue.length > 0) {
       let index = this.queue.findIndex((entry) => !entry.newConversation && !entry.maintenance);
       let consumesFreshToken = false;
+
       if (index < 0 && this.tokens >= 1) {
         index = this.queue.findIndex((entry) => entry.newConversation && !entry.maintenance);
+
         if (index >= 0) consumesFreshToken = true;
       }
+
       if (index < 0) {
         index = this.queue.findIndex((entry) => entry.maintenance);
       }
+
       if (index < 0) {
         this.scheduleWake();
+
         return;
       }
+
       if (consumesFreshToken) this.tokens -= 1;
 
       const entry = this.queue.splice(index, 1)[0];
       entry.removeAbort?.();
+
       if (entry.signal?.aborted) {
         entry.reject(abortError());
         continue;
       }
+
       this.active++;
       this.totalWaitMs += Math.max(0, this.now() - entry.enqueuedAt);
       void entry.task().then(entry.resolve, entry.reject).finally(() => {
@@ -181,12 +197,14 @@ export class RequestScheduler {
 
   private retryAfterSeconds(): number {
     if (this.active < this.maxConcurrency) return 1;
+
     return Math.max(1, Math.ceil(60 / this.newThreadsPerMinute));
   }
 }
 
 function envNumber(name: string, fallback: number): number {
   const value = Number(process.env[name]);
+
   return Number.isFinite(value) ? value : fallback;
 }
 
@@ -205,5 +223,6 @@ function positiveNumber(value: number | undefined, fallback: number): number {
 function abortError(): Error {
   const error = new Error("Request aborted while waiting for M365 upstream");
   error.name = "AbortError";
+
   return error;
 }

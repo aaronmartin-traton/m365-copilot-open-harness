@@ -4,6 +4,7 @@ import { createBackoffController } from "./auth-recovery.js";
 function setup(overrides: Record<string, unknown> = {}) {
   let t = 0;
   const slept: number[] = [];
+
   const controller = createBackoffController({
     now: () => t,
     sleep: async (ms: number) => { slept.push(ms); },
@@ -16,6 +17,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     jitterMaxMs: 100,
     ...overrides,
   });
+
   return { controller, slept, advance: (ms: number) => { t += ms; } };
 }
 

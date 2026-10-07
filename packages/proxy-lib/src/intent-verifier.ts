@@ -36,6 +36,7 @@ export const INTENT_VERIFIER_PROMPT =
   "Classify whether command/tool-shaped content in this assistant response is intended to be executed now. EXECUTE = perform it now. TEXT = show/discuss it without performing it. UNCERTAIN = insufficient evidence. Return exactly one token: EXECUTE, TEXT, or UNCERTAIN.\n";
 
 type IntentDecision = "EXECUTE" | "TEXT";
+
 type IntentCache = "hit" | "miss" | "shared";
 
 /**
@@ -113,6 +114,7 @@ function verifierEnabled(): boolean {
 export function getIntentVerifier(): IntentVerifier | null {
   if (!verifierEnabled()) return null;
   singleton ??= new BonsaiIntentVerifier();
+
   return singleton;
 }
 
@@ -132,7 +134,9 @@ interface CachedEntry {
 }
 
 const CACHE_CAP = 1000;
+
 const DEFAULT_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions";
+
 const DEFAULT_MODEL = "bonsai-27b-q1";
 
 /**
@@ -143,8 +147,10 @@ const DEFAULT_MODEL = "bonsai-27b-q1";
  */
 function parseTemplateKwargs(raw: string | undefined): Record<string, unknown> | undefined {
   const value = raw?.trim();
+
   if (!value) return undefined;
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(value);
   } catch {
@@ -152,11 +158,13 @@ function parseTemplateKwargs(raw: string | undefined): Record<string, unknown> |
       `intent-verifier: M365_INTENT_VERIFIER_TEMPLATE_KWARGS is not valid JSON: ${value}`,
     );
   }
+
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error(
       `intent-verifier: M365_INTENT_VERIFIER_TEMPLATE_KWARGS must be a JSON object, got: ${value}`,
     );
   }
+
   return parsed as Record<string, unknown>;
 }
 
@@ -200,8 +208,10 @@ class BonsaiIntentVerifier implements IntentVerifier {
     if (this.cache.size >= CACHE_CAP) {
       // LRU: Map keeps insertion order; drop the oldest.
       const oldest = this.cache.keys().next().value;
+
       if (oldest !== undefined) this.cache.delete(oldest);
     }
+
     this.cache.set(key, entry);
   }
 
@@ -216,6 +226,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
         `error=${check.error ?? "null"} reasoningChars=${check.reasoningChars} ` +
         `ts=${new Date().toISOString()}`,
     );
+
     return check;
   }
 
@@ -226,9 +237,11 @@ class BonsaiIntentVerifier implements IntentVerifier {
 
     // cache hit
     const cached = this.cache.get(key);
+
     if (cached) {
       this.cache.delete(key);
       this.cache.set(key, cached); // LRU touch
+
       return this.record(
         {
           decision: cached.decision,
@@ -244,8 +257,10 @@ class BonsaiIntentVerifier implements IntentVerifier {
 
     // single-flight: identical in-flight request -> share its result
     const flying = this.inflight.get(key);
+
     if (flying) {
       const base = await flying;
+
       return this.record(
         { ...base, cache: "shared" as const, latencyMs: Date.now() - t0 },
         responseHash,
@@ -254,8 +269,10 @@ class BonsaiIntentVerifier implements IntentVerifier {
 
     const run = this.runSerialized(plannerText, t0);
     this.inflight.set(key, run);
+
     try {
       const out = await run;
+
       if (out.error === null) {
         this.cacheSet(key, {
           decision: out.decision,
@@ -263,6 +280,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
           reasoningChars: out.reasoningChars,
         });
       }
+
       return this.record(out, responseHash);
     } finally {
       this.inflight.delete(key);
@@ -277,6 +295,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
       () => undefined,
       () => undefined,
     );
+
     return run;
   }
 
@@ -284,6 +303,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
   private async attempt(plannerText: string): Promise<RawAttempt> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
     try {
       const resp = await fetch(this.endpoint, {
         method: "POST",
@@ -301,24 +321,31 @@ class BonsaiIntentVerifier implements IntentVerifier {
         }),
         signal: controller.signal,
       });
+
       if (resp.status === 500 || resp.status === 503) {
         return { token: null, reasoningChars: 0, error: `HTTP ${resp.status}` };
       }
+
       if (!resp.ok) {
         return { token: null, reasoningChars: 0, error: `HTTP ${resp.status}` };
       }
+
       const j = (await resp.json()) as {
         model?: unknown;
         choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
       };
+
       if (j.model !== undefined && j.model !== null && String(j.model) !== this.model) {
         return { token: null, reasoningChars: 0, error: "model-mismatch" };
       }
+
       const msg = j.choices?.[0]?.message;
       const token = msg?.content ?? null;
+
       if (token === null) {
         return { token: null, reasoningChars: msg?.reasoning_content?.length ?? 0, error: "invalid" };
       }
+
       return {
         token,
         reasoningChars: msg?.reasoning_content?.length ?? 0,
@@ -326,6 +353,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
       };
     } catch (err) {
       const aborted = err instanceof Error && err.name === "AbortError";
+
       return { token: null, reasoningChars: 0, error: aborted ? "timeout" : "network" };
     } finally {
       clearTimeout(timer);
@@ -339,15 +367,20 @@ class BonsaiIntentVerifier implements IntentVerifier {
     attempt: number,
   ): Promise<IntentCheck> {
     const t = Date.now();
+
     if (t - t0 >= this.timeoutMs) {
       return this.finish(null, "timeout", t0, "miss");
     }
+
     const a = await this.attempt(plannerText);
     const retryable = a.error !== null && RETRYABLE_ERRORS.has(a.error);
+
     if (retryable && attempt < 2 && Date.now() - t0 < this.timeoutMs) {
       await new Promise((r) => setTimeout(r, this.retryBackoffMs * (attempt + 1)));
+
       return this.internalVerify(plannerText, t0, attempt + 1);
     }
+
     return this.finish(a, a.error, t0, "miss");
   }
 
@@ -359,6 +392,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
     cache: IntentCache,
   ): IntentCheck {
     const decision: IntentDecision = authorizes(attempt) ? "EXECUTE" : "TEXT";
+
     return {
       decision,
       raw: attempt?.token ?? null,

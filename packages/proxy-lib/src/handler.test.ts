@@ -17,37 +17,46 @@ const scripted = {
 
 vi.mock("@m365-copilot/core", async (importActual) => {
   const actual = await importActual<typeof import("@m365-copilot/core")>();
+
   class FakeModelSession {
     turnCount = 0;
     conversationId = "handler-conversation";
     sessionId = "handler-session";
     newConversation() {}
     reset() {}
-    async refreshAgent() { return false; }
+    id = "m365";
+    supportsTools() { return true; }
+    describeModel(model: string) { return model; }
+    recoverFromRefusal(rebuild: (framing: "softened") => string) { return rebuild("softened"); }
+    async refreshTools() { return false; }
     async run(prompt: string) {
       scripted.prompts.push(prompt);
+
       if (scripted.fail) throw new Error("upstream failed");
       const text = scripted.text;
+
       return {
         fullText: text,
         hasContent: text.length > 0,
+        images: [],
         throttle: scripted.throttle,
-        contentOrigin: "GPT",
-        messageType: scripted.messageType,
-        messageId: "handler-message",
-        scores: null,
+        stopReason: scripted.messageType === "Disengaged" ? "refused" : text.length > 0 ? "completed" : "empty",
         turnCount: ++this.turnCount,
         turnState: "Completed",
         result: scripted.result,
+        usage: { content_origin: "GPT", message_type: scripted.messageType ?? undefined },
         async *[Symbol.asyncIterator]() { if (text) yield text; },
       };
     }
   }
+
   return { ...actual, ModelSession: FakeModelSession };
 });
 
 const { ChatCompletionRequest } = await import("./schemas.js");
+
 const { handleChatCompletion } = await import("./handler.js");
+
 const { SessionPool } = await import("./session-pool.js");
 
 function body(messages: Array<Record<string, unknown>>, extra: Record<string, unknown> = {}) {
@@ -111,6 +120,7 @@ describe("handler deterministic boundaries", () => {
     scripted.throttle = { current: 600, max: 600 };
     const core = await import("@m365-copilot/core");
     const emitSpy = vi.spyOn(core, "emitThrottleEvent");
+
     try {
       const response = await handleChatCompletion(body([{ role: "user", content: "task" }]), new SessionPool());
       expect(response.status).toBe(429);
@@ -130,11 +140,13 @@ describe("handler deterministic boundaries", () => {
     scripted.messageType = "Disengaged";
     const core = await import("@m365-copilot/core");
     const emitSpy = vi.spyOn(core, "emitThrottleEvent");
+
     try {
       const response = await handleChatCompletion(
         body([{ role: "user", content: "task" }], { tools: [{ type: "function", function: { name: "bash", description: "Run a command", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } } }] }),
         new SessionPool(),
       );
+
       expect(response.status).toBe(502);
       const events = emitSpy.mock.calls.map(([ev]) => ev);
       const retry = events.find((ev) => ev.event === "disengaged" && ev.retryOutcome === "softened-retry");
@@ -184,6 +196,7 @@ describe("handler deterministic boundaries", () => {
 
   it("maps upstream failures to 502", async () => {
     scripted.fail = true;
+
     try {
       const response = await handleChatCompletion(body([{ role: "user", content: "task" }]), new SessionPool());
       expect(response.status).toBe(502);
@@ -209,6 +222,7 @@ describe("handler deterministic boundaries", () => {
         },
       },
     };
+
     scripted.text = "```edit\npath: fixture.txt\n\n<<<<<<< SEARCH\nold\n=======\nnew\n>>>>>>> REPLACE\n```";
     scripted.prompts.length = 0;
     const pool = new SessionPool();
@@ -221,11 +235,13 @@ describe("handler deterministic boundaries", () => {
     expect(JSON.parse(firstJson.choices[0].message.tool_calls[0].function.arguments)).toEqual({ path: "fixture.txt", search: "old", replace: "new" });
 
     scripted.text = "done";
+
     const next = await handleChatCompletion(body([
       ...firstMessages,
       { role: "assistant", content: null, tool_calls: firstJson.choices[0].message.tool_calls },
       { role: "tool", tool_call_id: firstJson.choices[0].message.tool_calls[0].id, name: "apply_patch", content: "updated" },
     ], { tools: [editTool], conversation_id: "edit-test" }), pool);
+
     expect(next.status).toBe(200);
     expect(scripted.prompts[1]).toContain('<tool_response name="apply_patch"');
     expect(scripted.prompts[1]).toContain("<task_anchor>task</task_anchor>");

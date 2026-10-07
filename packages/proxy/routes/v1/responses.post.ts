@@ -3,10 +3,12 @@ import { pool } from "../../server-pool";
 
 export default defineEventHandler(async (event) => {
   let body;
+
   try {
     body = ResponsesRequest.parse(await readBody(event));
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
+
     return new Response(
       JSON.stringify({ error: { message, type: "invalid_request_error" } }),
       { status: 400, headers: { "Content-Type": "application/json" } },
@@ -16,12 +18,15 @@ export default defineEventHandler(async (event) => {
   const abortController = new AbortController();
   const request = event.node?.req;
   const response = event.node?.res;
+
   if (request && response) {
     let finished = false;
     response.once("finish", () => { finished = true; });
+
     const maybeAbort = () => {
       if (!finished && !response.writableEnded) abortController.abort();
     };
+
     request.once("close", maybeAbort);
     response.once("close", maybeAbort);
   }

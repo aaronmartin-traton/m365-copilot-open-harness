@@ -5,9 +5,11 @@ import { tmpdir } from "node:os";
 import { SessionStateStore, type PersistedSessionState } from "./session-store.js";
 
 const dirs: string[] = [];
+
 const store = () => {
   const dir = mkdtempSync(join(tmpdir(), "m365-session-store-"));
   dirs.push(dir);
+
   return { dir, state: new SessionStateStore(join(dir, "state.json")) };
 };
 

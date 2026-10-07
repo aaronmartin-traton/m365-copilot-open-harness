@@ -117,9 +117,11 @@ describe("client attestation gate", () => {
 
   it("prunes terminal candidates so the capacity cap does not wedge registration", () => {
     const gate = getAttestationGate()!;
+
     for (let i = 0; i < 1000; i++) {
       expect(gate.register("pi", bashCall(`bulk_${i}`, "echo x"))).toBe(true);
     }
+
     expect(gate.register("pi", bashCall("bulk_1000", "echo x"))).toBe(false); // cap reached
     // Consume + accept one candidate (terminal), then registration succeeds again.
     const consumed = request("bulk_0", "echo x", "nonce-prune-capacity-01");

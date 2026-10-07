@@ -1,11 +1,11 @@
 import {
   type ModelSessionOptions,
-  getAvailableModels,
   getDegradationBackoffState,
   getAgentAvailability,
   isDegradationBackoff,
   getThrottleEventCounts,
 } from "@m365-copilot/core";
+import { activeBackend, type BackendDescriptor } from "./backends.js";
 import { handleChatCompletion } from "./handler.js";
 import { SessionPool } from "./session-pool.js";
 import { ChatCompletionRequest } from "./schemas.js";
@@ -16,6 +16,7 @@ import {
 } from "./responses.js";
 
 export { handleChatCompletion } from "./handler.js";
+
 export {
   SessionPool,
   type ConversationState,
@@ -23,16 +24,30 @@ export {
   type RemoteConversationPruner,
   type SessionPoolOptions,
 } from "./session-pool.js";
+
 export { ChatCompletionRequest, ChatMessage, ToolCall, ToolDefinition } from "./schemas.js";
+
 export { ImageGenerationRequest, handleImageGeneration, type ImageGenerationBody } from "./images-generation.js";
+
+export {
+  activeBackend,
+  parseBackendId,
+  type BackendDescriptor,
+  type BackendId,
+} from "./backends.js";
+
 export { ResponsesRequest, handleResponse } from "./responses.js";
+
 export { RequestScheduler, SchedulerBusyError, type SchedulerStats } from "./scheduler.js";
+
 export {
   compileDelta,
   LOCAL_TOOL_REMINDER,
   type DeltaContextInput,
 } from "./context-compiler.js";
+
 export { buildUsage, type UsageInput } from "./usage-builder.js";
+
 export {
   jsonResponse,
   sseResponse,
@@ -41,16 +56,20 @@ export {
   schedulerBusyResponse,
   emptyResponseResponse,
 } from "./response-helpers.js";
+
 export { parseImageDataUrl, type ParsedImageInput } from "./images.js";
+
 export {
   SessionStateStore,
   type PersistedSessionState,
 } from "./session-store.js";
+
 export {
   ConversationPruneSelectorSchema,
   handleConversationPrune,
   type ConversationPruneRequest,
 } from "./pruning.js";
+
 export {
   AttestationRequestSchema,
   handleAttestationRequest,
@@ -78,7 +97,9 @@ export {
 
 export function buildHealthPayload(pool?: SessionPool, reaper?: { lastRunAt: number | null; pruned: number; failed: number; disabled?: boolean }) {
   const backoff = getDegradationBackoffState();
+
   return {
+    backend: activeBackend().id,
     status: "ok" as const,
     ...(pool ? pool.diagnostics() : {}),
     ...(reaper ? { reaper } : {}),
@@ -95,34 +116,25 @@ export function buildHealthPayload(pool?: SessionPool, reaper?: { lastRunAt: num
   };
 }
 
-// Window/output hints surfaced to harnesses on /v1/models so they can size
-// context packing and output expectations. These are ADVERTISED hints only — M365
-// enforces its own limits server-side; the number here just stops harnesses from
-// pre-truncating our prompts/output. Empirically (docs/hypotheses.md F9) M365 accepts
-// ≥500k tokens of input (retrieval-backed); the old ~3k output hint made harnesses
-// cap generation far below what a coding turn needs. Advertise a roomy 1M window +
-// 1M output (in line with modern large-context models) so nothing client-side clips.
-// Override via env.
-const CONTEXT_WINDOW_TOKENS = Number(process.env.M365_CONTEXT_WINDOW) || 1_000_000;
-const MAX_OUTPUT_TOKENS = Number(process.env.M365_MAX_OUTPUT_TOKENS) || 1_000_000;
 
-/** Build the OpenAI-compatible `GET /v1/models` payload. */
-export function buildModelsPayload() {
+/** Build the OpenAI-compatible `GET /v1/models` payload for the active backend. */
+export function buildModelsPayload(backend: BackendDescriptor = activeBackend()) {
   const created = Math.floor(Date.now() / 1000);
+
   return {
     object: "list",
-    data: getAvailableModels().map((id) => ({
+    data: backend.listModels().map((id) => ({
       id,
       object: "model",
       created,
-      owned_by: "microsoft",
+      owned_by: backend.ownedBy,
       // Non-standard but widely-read by OpenAI-compatible harnesses. Several
       // aliases because clients disagree on the key name. Unknown keys are
       // ignored by strict clients.
-      context_window: CONTEXT_WINDOW_TOKENS,
-      max_context_length: CONTEXT_WINDOW_TOKENS,
-      max_input_tokens: CONTEXT_WINDOW_TOKENS,
-      max_output_tokens: MAX_OUTPUT_TOKENS,
+      context_window: backend.contextWindowTokens,
+      max_context_length: backend.contextWindowTokens,
+      max_input_tokens: backend.contextWindowTokens,
+      max_output_tokens: backend.maxOutputTokens,
     })),
   };
 }
@@ -137,6 +149,7 @@ const CORS_HEADERS: Record<string, string> = {
 
 function withCors(res: Response): Response {
   for (const [k, v] of Object.entries(CORS_HEADERS)) res.headers.set(k, v);
+
   return res;
 }
 
@@ -163,7 +176,8 @@ interface FetchApp {
  * `buildModelsPayload` helpers.
  */
 export function createApp(sessionOptions: ModelSessionOptions = {}): FetchApp {
-  const pool = new SessionPool(sessionOptions);
+  const backend = activeBackend();
+  const pool = new SessionPool(sessionOptions, { createSession: backend.createSession });
 
   async function fetch(req: Request): Promise<Response> {
     const { pathname } = new URL(req.url);
@@ -183,6 +197,7 @@ export function createApp(sessionOptions: ModelSessionOptions = {}): FetchApp {
 
     if (method === "POST" && pathname === "/v1/chat/completions") {
       let body: ReturnType<typeof ChatCompletionRequest.parse>;
+
       try {
         body = ChatCompletionRequest.parse(await req.json());
       } catch (err: any) {
@@ -190,6 +205,7 @@ export function createApp(sessionOptions: ModelSessionOptions = {}): FetchApp {
           json(400, { error: { message: err.message, type: "invalid_request_error" } }),
         );
       }
+
       // req.signal aborts when the client disconnects → cancels the M365 turn.
       return withCors(await handleChatCompletion(body, pool, {
         signal: req.signal,
@@ -199,14 +215,17 @@ export function createApp(sessionOptions: ModelSessionOptions = {}): FetchApp {
 
     if (method === "POST" && pathname === "/v1/responses") {
       let body: ResponsesRequestBody;
+
       try {
         body = ResponsesRequest.parse(await req.json());
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
+
         return withCors(
           json(400, { error: { message, type: "invalid_request_error" } }),
         );
       }
+
       return withCors(await handleResponse(body, pool, {
         signal: req.signal,
         sessionKey: req.headers.get("x-m365-session-key") ?? undefined,

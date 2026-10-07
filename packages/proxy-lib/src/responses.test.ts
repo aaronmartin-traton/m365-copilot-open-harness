@@ -6,39 +6,48 @@ const scripted = {
   toolCalls: [] as Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>,
   prompts: [] as string[],
 };
+
 vi.mock("@m365-copilot/core", async (importActual) => {
   const actual = await importActual<typeof import("@m365-copilot/core")>();
+
   class FakeModelSession {
     turnCount = 0;
     conversationId = "response-conversation";
     sessionId = "response-session";
     newConversation() { this.conversationId = "response-conversation-2"; }
     reset() {}
-    async refreshAgent() { return false; }
+    id = "m365";
+    supportsTools() { return true; }
+    describeModel(model: string) { return model; }
+    recoverFromRefusal(rebuild: (framing: "softened") => string) { return rebuild("softened"); }
+    async refreshTools() { return false; }
     async run(prompt: string) {
       scripted.prompts.push(prompt);
+
       if (scripted.fail) throw new Error("upstream failed");
       const text = scripted.text;
+      const hasContent = text.length > 0 || scripted.toolCalls.length > 0;
+
       return {
         fullText: text,
-        hasContent: text.length > 0 || scripted.toolCalls.length > 0,
+        hasContent,
+        images: [],
         throttle: { current: 1, max: 600 },
-        contentOrigin: "GPT",
-        messageType: null,
-        messageId: "response-message",
-        scores: null,
+        stopReason: hasContent ? "completed" : "empty",
         turnCount: ++this.turnCount,
-        turnState: "Completed",
+        usage: { content_origin: "GPT" },
         async *[Symbol.asyncIterator]() {
           if (text) yield text;
         },
       };
     }
   }
+
   return { ...actual, ModelSession: FakeModelSession };
 });
 
 const { handleResponse, ResponsesRequest } = await import("./responses.js");
+
 const { SessionPool } = await import("./session-pool.js");
 
 function base(input: unknown, extra: Record<string, unknown> = {}) {
@@ -50,6 +59,7 @@ async function responseFor(input: unknown, extra: Record<string, unknown> = {}) 
   scripted.fail = false;
   scripted.prompts.length = 0;
   const response = await handleResponse(base(input, extra), new SessionPool());
+
   return { response, body: await response.json() as Record<string, unknown> };
 }
 
@@ -68,6 +78,7 @@ describe("Responses adapter conversion", () => {
         { type: "input_image", image_url: "data:image/png;base64,iVBORw0KGgo=" },
       ],
     }]);
+
     expect(scripted.prompts[0]).toContain("describe");
     expect(body.status).toBe("completed");
   });
@@ -77,6 +88,7 @@ describe("Responses adapter conversion", () => {
       { type: "function_call", call_id: "call-1", name: "lookup", arguments: "{\"q\":\"x\"}" },
       { type: "function_call_output", call_id: "call-1", output: "result" },
     ]);
+
     expect(scripted.prompts[0]).toContain("lookup");
     expect(scripted.prompts[0]).toContain("x");
     expect(body.id).toMatch(/^resp_/);
@@ -88,6 +100,7 @@ describe("Responses adapter conversion", () => {
         tools: [{ type: "function", name: "lookup", description: "look up", parameters: { type: "object" } }],
         tool_choice,
       });
+
       expect(response.status).toBe(200);
     }
   });
@@ -115,6 +128,7 @@ describe("Responses envelopes and streaming", () => {
 
   it("emits response.failed on an upstream error while preserving HTTP 200 SSE", async () => {
     scripted.fail = true;
+
     try {
       const response = await handleResponse(base("hello", { stream: true }), new SessionPool());
       const text = await response.text();

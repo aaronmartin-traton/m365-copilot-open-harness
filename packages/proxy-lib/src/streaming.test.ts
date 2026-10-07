@@ -6,25 +6,29 @@ const scripted: { deltas: string[]; fullText?: string } = { deltas: [] };
 
 vi.mock("@m365-copilot/core", async (importActual) => {
   const actual = await importActual<typeof import("@m365-copilot/core")>();
+
   class FakeModelSession {
     turnCount = 0;
     conversationId = "conv-test";
     reset() {}
     newConversation() { this.conversationId = "conv-test-2"; }
-    async refreshAgent() { return false; }
+    id = "m365";
+    supportsTools() { return true; }
+    describeModel(model: string) { return model; }
+    recoverFromRefusal(rebuild: (framing: "softened") => string) { return rebuild("softened"); }
+    async refreshTools() { return false; }
     async run() {
       const deltas = scripted.deltas;
       const full = scripted.fullText ?? deltas.join("");
+
       const stream = {
         fullText: full,
         hasContent: true,
+        images: [],
         throttle: { current: 1, max: 600 },
-        contentOrigin: "Claude",
-        messageType: null as string | null,
-        messageId: "m1",
-        scores: null,
+        stopReason: "completed" as const,
         turnCount: 1,
-        turnState: "Completed",
+        usage: { content_origin: "Claude" },
         async *[Symbol.asyncIterator]() {
           for (const d of deltas) {
             await Promise.resolve(); // yield to the event loop between deltas
@@ -32,9 +36,11 @@ vi.mock("@m365-copilot/core", async (importActual) => {
           }
         },
       };
+
       return stream;
     }
   }
+
   return { ...actual, ModelSession: FakeModelSession };
 });
 
@@ -44,24 +50,30 @@ const { handleChatCompletion, SessionPool, ChatCompletionRequest } = await impor
 async function streamContents(deltas: string[], fullText?: string): Promise<string[]> {
   scripted.deltas = deltas;
   scripted.fullText = fullText;
+
   const body = ChatCompletionRequest.parse({
     model: "m365-copilot",
     stream: true,
     messages: [{ role: "user", content: "hello" }],
   });
+
   const res = await handleChatCompletion(body, new SessionPool());
   expect(res.status).toBe(200);
   const text = await res.text();
 
   const contents: string[] = [];
+
   for (const line of text.split("\n")) {
     if (!line.startsWith("data: ")) continue;
     const payload = line.slice(6);
+
     if (payload === "[DONE]") continue;
     const chunk = JSON.parse(payload);
     const c = chunk.choices?.[0]?.delta?.content;
+
     if (typeof c === "string" && c.length > 0) contents.push(c);
   }
+
   return contents;
 }
 

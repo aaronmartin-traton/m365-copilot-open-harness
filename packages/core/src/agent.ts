@@ -9,16 +9,21 @@ import { z } from "zod";
 const log = createLogger("agent");
 
 const CONFIG_DIR = join(homedir(), ".config", "opencode-m365");
+
 const AGENT_CACHE_FILE = join(CONFIG_DIR, "agent-id.json");
 
 const POWERPLATFORM_SCOPES = ["https://api.powerplatform.com/.default"];
+
 const BAP_SCOPES = ["https://api.bap.microsoft.com/.default"];
+
 const BAP_API = "https://api.bap.microsoft.com";
 
 const AGENT_BASE_NAME = "m365-tool-agent";
+
 const AGENT_DESCRIPTION = "Auto-created agent for tool calling";
 
 let unavailableUntil = 0;
+
 let unavailableReason = "";
 
 function markUnavailable(reason: string): void {
@@ -47,6 +52,7 @@ export function getAgentAvailability() {
 function getInstructionsHash(): string {
   return createHash("sha256").update(getAgentInstructions()).digest("hex").slice(0, 8);
 }
+
 function getAgentName(): string {
   return `${AGENT_BASE_NAME}-${getInstructionsHash()}`;
 }
@@ -137,6 +143,7 @@ async function getEnvironmentUrl(bapToken: string, ppToken: string): Promise<str
   }
 
   return url;
+
 }
 
 interface CachedAgent {
@@ -149,6 +156,7 @@ interface CachedAgent {
 
 function loadCachedAgent(): CachedAgent | null {
   if (!existsSync(AGENT_CACHE_FILE)) return null;
+
   try {
     return JSON.parse(readFileSync(AGENT_CACHE_FILE, "utf-8"));
   } catch {
@@ -184,8 +192,10 @@ async function listBots(
     `${envUrl}/copilotstudio/minimalBots/api?api-version=2022-03-01-preview`,
     token,
   );
+
   if (!res.ok)
     throw new Error(`Failed to list bots: ${res.status} ${await res.text()}`);
+
   return z.array(z.object({ botId: z.string(), shortBotName: z.string() })).parse(await res.json());
 }
 
@@ -281,11 +291,15 @@ async function createBot(
 
   if (!res.ok)
     throw new Error(`Failed to create bot: ${res.status} ${await res.text()}`);
+
   const data = z.object({
     bot: z.object({ schemaName: z.string().optional(), cdsBotId: z.string().optional() }).optional(),
   }).parse(await res.json());
+
   const botId = data.bot?.schemaName || data.bot?.cdsBotId;
+
   if (!botId) throw new Error("Create bot response missing bot ID");
+
   return { botId };
 }
 
@@ -307,6 +321,7 @@ async function publishBot(
     throw new Error(`Failed to publish bot: ${res.status} ${await res.text()}`);
   const titleId = z.object({ TitleId: z.string().min(1) }).parse(await res.json()).TitleId;
   log.info(`Published agent: TitleId=${titleId}`);
+
   return titleId;
 }
 
@@ -329,10 +344,13 @@ export async function getOrCreateAgent(
   // (the "deleted-agent trap" — see docs/m365-copilot-api.md §10). The cache
   // would otherwise keep handing back the now-dead agent id.
   const cached = loadCachedAgent();
+
   if (!opts.forceRefresh && cached && cached.instructionsHash === wantHash) {
     log.info(`Using cached agent: ${cached.agentId} (instructions ${wantHash})`);
+
     return cached.agentId;
   }
+
   if (cached) {
     log.info(
       `Cached agent instructions stale (${cached.instructionsHash ?? "none"} != ${wantHash}), rebuilding`,
@@ -341,39 +359,50 @@ export async function getOrCreateAgent(
 
   if (Date.now() < unavailableUntil) {
     log.info(`Agent provisioning unavailable until ${new Date(unavailableUntil).toISOString()}: ${unavailableReason}`);
+
     return null;
   }
 
   // Need BAP token for environment discovery
   let bapToken: string | null;
+
   try { bapToken = await getTokenForScope(BAP_SCOPES); }
   catch (error: any) {
     markUnavailable(error?.message ?? "BAP token acquisition failed");
+
     return null;
   }
+
   if (!bapToken) {
     log.info("No BAP token available — skipping agent creation");
     markUnavailable("No BAP token available");
+
     return null;
   }
 
   // Need PowerPlatform token for Copilot Studio APIs
   let ppToken: string | null;
+
   try { ppToken = await getTokenForScope(POWERPLATFORM_SCOPES); }
   catch (error: any) {
     markUnavailable(error?.message ?? "PowerPlatform token acquisition failed");
+
     return null;
   }
+
   if (!ppToken) {
     log.info("No PowerPlatform token available — skipping agent creation");
     markUnavailable("No PowerPlatform token available");
+
     return null;
   }
 
   let envUrl: string;
+
   try { envUrl = await getEnvironmentUrl(bapToken, ppToken); }
   catch (error: any) {
     markUnavailable(error?.message ?? "PowerPlatform environment discovery failed");
+
     return null;
   }
 
@@ -384,6 +413,7 @@ export async function getOrCreateAgent(
     let botId: string | null = null;
 
     const existing = bots.find((b) => b.shortBotName === wantName);
+
     if (existing) {
       log.info(`Found existing agent ${wantName}: ${existing.botId}`);
       botId = existing.botId;
@@ -397,6 +427,7 @@ export async function getOrCreateAgent(
 
     // Publish to M365 Copilot and get the TitleId
     let titleId: string;
+
     try {
       titleId = await publishBot(envUrl, ppToken, botId);
     } catch (pubErr: any) {
@@ -416,6 +447,7 @@ export async function getOrCreateAgent(
       log.info(`Recreated agent: botId=${botId}`);
       titleId = await publishBot(envUrl, ppToken, botId);
     }
+
     const agentId = `${titleId}.${botId}.gpt.default`;
     log.info(`Full agent ID: ${agentId}`);
 
@@ -426,10 +458,12 @@ export async function getOrCreateAgent(
     saveCachedAgent({ agentId, botId, instructionsHash: wantHash, createdAt: new Date().toISOString() });
     unavailableUntil = 0;
     unavailableReason = "";
+
     return agentId;
   } catch (err: any) {
     log.error("Agent creation failed:", err.message, err.cause?.message || "");
     markUnavailable(err?.message ?? "Agent creation failed");
+
     return null;
   }
 }

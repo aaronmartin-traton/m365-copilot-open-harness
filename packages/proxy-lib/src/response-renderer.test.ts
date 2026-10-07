@@ -34,6 +34,7 @@ function args(over: Partial<RenderResponseArgs> = {}): RenderResponseArgs {
  * (skipping keepalive comments and [DONE]). */
 async function readSSE(resp: Response): Promise<{ text: string; events: Array<Record<string, any>> }> {
   const text = await resp.text();
+
   return {
     text,
     events: text
@@ -87,6 +88,7 @@ describe("renderResponse non-stream", () => {
     const a = args({
       produce: vi.fn(async () => ({ kind: "tools" as const, toolCalls: [bashCall] })),
     });
+
     const resp = await renderResponse(a);
     expect(resp.status).toBe(200);
     const body = await resp.json();
@@ -121,14 +123,18 @@ describe("renderResponse streaming", () => {
     const produce = vi.fn(async (onDelta?: (d: string) => void) => {
       onDelta?.("hel");
       onDelta?.("lo");
+
       return { kind: "text" as const, text: "hello" };
     });
+
     const a = args({ stream: true, produce });
     const resp = await renderResponse(a);
     const { events } = await readSSE(resp);
+
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
       .filter((c): c is string => typeof c === "string");
+
     expect(content).toEqual(["hel", "lo"]);
     // finalization must not re-emit the full text
     expect(content.join("")).toBe("hello");
@@ -140,14 +146,18 @@ describe("renderResponse streaming", () => {
   it("emits only the missing tail after live deltas", async () => {
     const produce = vi.fn(async (onDelta?: (d: string) => void) => {
       onDelta?.("hel");
+
       return { kind: "text" as const, text: "hello world" };
     });
+
     const a = args({ stream: true, produce });
     const resp = await renderResponse(a);
     const { events } = await readSSE(resp);
+
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
       .filter((c): c is string => typeof c === "string");
+
     expect(content).toEqual(["hel", "lo world"]);
     expect(content.some((c) => c === "hello world")).toBe(false);
   });
@@ -155,18 +165,24 @@ describe("renderResponse streaming", () => {
   it("suppresses live text passthrough in tool mode", async () => {
     const produce = vi.fn(async (onDelta?: (d: string) => void) => {
       expect(onDelta).toBeUndefined();
+
       return { kind: "tools" as const, toolCalls: [bashCall] };
     });
+
     const a = args({ stream: true, hasTools: true, produce });
     const resp = await renderResponse(a);
     const { events } = await readSSE(resp);
+
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
       .filter((c): c is string => typeof c === "string");
+
     expect(content).toHaveLength(0);
+
     const toolDeltas = events
       .map((e) => e.choices?.[0]?.delta?.tool_calls)
       .filter(Boolean);
+
     expect(toolDeltas.length).toBeGreaterThan(0);
     expect(toolDeltas[0][0].index).toBe(0);
     expect(toolDeltas[0][0].id).toBe("call_1");
@@ -181,11 +197,14 @@ describe("renderResponse streaming", () => {
       hasTools: true,
       produce: vi.fn(async () => ({ kind: "tools" as const, toolCalls: [bashCall, secondCall] })),
     });
+
     const resp = await renderResponse(a);
     const { events } = await readSSE(resp);
+
     const toolDeltas = events
       .flatMap((e) => (e.choices?.[0]?.delta?.tool_calls ?? []) as any[])
       .filter(Boolean);
+
     expect(toolDeltas.map((d) => d.index)).toEqual([0, 1]);
     expect(toolDeltas.map((d) => d.id)).toEqual(["call_1", "call_2"]);
     expect(toolDeltas.map((d) => d.function.name)).toEqual(["bash", "write_file"]);
@@ -215,10 +234,12 @@ describe("renderResponse streaming", () => {
 
   it("turns a produced error into an in-stream error event after HTTP 200", async () => {
     const errResp = jsonResponse(502, { error: { message: "upstream exploded", type: "whatever" } });
+
     const a = args({
       stream: true,
       produce: vi.fn(async () => ({ kind: "error" as const, resp: errResp })),
     });
+
     const resp = await renderResponse(a);
     expect(resp.status).toBe(200);
     const { text, events } = await readSSE(resp);
@@ -233,6 +254,7 @@ describe("renderResponse streaming", () => {
       stream: true,
       produce: vi.fn(async () => { throw new Error("boom"); }),
     });
+
     const resp = await renderResponse(a);
     expect(resp.status).toBe(200);
     const { text, events } = await readSSE(resp);
@@ -245,14 +267,18 @@ describe("renderResponse streaming", () => {
   it("does not duplicate a divergent live prefix", async () => {
     const produce = vi.fn(async (onDelta?: (d: string) => void) => {
       onDelta?.("hello");
+
       return { kind: "text" as const, text: "goodbye" };
     });
+
     const a = args({ stream: true, produce });
     const resp = await renderResponse(a);
     const { text, events } = await readSSE(resp);
+
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
       .filter((c): c is string => typeof c === "string");
+
     expect(content).toEqual(["hello"]);
     expect(content.some((c) => c.includes("goodbye"))).toBe(false);
     expect(events.filter((e) => e.choices?.[0]?.finish_reason != null)).toHaveLength(1);
@@ -263,9 +289,11 @@ describe("renderResponse streaming", () => {
     const a = args({ stream: true }); // default produce ignores the callback
     const resp = await renderResponse(a);
     const { events } = await readSSE(resp);
+
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
       .filter((c): c is string => typeof c === "string");
+
     expect(content).toEqual(["hello"]);
     expect(events.filter((e) => e.choices?.[0]?.finish_reason != null)).toHaveLength(1);
   });

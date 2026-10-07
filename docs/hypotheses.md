@@ -2501,3 +2501,112 @@ token within 2048) holds under LM Studio. local proxy runs set
 `M365_INTENT_VERIFIER_MODEL=bonsai-27b` (LM Studio identifier); the llama.cpp
 `--alias bonsai-27b-q1` path stays valid for the local machine. Functional on the local machine
 only — latency/safety parity must be re-verified on the target machine.
+
+---
+
+## 20. A non-M365 backend is a `ModelProvider`, not a fork (2026-10-05) — functional, live lane unproven
+
+**Status:** 🟡 partially tested. The seam and the ChatGPT Web backend are built
+and verified locally; the live lane has never touched chatgpt.com.
+
+### Hypothesis
+
+Everything in this repo above the transport was already backend-agnostic
+(OpenAI translation, fenced tool-call parsing, shell-routing, session pool,
+verifier). Only the *absence of a seam* made a second backend look like a
+rewrite. Introducing one interface — `ModelProvider`
+(`packages/core/src/provider.ts`) — is enough to add a backend.
+
+**Falsification criterion:** if wiring a second backend required changing
+`proxy-lib`'s OpenAI translation, tool parsing, or session bookkeeping — i.e.
+if the seam only worked for M365-shaped backends — the hypothesis fails.
+
+### Result: hypothesis holds
+
+The ChatGPT Web backend added **zero** changes to tool-call parsing, the
+response renderer, the scheduler, the verifier, or any of the openai wire
+translation. The M365-specific surface in `proxy-lib` shrank to zero: the
+refusal branch now reads `turn.stopReason === "refused"` and asks
+`session.recoverFromRefusal()`; the tone-derived tool-agent rule moved behind
+`session.supportsTools()`; `x_m365_*` telemetry became provider-namespaced
+(`x_<providerId>_*`).
+
+Evidence: 363 unit tests pass unchanged on the M365 lane, including
+`emits disengaged telemetry with framing and retry outcome`, which proves the
+F22 softened-retry still fires through the new seam.
+
+### Upstream `miuuyy/codex-chatgpt-web` supersedes the 2026-08-10 candidate list
+
+`.scratch/research/issues/chatgpt-web-provider/01-feasibility-evaluation.md`
+evaluated chat-only bridges and concluded the deciding limitation was **tool
+calling** — `guberm/chatgpt-web-provider` has no tool loop. That verdict is now
+outdated in one specific way: upstream (13.4k stars, MIT, TypeScript/Bun) is
+not a chat-only bridge. It routes ChatGPT into a harness two ways — prompt-driven
+browser mode, and an MCP connector over the official `openai/tunnel-client`
+whose tool calls execute locally. That is the same structural shape as our
+shell-routing, and it is what makes the lane credible.
+
+Pointer only; the durable finding is the seam. Details and the native-MCP
+follow-on: `.scratch/chatgpt-web-backend/spec.md`, tickets 01–04.
+
+### Two DOM facts that cost real debugging (n=2 captures, both upstream's)
+
+1. **Bind on the logical turn key, not display order.** History virtualization
+   renumbers visible positions, so "the last turn" is not an identity. Upstream
+   says the same thing about `conversation-turn-N` vs `data-turn-id`.
+2. **Turn-action-controls do NOT mean "finished".** Both the streaming and the
+   completed capture carry `.turn-action-controls`. The marker that actually
+   distinguishes them is `data-markdown-animated`, present on the assistant block
+   while generating and removed when it settles. Our first implementation read
+   controls and declared a streaming turn complete — caught by the fixture test,
+   not by inspection.
+
+Sample size is 2 (one capture per state, from a single account). Both are real
+ChatGPT renderings, not hand-written markup. Selector drift remains possible and
+the captured tests will *not* catch it — only a live run will.
+
+A third, found by adversarial review: **attribution must be per-candidate, not
+page-global.** Binding "the first new answer turn whose predecessor's bubble
+equals our prompt" is wrong when a stranger's exchange renders above ours —
+the last bubble on the page is still ours, so a page-global check passes while
+the first new answer is theirs. Each candidate turn is now attributed to a
+prompt on its own terms (its own bubble, or the new container immediately
+preceding it) and only an exact match may be bound.
+
+### Live lane: unproven
+
+**Not verified.** No ChatGPT account was used; every test runs against a local
+fake or a frozen capture. Unverified and therefore not claimed: Cloudflare
+behaviour from this workstation, selector drift against today's DOM, and whether
+a fenced bash block actually yields a tool loop from a ChatGPT Web model. See
+`.scratch/chatgpt-web-backend/issues/03`.
+
+## 21. MiniCPM-5-2B as the LOCAL tool-caller (2026-10-05) — ⚫ disproved as executor
+
+Evaluated as the local model that *writes* tool calls. Verdict: **DO-NOT-
+RECOMMEND**. Full write-up with primary sources:
+`.scratch/chatgpt-web-backend/issues/05-minicpm-5-2b-local-tool-caller.md`.
+
+Strongest reason: it emits **XML** tool calls
+(`<function name=…><param name=…>`, parsed by the vLLM/SGLang `minicpm5`
+parser), not the fenced ` ```bash ` blocks this stack routes. Coercing a 2B
+decoder into a format it was not trained for is the same class of dead end
+`docs/prompt-engineering.md` already records — and prompt framing provably
+cannot flip a turn-1 reflex.
+
+Secondary, and the reason the 8H gate matters: agentic-coding scores
+Terminal-Bench v2.1 **8.6**, SWE-bench Pro 14.4, tau3-Bench Banking 20.8. BFCL
+v4 66.6 is self-reported with no independent leaderboard entry found, and
+measures call *syntax*, not agentic competence. The official parser's own
+defensive code — U+0120 tag-collapse normalization, dropping invalid or
+duplicate params — is primary evidence that malformed calls occur at this scale.
+
+Footprint is not the objection: Apache-2.0, 131k context, and Q4_K_M at **1.56
+GB** from measured GGUF sizes (F16 5.04 GB, Q8_0 2.68 GB), so it fits the 8GB
+local machine and CPU-only.
+
+**Still worth a bench as a verifier candidate**, not an executor. The verifier's
+job is classification (`EXECUTE`/`TEXT`), it is a narrow task, and the 8H gate
+already fails closed — so a weak verifier degrades to "always TEXT", which is
+safe. The wiring is configuration only: `intent-verifier.ts` already speaks
+OpenAI chat-completions to an external endpoint.

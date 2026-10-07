@@ -25,6 +25,7 @@ export const ClassifierScore = z.object({
   component: z.string(),
   score: z.number(),
 });
+
 export const ContentGenerationProgress = z.object({
   contentType: z.string().optional(),
   size: z.string().optional(),

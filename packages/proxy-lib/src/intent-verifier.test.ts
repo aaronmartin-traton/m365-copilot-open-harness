@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 /** Capture logger.info calls so the F1 observability record is assertable. */
 const infoCalls: string[] = [];
+
 const loggerMock = vi.hoisted(() => ({
   createLogger: (component: string) => ({
     info: (...args: unknown[]) => {
@@ -14,6 +15,7 @@ const loggerMock = vi.hoisted(() => ({
     debug: () => {},
   }),
 }));
+
 vi.mock("@m365-copilot/core", () => loggerMock);
 
 import {
@@ -24,6 +26,7 @@ import {
 } from "./intent-verifier.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+
 const PROMPT_FILE = join(
   HERE,
   "..",
@@ -150,6 +153,7 @@ describe("intent-verifier — arbitration table (stub fetch)", () => {
     let calls = 0;
     stubFetch(async () => {
       calls++;
+
       return new Response("boom", { status: 500 });
     });
     const r = await getIntentVerifier()!.check("retry me");
@@ -214,6 +218,7 @@ describe("intent-verifier — chat_template_kwargs forwarding", () => {
     let sent: unknown = null;
     stubFetch(async (_url, init) => {
       sent = JSON.parse(String(init.body));
+
       return bodyEchoResponse();
     });
     await getIntentVerifier()!.check("kwargs please");
@@ -224,6 +229,7 @@ describe("intent-verifier — chat_template_kwargs forwarding", () => {
     let sent: unknown = null;
     stubFetch(async (_url, init) => {
       sent = JSON.parse(String(init.body));
+
       return bodyEchoResponse();
     });
     await getIntentVerifier()!.check("no kwargs");
@@ -279,6 +285,7 @@ describe("intent-verifier — cache", () => {
     const fetches = vi.fn().mockImplementation(() => tokenResponse("TEXT"));
     vi.stubGlobal("fetch", fetches);
     const v = getIntentVerifier()!;
+
     // 1001 distinct planner texts -> 1001 entries, first evicted
     for (let i = 0; i < 1001; i++) await v.check(`uniquetext-${i}`);
     expect(fetches).toHaveBeenCalledTimes(1001);
@@ -292,6 +299,7 @@ describe("intent-verifier — cache", () => {
     let calls = 0;
     stubFetch(() => {
       calls++;
+
       return tokenResponse(calls === 1 ? "EXECUTE" : "TEXT");
     });
     const v = getIntentVerifier()!;
@@ -325,6 +333,7 @@ describe("intent-verifier — concurrency & prompt guard", () => {
       maxActive = Math.max(maxActive, active);
       await new Promise((r) => setTimeout(r, 10));
       active--;
+
       return tokenResponse("TEXT");
     });
     const v = getIntentVerifier()!;
@@ -361,6 +370,7 @@ describe("intent-verifier — concurrency & prompt guard", () => {
     expect(r.decision).toBe("EXECUTE");
     const record = infoCalls.find((l) => l.includes("policyVersion=8h"));
     expect(record).toBeDefined();
+
     for (const field of [
       "model=",
       "policyVersion=8h",

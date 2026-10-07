@@ -28,6 +28,11 @@ against a live, undocumented, throttled API. It is not a normal SDK wrapper.
 | **8H fail-closed** | The approved policy: only verifier `EXECUTE` authorizes tool execution. Anything else (TEXT/UNCERTAIN/error/timeout) resolves to raw text. |
 | **optionsSets** | The server-side capability flags array in the chat payload. This repo historically sends `[]` — likely leaving capabilities off the table. |
 | **benchtop** | The quantitative benchmark (`scripts/bench/`): scores real agentic coding tasks in `--network none` sandboxes. |
+| **backend** | The model backend a turn runs against. Chosen by `PROVIDER`: `m365` (default) or `chatgpt-web`. |
+| **provider** | A backend's implementation of `ModelProvider` (`packages/core/src/provider.ts`). Owns its own refusal vocabulary, quota shape and telemetry, and maps them onto `ProviderTurn`. `ModelSession` is the M365 one; `ChatGptWebProvider` is the ChatGPT Web one. |
+| **turn** | One assistant reply from one backend. For M365 this is one WebSocket exchange; on ChatGPT Web it is one submitted composer message bound to its DOM turn. |
+| **turn key** | ChatGPT Web's logical id for a rendered exchange (`data-turn-key`). Bind on this, never on a display position — virtualized history renumbers what is on screen. |
+| **ChatGPT Web lane** | The opt-in browser-driven backend: headed Chromium against a signed-in chatgpt.com profile, no API key. See `.scratch/chatgpt-web-backend/spec.md`. |
 
 ## Decisions
 
@@ -39,6 +44,13 @@ against a live, undocumented, throttled API. It is not a normal SDK wrapper.
   `experiments/tool-decision/execution-intent/fail-closed-policy-8h.json`.
 - **JSON `{"tool":...}` tool format is dead.** Fenced + shell-routing is the
   only tool format (scored 0/5, removed).
+- **A second backend is behind `ModelProvider`, not a fork.** `proxy-lib` speaks
+  OpenAI in and OpenAI out; the backend sits behind one interface in
+  `packages/core/src/provider.ts`. Anything needing a second backend extends
+  that interface rather than forking the translation layer.
+- **ChatGPT Web is opt-in and ToS-constrained.** `PROVIDER=chatgpt-web` only,
+  never a default route, and headed — Cloudflare blocks headless Chromium. Use
+  your own account; account action is a real possibility.
 
 ## Where things live
 

@@ -3,6 +3,7 @@ import { pool } from "../../../server-pool";
 
 export default defineEventHandler(async (event) => {
   let body: ReturnType<typeof ImageGenerationRequest.parse>;
+
   try {
     body = ImageGenerationRequest.parse(await readBody(event));
   } catch (err: any) {
@@ -21,6 +22,7 @@ export default defineEventHandler(async (event) => {
   // response is ignored.
   const ac = new AbortController();
   const res = event.node?.res;
+
   if (res) {
     let finished = false;
     res.once("finish", () => { finished = true; });

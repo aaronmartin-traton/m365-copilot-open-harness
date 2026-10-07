@@ -6,14 +6,17 @@ function isLoopback(address: string | undefined): boolean {
 
 export default defineEventHandler(async (event) => {
   const loopback = isLoopback(event.node?.req.socket.remoteAddress);
+
   if (!loopback) return handleAttestationRequest(null, undefined, false);
 
   let body: unknown;
+
   try {
     body = await readBody(event);
   } catch {
     body = null;
   }
+
   return handleAttestationRequest(
     body,
     getHeader(event, "x-m365-attestation-sig") ?? undefined,

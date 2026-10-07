@@ -1,0 +1,29 @@
+{
+  "name": "@m365-copilot/chatgpt-web",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts"
+  },
+  "dependencies": {
+    "@m365-copilot/core": "workspace:*",
+    "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

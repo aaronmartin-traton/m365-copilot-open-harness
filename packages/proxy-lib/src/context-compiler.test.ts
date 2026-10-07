@@ -32,11 +32,13 @@ describe("compileDelta", () => {
 
   it("truncates oversized tool results via the shared bounded truncation", () => {
     const big = "x".repeat(20_000);
+
     const output = compileDelta({
       messages: [{ role: "tool", name: "bash", tool_call_id: "call-1", content: big }],
       taskAnchor: "task",
       hasTools: true,
     });
+
     expect(output.length).toBeLessThan(big.length + 400);
     expect(output).toContain("[tool output truncated:");
   });

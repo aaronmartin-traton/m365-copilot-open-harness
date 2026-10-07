@@ -6,12 +6,16 @@ import { dirname, join } from "node:path";
 import { createLogger } from "./log.js";
 
 const CLIENT_ID = "c0ab8ce9-e9a0-42e7-b064-33d422df41f1";
+
 const AUTHORITY = "https://login.microsoftonline.com/common";
+
 const REDIRECT_URI = "https://login.microsoftonline.com/common/oauth2/nativeclient";
+
 const SCOPES = [
   "https://substrate.office.com/sydney/M365Chat.Read",
   "https://substrate.office.com/sydney/sydney.readwrite",
 ];
+
 const IMAGE_ARTIFACT_SCOPES = ["https://designerappservice.officeapps.live.com/.default"];
 
 export function getImageArtifactToken(): Promise<string | null> {
@@ -19,10 +23,13 @@ export function getImageArtifactToken(): Promise<string | null> {
 }
 
 const log = createLogger("auth");
+
 const CONFIG_DIR = join(homedir(), ".config", "opencode-m365");
 
 mkdirSync(CONFIG_DIR, { recursive: true });
+
 const CACHE_FILE = process.env.M365_CACHE_FILE ?? join(CONFIG_DIR, "msal-cache.json");
+
 /** Playwright's persistent-context profile dir. The "cdp" suffix is legacy
  * (predates the playwright migration); renaming would orphan logged-in profiles. */
 export function getBrowserProfileDir(): string {
@@ -31,6 +38,7 @@ export function getBrowserProfileDir(): string {
 
 function loadCache(app: msal.PublicClientApplication): void {
   if (!existsSync(CACHE_FILE)) return;
+
   try {
     app.getTokenCache().deserialize(readFileSync(CACHE_FILE, "utf-8"));
   } catch (error: unknown) {
@@ -56,6 +64,7 @@ function getApp(): msal.PublicClientApplication {
     });
     loadCache(appInstance);
   }
+
   return appInstance;
 }
 
@@ -75,12 +84,15 @@ export interface AuthCodeEventSource {
  */
 export function extractAuthCode(url: string): string | null {
   let parsed: URL;
+
   try {
     parsed = new URL(url);
   } catch {
     return null;
   }
+
   if (!parsed.pathname.includes("/oauth2/nativeclient")) return null;
+
   return parsed.searchParams.get("code");
 }
 
@@ -94,17 +106,21 @@ export function waitForAuthCode(
   timeoutMs = 900_000,
 ): Promise<string> {
   const code = Promise.withResolvers<string>();
+
   const timer = setTimeout(() => {
     unsubscribe();
     code.reject(new Error("Timed out waiting for Microsoft login"));
   }, timeoutMs);
+
   const unsubscribe = source.on("request", (request) => {
     const authCode = extractAuthCode(request.url());
+
     if (!authCode) return;
     clearTimeout(timer);
     unsubscribe();
     code.resolve(authCode);
   });
+
   return code.promise;
 }
 
@@ -133,6 +149,7 @@ export async function loginInteractive(
   const app = getApp();
   const cryptoProvider = new msal.CryptoProvider();
   const { verifier, challenge } = await cryptoProvider.generatePkceCodes();
+
   const authUrl = await app.getAuthCodeUrl({
     scopes,
     redirectUri: REDIRECT_URI,
@@ -146,14 +163,18 @@ export async function loginInteractive(
     ...(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {}),
     args: ["--no-first-run", "--no-default-browser-check"],
   });
+
   try {
     const page = context.pages()[0] ?? (await context.newPage());
+
     const source: AuthCodeEventSource = {
       on: (event, handler) => {
         page.on(event, handler);
+
         return () => page.off(event, handler);
       },
     };
+
     const authCode = waitForAuthCode(source);
     let codeArrived = false;
     // Navigate without blocking the flow; the code promise (15-min timeout) governs.
@@ -170,14 +191,17 @@ export async function loginInteractive(
     onAuthUrl(authUrl);
     const code = await authCode;
     codeArrived = true;
+
     const result = await app.acquireTokenByCode({
       code,
       scopes,
       redirectUri: REDIRECT_URI,
       codeVerifier: verifier,
     });
+
     saveCache(app);
     log.info(`Interactive login succeeded as ${result.account?.username ?? "unknown account"}`);
+
     return result.accessToken;
   } finally {
     await context.close();
@@ -187,14 +211,17 @@ export async function loginInteractive(
 async function acquireSilent(scopes: string[]): Promise<string | null> {
   const app = getApp();
   const accounts = await app.getTokenCache().getAllAccounts();
+
   if (accounts.length === 0) return null;
 
   try {
     const result = await app.acquireTokenSilent({ scopes, account: accounts[0] });
     saveCache(app);
+
     return result.accessToken;
   } catch (error: unknown) {
     log.info(`Silent token acquisition failed: ${error instanceof Error ? error.message : String(error)}`);
+
     return null;
   }
 }
@@ -205,11 +232,13 @@ export function getTokenSilent(): Promise<string | null> {
 
 export async function getTokenForScope(scopes: string[]): Promise<string | null> {
   const token = await acquireSilent(scopes);
+
   if (token || !canPromptForInteractiveApproval()) return token;
 
   log.info(
     `No cached token for [${scopes.join(", ")}]; opening interactive approval`,
   );
+
   return loginInteractive(scopes);
 }
 
@@ -219,8 +248,10 @@ function forceReauth(): Promise<boolean> {
   return (inflightReauth ??= getTokenSilent()
     .then(async (token) => {
       if (token) return true;
+
       if (!canPromptForInteractiveApproval()) return false;
       await loginInteractive(SCOPES);
+
       return true;
     })
     .catch((error: unknown) => {
@@ -229,6 +260,7 @@ function forceReauth(): Promise<boolean> {
           error instanceof Error ? error.message : String(error)
         }`,
       );
+
       return false;
     })
     .finally(() => {
@@ -242,10 +274,13 @@ export function getToken(): Promise<string> {
   return (inflightToken ??= getTokenSilent()
     .then(async (token) => {
       if (token) return token;
+
       if (canPromptForInteractiveApproval()) {
         log.info("No cached Microsoft token; opening interactive approval");
+
         return loginInteractive(SCOPES);
       }
+
       throw new Error(
         "No cached Microsoft token. Run m365-login interactively, or set M365_ENABLE_INTERACTIVE_APPROVAL=1 to allow a visible browser sign-in. M365_NO_INTERACTIVE=1 vetoes that fallback.",
       );

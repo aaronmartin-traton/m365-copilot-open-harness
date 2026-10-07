@@ -6,12 +6,15 @@ import {foldStreamText, cursorMessageId, TurnTextComposer} from "./session.js";
 function replay(frames: Array<{ d: string } | { s: string }>) {
   let answer = "";
   const emitted: string[] = [];
+
   for (const f of frames) {
     const next = "d" in f ? answer + f.d : f.s;
     const r = foldStreamText(answer, next);
     answer = r.answer;
+
     if (r.emit) emitted.push(r.emit);
   }
+
   return { emitted, streamed: emitted.join(""), answer };
 }
 
@@ -29,6 +32,7 @@ describe("foldStreamText", () => {
       { d: "\nbeta" },
       { d: "\ngamma" },
     ]);
+
     expect(r.streamed).toBe("alpha\nbeta\ngamma");
     expect(r.answer).toBe("alpha\nbeta\ngamma");
   });

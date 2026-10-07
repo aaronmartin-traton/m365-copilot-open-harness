@@ -84,6 +84,7 @@ export function schedulerBusyResponse(error: { message: string; retryAfterSecond
  */
 export function emptyResponseResponse(throttle: { current: number; max: number } | null): Response {
   const detail = throttle ? ` (throttle ${throttle.current}/${throttle.max})` : "";
+
   return jsonResponse(502, {
     error: {
       message: `M365 Copilot returned an empty response${detail} — likely a content filter, an invalid agent/session, or a transient upstream error.`,

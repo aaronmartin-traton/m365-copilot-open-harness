@@ -24,6 +24,7 @@ describe("disabled OpenClaw compatibility tombstone", () => {
       proxy: ProxyHandle;
       config: OpenClawConfig;
     }> = startForOpenClaw;
+
     expect(starter).toBe(startForOpenClaw);
     await expect(starter()).rejects.toBeInstanceOf(OpenClawDisabledError);
     await expect(starter({ port: 0 })).rejects.toThrow(OPENCLAW_DISABLED_MESSAGE);

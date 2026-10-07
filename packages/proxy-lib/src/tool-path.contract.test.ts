@@ -32,6 +32,7 @@ function narrow<T extends ToolPathResult["kind"]>(
   kind: T,
 ): Extract<ToolPathResult, { kind: T }> {
   expect(r.kind).toBe(kind);
+
   return r as Extract<ToolPathResult, { kind: T }>;
 }
 
@@ -54,8 +55,10 @@ const INITIAL_PROMPT = "fix the bug";
 /** One fake turn: runTurn resolves exactly once with `fullText`, then never again. */
 function fakeTurn(fullText: string) {
   const runTurn = vi.fn().mockResolvedValue({ fullText });
+
   return runTurn;
 }
+
 function depsLike(runTurn: ReturnType<typeof fakeTurn>, extra: Partial<ToolPathDeps> = {}) {
   return {
     runTurn,
@@ -147,6 +150,7 @@ describe("produceToolPath contract — translate, do not infer", () => {
       type: "function",
       function: { name: "reply", description: "plain answer", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
     };
+
     const runTurn = fakeTurn("```reply\ndone\n```");
     const r = narrow(await produceToolPath(INITIAL_PROMPT, depsLike(runTurn, { tools: [replyTool] })), "text");
     expect(r.text).toBe("done");
@@ -254,6 +258,7 @@ describe("produceToolPath contract — batching and mixed output", () => {
       type: "function",
       function: { name: "reply", description: "plain answer", parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } },
     };
+
     const runTurn = fakeTurn("```reply\nall done\n```\n```read_file\npath: src/index.ts\n```");
     const deps = depsLike(runTurn, { tools: [replyTool, readTool] });
     const r = narrow(await produceToolPath(INITIAL_PROMPT, deps), "tools");

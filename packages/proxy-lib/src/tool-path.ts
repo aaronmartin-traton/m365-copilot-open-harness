@@ -159,6 +159,7 @@ export async function produceToolPath(
 
   // Initial turn — the handler has already compiled the prompt.
   const initial = await runTurn(initialPrompt);
+
   if ("error" in initial) return { kind: "error", resp: initial.error };
   markSent(messages.length);
 
@@ -177,6 +178,7 @@ export async function produceToolPath(
   }
   let parsed = parseToolCalls(fullText, tools);
   log.info(`Parse result: hasToolCalls=${parsed.hasToolCalls}, count=${parsed.toolCalls.length}`);
+
   // Document guard: the shell-routing parser turns every ```bash block into a
   // tool call, so a model that ANSWERS with a markdown document full of code
   // fences (e.g. "here's a simplified README") would get its own answer executed
@@ -194,6 +196,7 @@ export async function produceToolPath(
   // This enforces the "output ONLY a tool call" contract.
   if (parsed.hasToolCalls && parsed.textContent) {
     const extraText = parsed.textContent.trim();
+
     if (extraText.length > 0) {
       log.info(`Mixed output detected (${extraText.length} chars of text alongside ${parsed.toolCalls.length} tool calls), stripping text`);
       // Strip the text — the tool calls are what the client needs.
@@ -210,13 +213,16 @@ export async function produceToolPath(
 
     if (replyCall && realToolCalls.length === 0) {
       let replyText: string;
+
       try {
         const args = JSON.parse(replyCall.function.arguments);
         replyText = args.text || args.message || args.content || fullText;
       } catch {
         replyText = fullText;
       }
+
       log.info("Reply tool detected, converting to text response");
+
       return { kind: "text", text: replyText };
     }
 
@@ -244,14 +250,17 @@ export async function produceToolPath(
   // preserved byte-for-byte when M365_STEERING is unset.
   if (process.env.M365_STEERING === "1" && parsed.hasToolCalls && parsed.toolCalls.length > 0) {
     const fp = deps.steeringFingerprint?.();
+
     if (!fp || fp === "unsteered") {
       log.info(`Steering ladder active but response is unsteered (${fp ?? "no fingerprint"}), returning raw text instead of ${parsed.toolCalls.length} tool call(s)`);
+
       return { kind: "text", text: fullText };
     }
   }
 
   if (parsed.hasToolCalls && parsed.toolCalls.length > 0) {
     registerToolCalls(parsed.toolCalls);
+
     return {
       kind: "tools",
       toolCalls: parsed.toolCalls,
@@ -262,5 +271,6 @@ export async function produceToolPath(
       ),
     };
   }
+
   return { kind: "text", text: fullText };
 }

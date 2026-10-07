@@ -2,8 +2,9 @@ import { getToken } from "./auth.js";
 import { getOrCreateAgent } from "./agent.js";
 import { CopilotSession } from "./session.js";
 import { createLogger, trunc } from "./log.js";
-import type { CopilotStream } from "./copilot.js";
+import { getAvailableModels, getToneForModel } from "./copilot.js";
 import type { ImageInput } from "./images.js";
+import type { ModelProvider, ProviderTurn } from "./provider.js";
 
 const log = createLogger("model");
 
@@ -28,7 +29,7 @@ export interface ModelSessionOptions {
  * reconnections so M365 finds the existing server-side conversation
  * instead of creating a new one.
  */
-export class ModelSession {
+export class ModelSession implements ModelProvider {
   private resolveToken: () => Promise<string>;
   private useAgent: boolean;
   private copilotSession: CopilotSession | null = null;
@@ -63,6 +64,52 @@ export class ModelSession {
   /** Number of turns completed in this session */
   get turnCount(): number {
     return this.copilotSession?.turnCount ?? this.persistedTurnCount;
+  }
+
+  /** Namespaces this backend's `usage` keys (`x_m365_*`). */
+  get id(): string { return "m365"; }
+
+  readonly refusalHint =
+    "M365 Copilot disengaged from this request (its safety filter declined to answer). "
+    + "Common causes: too many tools, jailbreak-shaped instructions, or pairing a non-default "
+    + "model with the tool agent. Reduce the toolset or use the default model.";
+
+  listModels(): string[] { return getAvailableModels(); }
+
+  /** M365 routes by tone, so the tone is the honest model name to log. */
+  describeModel(model: string): string { return getToneForModel(model); }
+
+  /**
+   * Claude tones tool-call reliably AGENT-LESS (probe: 4/4 ```bash, 0 disengage)
+   * and self-ID as Claude Sonnet 4.5; the declarative agent would override the
+   * tone back to GPT-5 (H8.6) AND add jailbreak-shape signal. The GPT chat
+   * model, by contrast, won't tool-call agent-less (0/4) so it still needs the
+   * agent. So: attach the tool agent EXCEPT on Claude tones. `M365_FORCE_AGENT=1`
+   * restores the old always-agent behaviour.
+   *
+   * Derived from the RESOLVED tone, not the raw model string: getToneForModel
+   * routes any unmapped `claude-*` (e.g. the `claude-opus-4-8[1m]` a Claude Code
+   * client sends) to Claude_Sonnet, which keeps that request on the working
+   * agent-less path. One resolved tone drives both decisions.
+   */
+  supportsTools(model: string): boolean {
+    return process.env.M365_FORCE_AGENT === "1" || !/^Claude_/i.test(getToneForModel(model));
+  }
+
+  /**
+   * F22: the default framing's override-shape language occasionally trips Azure
+   * Prompt Shields (jailbreak classifier) on benign requests (e.g. "replace X
+   * with Y, leave everything else unchanged"). Retry ONCE with the low-override
+   * `softened` framing, and in a FRESH conversation — a Disengaged conversation
+   * stays Disengaged, so a clean retry on the same ConversationId keeps
+   * refusing. Drops the worst-case disengage ~100%→~4% (docs §10 F22).
+   * Off via M365_NO_DISENGAGE_RETRY.
+   */
+  recoverFromRefusal(rebuild: (framing: "softened") => string): string | null {
+    if (process.env.M365_NO_DISENGAGE_RETRY) return null;
+    this.newConversation();
+
+    return rebuild("softened");
   }
 
   /** Agent id baked into the current copilotSession (undefined = no agent). */
@@ -102,7 +149,7 @@ export class ModelSession {
     signal?: AbortSignal,
     useAgent: boolean = true,
     images: ImageInput[] = [],
-  ): Promise<CopilotStream> {
+  ): Promise<ProviderTurn> {
     const token = await this.resolveToken();
     const wantAgent = this.useAgent && useAgent;
 
@@ -110,12 +157,14 @@ export class ModelSession {
     if (wantAgent && this.cachedAgentId === undefined) {
       try {
         this.cachedAgentId = await getOrCreateAgent();
+
         if (this.cachedAgentId) log.info(`Using agent: ${this.cachedAgentId}`);
         else log.info("No agent available");
       } catch {
         this.cachedAgentId = null;
       }
     }
+
     const agentForTurn = wantAgent ? (this.cachedAgentId ?? undefined) : undefined;
     // A tool-enabled turn must not be swallowed by M365's hosted `/mnt/data`
     // interpreter when agent provisioning is unavailable. Leave it enabled only
@@ -145,6 +194,7 @@ export class ModelSession {
       log.info("Session error, reconnecting:", err instanceof Error ? err.message : String(err));
       this.copilotSession = this.createCopilotSession(agentForTurn, enableCodeInterpreter);
       this.currentAgentId = agentForTurn;
+
       return await this.copilotSession.chat(token, text, model, signal, images, turnOptions);
     }
   }
@@ -160,21 +210,25 @@ export class ModelSession {
    * the session was dropped to reconnect), so the caller can resend the original
    * prompt to the fresh agent.
    */
-  async refreshAgent(): Promise<boolean> {
+  async refreshTools(): Promise<boolean> {
     if (!this.useAgent) return false;
+
     try {
       const fresh = await getOrCreateAgent({ forceRefresh: true });
+
       if (fresh !== this.cachedAgentId) {
         log.info(`Agent refreshed: ${this.cachedAgentId ?? "none"} -> ${fresh ?? "none"}`);
         this.cachedAgentId = fresh;
         this.persistedTurnCount = this.turnCount;
         this.copilotSession = null; // reconnect so the new agent id takes effect
         this.currentAgentId = undefined;
+
         return true;
       }
     } catch (err: any) {
       log.info(`Agent refresh failed: ${err.message}`);
     }
+
     return false;
   }
 

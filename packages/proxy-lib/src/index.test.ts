@@ -76,9 +76,11 @@ describe.skipIf(!LIVE)("proxy-lib e2e with tools (live)", () => {
 
       // Simulate tool execution
       let toolResult: string;
+
       if (toolCall.function.name === "bash") {
         const args = JSON.parse(toolCall.function.arguments);
         const { execSync } = await import("node:child_process");
+
         try {
           toolResult = execSync(args.command, { cwd: process.cwd(), encoding: "utf-8" }).trim();
         } catch (e: any) {
@@ -87,6 +89,7 @@ describe.skipIf(!LIVE)("proxy-lib e2e with tools (live)", () => {
       } else if (toolCall.function.name === "read_file") {
         const args = JSON.parse(toolCall.function.arguments);
         const { readFileSync } = await import("node:fs");
+
         try {
           toolResult = readFileSync(args.path, "utf-8");
         } catch (e: any) {
@@ -95,6 +98,7 @@ describe.skipIf(!LIVE)("proxy-lib e2e with tools (live)", () => {
       } else {
         toolResult = `Unknown tool: ${toolCall.function.name}`;
       }
+
       console.log("Tool result:", toolResult.slice(0, 500));
 
       // Turn 2: send tool result back

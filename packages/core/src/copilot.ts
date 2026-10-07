@@ -1,11 +1,14 @@
 import { JwtClaims } from "./schemas.js";
+import type { ProviderStopReason, ProviderTurn, ProviderUsage, ProviderUsageValue, TurnResult } from "./provider.js";
+
+export type { TurnResult };
 
 // Model name → tone mapping.
 // The server VALIDATES tones (an unknown tone errors with "Failed to invoke
 // 'Chat'"), so every entry here has been confirmed accepted against the live
 // API. Claude tones self-identify as "Claude Sonnet 4.5, by Anthropic"
 // (docs/hypotheses.md H8.6) — a genuine non-Microsoft model at zero marginal cost.
-const MODEL_TONES: Record<string, string> = {
+const MODEL_TONES = {
   // Default
   "m365-copilot": "magic",
   "auto": "magic",
@@ -43,11 +46,15 @@ const MODEL_TONES: Record<string, string> = {
   "gpt-5.2": "Gpt_5_2_Quick",
   "gpt-5.2-quick": "Gpt_5_2_Quick",
   "gpt-5.2-think-deeper": "Gpt_5_2_Reasoning",
-};
+} satisfies Record<string, string>;
+
+const TONE_BY_MODEL = new Map<string, string>(Object.entries(MODEL_TONES));
 
 export function getToneForModel(model: string): string {
-  const exact = MODEL_TONES[model];
+  const exact = TONE_BY_MODEL.get(model);
+
   if (exact) return exact;
+
   // Unmapped `claude-*` strings (e.g. the `claude-opus-4-8[1m]` a Claude Code client
   // sends) must NOT fall back to the `magic` (GPT) tone. Empirically (route-probe,
   // 2026-07-07) the magic path does not tool-call right now — 0/2, confabulates
@@ -56,6 +63,7 @@ export function getToneForModel(model: string): string {
   // rather than silently serving GPT under a Claude name and landing in the
   // confabulation quadrant. (getAvailableModels still only advertises the exact keys.)
   if (/^claude/i.test(model)) return "Claude_Sonnet";
+
   return MODEL_TONES["m365-copilot"];
 }
 
@@ -67,40 +75,19 @@ export function decodeJwt(token: string) {
   const payload = token.split(".")[1];
   const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
   const raw = JSON.parse(Buffer.from(padded, "base64").toString());
-  return JwtClaims.parse(raw);
-}
 
-/** One generated image carried by a GraphicArt progress frame. */
-export interface CapturedImage {
-  referenceUrls: string[];
-  fileToken?: string;
-  pollUrl?: string;
-  size?: string;
-  orientation?: string;
-  status?: number;
+  return JwtClaims.parse(raw);
 }
 
 /**
  * The streaming result of one M365 Copilot turn. Implemented by
  * CopilotSession.chat (session.ts); async-iterate it for delta text and read
  * the getters for the turn's diagnostic metadata after it completes.
+ *
+ * The generic contract (text, images, quota, stopReason, telemetry) lives in
+ * ProviderTurn; everything declared here on top is M365's own vocabulary.
  */
-/** The server's verdict on one turn (final type:2 item `result`). */
-export interface TurnResult {
-  value: string;
-  errorCode?: string;
-  message?: string;
-}
-
-export interface CopilotStream {
-  [Symbol.asyncIterator](): AsyncIterator<string>;
-  fullText: string;
-  /** Generated images captured during this turn. */
-  images: CapturedImage[];
-  /** True if the server returned content (deltas or full text) */
-  hasContent: boolean;
-  /** Throttle info if provided by M365 */
-  throttle: { current: number; max: number } | null;
+export interface CopilotStream extends ProviderTurn {
   /** `DeepLeo` (reasoning) / `3PDeclarativeAgent` (agent) / etc.  */
   contentOrigin?: string | null;
   /** Last seen messageType (e.g. `Disengaged`, `EndOfRequest`). Null when M365 sends an unmistakably content message. */
@@ -110,18 +97,82 @@ export interface CopilotStream {
   /** Per-message classifier scores from M365 (BotOffense / dea_violation).
    *  Highest values across the response. Drives the "how close to Disengaged are we" metric. */
   scores?: Record<string, number> | null;
-  /** Authoritative server-side turn count for this conversation. */
-  turnCount?: number | null;
   /** `Completed` etc. */
   turnState?: string | null;
-  /**
-   * The final type:2 item's `result`. Normally `{value: "Success"}`. When the
-   * account is rate-limited it is `{value: "Throttled", errorCode:
-   * "PerUserThrottled", message}` and the turn has no content frames.
-   */
-  result?: TurnResult | null;
   /** True if the model triggered a native custom action this turn (H-NATIVE-6). */
   sawAction?: boolean;
   /** Steering-ladder fingerprint (ticket 02): `unsteered` | `steered:channel=…`. */
   steeringFingerprint?: string;
+}
+
+/** Map M365's per-turn telemetry onto the generic `usage` vocabulary. */
+export function m365UsageFields(stream: {
+  throttle: { current: number; max: number } | null;
+  contentOrigin?: string | null;
+  messageType?: string | null;
+  scores?: Record<string, number> | null;
+  turnCount?: number | null;
+  tone?: string;
+  steeringFingerprint?: string;
+}): ProviderUsage {
+  const fields: Record<string, ProviderUsageValue> = {};
+
+  if (stream.tone) fields.tone = stream.tone;
+
+  if (stream.throttle) {
+    fields.conversation_messages = stream.throttle.current;
+    fields.conversation_max = stream.throttle.max;
+    fields.conversation_pct = Math.min(100, Math.round((stream.throttle.current / stream.throttle.max) * 100));
+    fields.conversation_remaining = Math.max(0, stream.throttle.max - stream.throttle.current);
+  }
+
+  if (stream.contentOrigin) fields.content_origin = stream.contentOrigin;
+
+  if (stream.messageType) fields.message_type = stream.messageType;
+
+  if (stream.turnCount !== null && stream.turnCount !== undefined) {
+    fields.turn_count = stream.turnCount;
+  }
+
+  if (stream.steeringFingerprint) fields.system_fingerprint = stream.steeringFingerprint;
+
+  // Disengaged-classifier scores. Empirically: clean tool calls sit at
+  // ~1e-13 / ~1e-8, jailbreak-shaped prompts climb to ~1e-3 / ~1e-3. The
+  // `dea_violation` component is the one that actually correlates with the
+  // Disengaged filter firing — surface that explicitly so clients can monitor
+  // their proximity to the threshold.
+  if (stream.scores) {
+    // `ProviderUsage` values are scalars, so the score map is serialized
+    // rather than nested. The individual components clients actually alert on
+    // are lifted out alongside it.
+    fields.classifier_scores = JSON.stringify(stream.scores);
+
+    const { dea_violation: deaScore, BotOffense: offenseScore } = stream.scores;
+
+    if (deaScore !== undefined) fields.dea_score = deaScore;
+
+    if (offenseScore !== undefined) fields.offense_score = offenseScore;
+  }
+
+  return fields;
+}
+
+/**
+ * Map M365's frame vocabulary onto the generic stop reasons. A `Disengaged` is
+ * a deliberate safety refusal; an exhausted per-conversation quota is rate
+ * limiting; any other contentless turn is an unexplained empty worth a brief
+ * retry.
+ */
+export function m365StopReason(
+  messageType: string | null,
+  hasContent: boolean,
+  throttle: { current: number; max: number } | null,
+): ProviderStopReason {
+  if (hasContent) return "completed";
+
+  if (messageType === "Disengaged") return "refused";
+
+  if (throttle && throttle.current >= throttle.max) return "rate_limited";
+
+  return "empty";
 }

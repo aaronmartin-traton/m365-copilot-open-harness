@@ -85,6 +85,7 @@ describe("parseToolCalls", () => {
         parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] },
       },
     };
+
     const result = parseToolCalls('```container.exec\nls -la\n```', [shell]);
     expect(result.toolCalls[0].function.name).toBe("run_command");
   });
@@ -146,6 +147,7 @@ describe("M365_INJECT_REPLY_TOOL", () => {
   // Lazily import formatMessages so we pick up the env var per test.
   async function importFormat() {
     const mod = await import("./tools.js");
+
     return mod.formatMessages;
   }
 
@@ -159,6 +161,7 @@ describe("M365_INJECT_REPLY_TOOL", () => {
       },
     },
   ];
+
   const userMsg = [{ role: "user" as const, content: "do a thing" }];
 
   it("does NOT inject the reply tool when the env var is unset", async () => {
@@ -181,6 +184,7 @@ describe("M365_INJECT_REPLY_TOOL", () => {
   it("doesn't double-inject a reply tool already provided by the caller", async () => {
     process.env.M365_INJECT_REPLY_TOOL = "1";
     const fmt = await importFormat();
+
     const callerReply = {
       type: "function" as const,
       function: {
@@ -189,6 +193,7 @@ describe("M365_INJECT_REPLY_TOOL", () => {
         parameters: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
       },
     };
+
     const out = fmt(userMsg, [callerReply, ...sampleTools]);
     // Exactly one fenced template for the reply tool
     const matches = out.match(/```reply/g) ?? [];
@@ -233,6 +238,7 @@ describe("isProseDocument (don't execute a written document's code fences)", () 
     type: "function" as const,
     function: { name: "bash", description: "run", parameters: { type: "object", properties: { command: { type: "string" } }, required: ["command"] } },
   }];
+
   const parse = (t: string) => parseToolCalls(t, bashTool);
 
   it("flags a markdown answer full of ```bash fences as a document", () => {
@@ -251,6 +257,7 @@ bun install && bun run build
 bun run proxy 4141
 \`\`\`
 That should be everything you need to get going quickly.`;
+
     expect(isProseDocument(parse(readme))).toBe(true);
   });
 
@@ -355,6 +362,7 @@ describe("tool-result labelling", () => {
 
   it("labels a tool result with the command that produced it (not 'unknown')", async () => {
     const { formatMessages } = await import("./tools.js");
+
     const out = formatMessages(
       [
         { role: "user", content: "list files" },
@@ -363,16 +371,19 @@ describe("tool-result labelling", () => {
       ],
       tools,
     );
+
     expect(out).toContain('<tool_response tool="bash" command="ls -la">');
     expect(out).not.toContain('name="unknown"');
   });
 
   it("falls back to a generic tool label when the call can't be correlated", async () => {
     const { formatMessages } = await import("./tools.js");
+
     const out = formatMessages(
       [{ role: "tool", tool_call_id: "orphan", content: "some output" }],
       tools,
     );
+
     expect(out).toContain('<tool_response tool="tool">');
   });
 });
@@ -417,6 +428,7 @@ describe("fenced tool format (the only format)", () => {
 
   it("emits a fenced <tools> block and renders history as fenced calls", async () => {
     const mod = await import("./tools.js");
+
     const out = mod.formatMessages(
       [
         { role: "user", content: "make a file" },
@@ -427,6 +439,7 @@ describe("fenced tool format (the only format)", () => {
       ],
       tools,
     );
+
     expect(out).toContain("```write_file");
     expect(out).toContain("path: a.py");
     expect(out).not.toContain('{"tool":');
