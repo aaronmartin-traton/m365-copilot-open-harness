@@ -1,1 +1,0 @@
-The Runtime is an operating system for agents. Planner owns strategy. Runtime owns execution. Architecture emerges from existing code.

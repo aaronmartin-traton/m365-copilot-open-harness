@@ -1,1 +1,0 @@
-Inside: Runtime, Planner Adapter, Context Compiler. Outside: M365, local models, MCP, Git, filesystem.

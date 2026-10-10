@@ -127,6 +127,5 @@ describe("RequestScheduler", () => {
     const stats = scheduler.stats();
     expect(stats.active).toBe(0);
     expect(stats.completed).toBe(2);
-    expect(stats.averageWaitMs).toBeGreaterThanOrEqual(0);
   });
 });

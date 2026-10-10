@@ -1,1 +1,0 @@
-Future concept. Do not implement until justified by duplicated runtime knowledge.

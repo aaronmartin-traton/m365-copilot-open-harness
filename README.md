@@ -1,87 +1,33 @@
 # M365 Copilot Proxy
 
-This is a fork of cramt/m365-copilot-proxy.
-We extracted the architecture.
+A reverse-engineered, **OpenAI-compatible proxy** for Microsoft 365 Copilot, so
+OpenAI-compatible coding agents (pi, Codex, the bench) can use M365 as a model
+backend.
 
-## Architecture
-
-We moved code from `handler.ts` to modules.
-Each module has one job.
-
-### Extracted Modules
-
-- **context-compiler.ts** - Formats messages
-- **usage-builder.ts** - Makes usage objects
-- **response-helpers.ts** - Makes responses
-- **local-response-helpers.ts** - Handles local responses
-- **session-pool.ts** - Manages sessions
-- **output-ceiling.ts** - Checks output length
-- **image-renderer.ts** - Renders images
-
-### Main Handler
-
-`handler.ts` holds `handleChatCompletion()`.
-
-## Documentation
-
-- **docs/development/ENGINEERING_RULES.md** - Development rules
-- **docs/architecture/COMPONENT_REFERENCE.md** - Module descriptions
-- **docs/architecture/ARCHITECTURE_ROADMAP.md** - Extraction progress
+- Protocol source of truth: [`docs/m365-copilot-api.md`](docs/m365-copilot-api.md)
+- Vocabulary and decisions: [`CONTEXT.md`](CONTEXT.md)
+- Agent guidance: [`AGENTS.md`](AGENTS.md)
 
 ## Backends
 
-The OpenAI-compatible surface is backend-agnostic. The backend is selected with
-`PROVIDER`:
+`PROVIDER` selects the backend:
 
 | `PROVIDER` | Backend | Notes |
 |---|---|---|
-| `m365` (default) | Microsoft 365 Copilot SignalR/WebSocket | The original backend. Unset behaves exactly as before. |
-| `chatgpt-web` | ChatGPT Web, driven in a real browser | Opt-in. Headed Chromium against a signed-in `chatgpt.com` profile; no API key. |
-
-```bash
-# Sign in once, by hand, into the dedicated profile:
-#   ~/.config/opencode-m365/chatgpt-web-profile
-PROVIDER=chatgpt-web bun run proxy
-```
-
-**`chatgpt-web` is opt-in and constrained.** Driving a ChatGPT web session as an
-API endpoint is against OpenAI's terms; accounts can be limited or banned. It
-runs headed because Cloudflare serves headless Chromium an interstitial. It is
-never a default route, and do not raise concurrency on it to chase throughput.
+| `m365` (default) | M365 Copilot SignalR/WebSocket | the original backend |
+| `chatgpt-web` | ChatGPT Web, driven in a real browser | opt-in; headed only (Cloudflare blocks headless); ToS-constrained |
 
 Adding a backend means implementing `ModelProvider`
-(`packages/core/src/provider.ts`) — not forking the translation layer. See
-`.scratch/chatgpt-web-backend/spec.md`.
-
-On `chatgpt-web`, `model:` is **advisory**: nothing drives ChatGPT's model
-picker, so the slug labels telemetry and `/v1/models` rather than switching the
-model.
+(`packages/core/src/provider.ts`) — do not fork the translation layer.
 
 ## Development
 
-Install dependencies:
-```bash
+```sh
 bun install
+bun run build        # tsdown, all packages
+bun run test:unit    # build + vitest
+bun run typecheck    # tsc --noEmit per package
 ```
 
-Build:
-```bash
-bun run build
-```
-
-Test:
-```bash
-bun run test:unit
-```
-
-Lint (Oxlint + the vendored `anti-slop` rules):
-```bash
-bun run lint
-bun run lint:fix
-```
-
-## Handoff
-
-See `docs/development/CONTINUATION_PROMPT.md` for instructions.
-
-**Rule**: Extract from real code. Make small changes. Keep behavior.
+See [`AGENTS.md`](AGENTS.md) for the gotchas (fenced shell-routing, throttle vs
+`Disengaged`, lean toolsets) and the ticket workflow.

@@ -1,1 +1,0 @@
-Composition root. Owns subsystem lifetime. Does not own planning.

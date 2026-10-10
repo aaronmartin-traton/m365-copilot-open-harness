@@ -1,1 +1,0 @@
-Runtime: execution, context preparation, orchestration. Planner: goals and strategy. Future concepts (World Model, Sensors) must earn their existence.

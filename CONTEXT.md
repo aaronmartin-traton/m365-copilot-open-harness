@@ -22,7 +22,7 @@ against a live, undocumented, throttled API. It is not a normal SDK wrapper.
 | **fenced format** | Tool-call output as Markdown fences (```` ```bash ```` blocks). The only sanctioned tool format. |
 | **shell-routing** | The proxy routes fenced bash blocks to the harness's shell tool. The load-bearing lever that produces real agent loops. |
 | **fenced agent** | The Copilot Studio agent (`m365-tool-agent-<hash[:8]>`) that emits fenced tools. |
-| **verifier** | The execution-intent verifier (`Bonsai` on the local machine, or `qwen`-family fallback) that decides `EXECUTE` vs `TEXT` for a tool decision. |
+| **verifier** | The execution-intent verifier (a small local model, e.g. `Bonsai` or a `qwen`-family fallback) that decides `EXECUTE` vs `TEXT` for a tool decision. |
 | **EXECUTE** | Verifier verdict: the tool call is authorized to run. |
 | **TEXT** | Verifier verdict: return the model's raw text instead of executing. |
 | **8H fail-closed** | The approved policy: only verifier `EXECUTE` authorizes tool execution. Anything else (TEXT/UNCERTAIN/error/timeout) resolves to raw text. |

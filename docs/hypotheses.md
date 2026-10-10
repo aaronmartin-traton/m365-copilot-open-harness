@@ -2438,7 +2438,7 @@ Core conclusions:
    dense layer-offload dead (4–11 t/s); stay on GGUF Q4–Q6 (NVFP4 llama.cpp
    support contradicted between lanes — unresolved).
 
-**Evidence.** `docs/research/2026-08-09-local-models-8gb-blackwell.md` +
+**Evidence.** `.scratch/research/2026-08-09-local-models-8gb-blackwell.md` +
 notes `lane-a`..`lane-f` + `judge-review.md`. Queued work:
 `.scratch/verifier-latency-bakeoff/` (4 tickets), `.scratch/
 fallback-lane-telemetry/` (1 ticket), `.scratch/m365-live-probes/issues/
