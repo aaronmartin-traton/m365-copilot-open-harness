@@ -45,13 +45,15 @@ function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
+const ToolCommandArgs = z.object({ command: z.string() });
+
 function commandFor(call: ParsedToolCall): string | null {
   if (call.function.name !== "bash") return null;
 
   try {
-    const args = JSON.parse(call.function.arguments) as { command?: unknown };
+    const parsed = ToolCommandArgs.safeParse(JSON.parse(call.function.arguments));
 
-    return typeof args.command === "string" ? args.command : null;
+    return parsed.success ? parsed.data.command : null;
   } catch {
     return null;
   }
