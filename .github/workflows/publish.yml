@@ -15,7 +15,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
+          bun-version: 1.4.0
 
       - uses: actions/setup-node@v4
         with:
@@ -25,20 +25,40 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
 
+      # `npm publish` does not rewrite the `workspace:*` protocol — only bun, pnpm and yarn
+      # do — so a tarball packed straight from the workspace declares a dependency npm cannot
+      # install (EUNSUPPORTEDPROTOCOL). Pin each workspace dependency to the version being
+      # released before packing. Order is the dependency order:
+      # core -> chatgpt-web -> proxy-lib -> proxy (proxy-lib imports chatgpt-web, which this
+      # workflow never published).
       - name: Publish core
         working-directory: packages/core
         run: npm publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Publish chatgpt-web
+        working-directory: packages/chatgpt-web
+        run: |
+          npm pkg set "dependencies.@m365-copilot/core=^$(node -p "require('../core/package.json').version")"
+          npm publish --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
       - name: Publish proxy-lib
         working-directory: packages/proxy-lib
-        run: npm publish --provenance
+        run: |
+          npm pkg set "dependencies.@m365-copilot/core=^$(node -p "require('../core/package.json').version")"
+          npm pkg set "dependencies.@m365-copilot/chatgpt-web=^$(node -p "require('../chatgpt-web/package.json').version")"
+          npm publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish proxy
         working-directory: packages/proxy
-        run: npm publish --provenance
+        run: |
+          npm pkg set "dependencies.@m365-copilot/core=^$(node -p "require('../core/package.json').version")"
+          npm pkg set "dependencies.@m365-copilot/proxy-lib=^$(node -p "require('../proxy-lib/package.json').version")"
+          npm publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

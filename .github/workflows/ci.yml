@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.0
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      # The build must come first: proxy-lib, chatgpt-web and proxy resolve `@m365-copilot/core`
+      # through `dist/index.d.mts`, which does not exist on a clean checkout. Building every
+      # package (not just build:libs) also keeps the Nitro service compiling.
+      - run: bun run build
+
+      # A gate, not advice: the vendored anti-slop plugin must stay at zero findings in the code
+      # this fork owns. See tools/oxlint/anti-slop/UPSTREAM.md for the ownership rule.
+      - run: bun run lint
+      - run: bun run typecheck
+
+      # packages/chatgpt-web drives a real Chromium, so the browser has to be installed.
+      - run: bunx playwright install --with-deps chromium
+
+      # The build above already produced every dist the tests read, so run vitest directly
+      # instead of `test:unit` (which builds again).
+      - run: bunx vitest run
