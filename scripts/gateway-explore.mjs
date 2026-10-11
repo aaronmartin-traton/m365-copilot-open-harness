@@ -20,7 +20,7 @@ const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
 
-// Launch the persistent profile — already logged in from the msal cache / profile.
+// Launch the persistent profile — already logged in from the token cache / profile.
 // Keep it visible so interactive re-login can happen if the profile is signed out.
 const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
   headless: false,

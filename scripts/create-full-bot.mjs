@@ -3,7 +3,7 @@
 // full bot is reachable over the BizChat WebSocket (the decisive MCP question).
 //
 // Captures every gateway POST/PUT body + screenshots each step so the flow can be
-// debugged/iterated. Uses the msal/persistent-profile auth path (no password/MFA
+// debugged/iterated. Uses the persistent-profile auth path (no password/MFA
 // in this script). Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/create-full-bot.mjs
 import { mkdirSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,7 +17,7 @@ const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
 
-// Launch the persistent profile — already logged in from the msal cache / profile.
+// Launch the persistent profile — already logged in from the token cache / profile.
 // Keep it visible so interactive re-login can happen if the profile is signed out.
 const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
   headless: false,

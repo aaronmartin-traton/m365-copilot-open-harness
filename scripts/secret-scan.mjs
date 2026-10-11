@@ -12,9 +12,8 @@
  * Exit 0 = clean, 1 = matches found (block the push), 2 = usage/scan error.
  *
  * The repo is PUBLIC — a secret is exposed the moment a push lands, so this
- * must run BEFORE the push, at both egress points:
- *   - clone:      push to GitHub  (origin)   — installed via install-hooks.mjs
- *   - clone:  push to the remote (origin)  — same installer
+ * must run BEFORE the push, at every egress point
+ * (install it with `bun scripts/install-hooks.mjs`).
  * GitHub Actions (.github/workflows/secret-scan.yml) is belt-and-braces AFTER
  * the fact, never the gate.
  */

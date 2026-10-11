@@ -3,8 +3,12 @@ export {
   getTokenSilent,
   getTokenForScope,
   getImageArtifactToken,
+  getTokenStatus,
   loginInteractive,
   getBrowserProfileDir,
+  tokenCacheFile,
+  AuthenticationError,
+  type TokenStatus,
 } from "./auth.js";
 
 export {

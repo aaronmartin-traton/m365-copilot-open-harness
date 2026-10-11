@@ -25,7 +25,7 @@ const agentId = await getOrCreateAgent().catch(() => null);
 const framingText = formatMessages([{ role: "user", content: TASK }], BENCH_TOOLS, "auto", crypto.randomUUID());
 console.log(`[emu] agent=${agentId ?? "none"} framing=${process.env.M365_FRAMING_VARIANT} textlen=${framingText.length}`);
 
-// Launch the persistent profile — already logged in from the msal cache / profile.
+// Launch the persistent profile — already logged in from the token cache / profile.
 // Keep it visible so interactive re-login can happen if the profile is signed out.
 const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
   headless: false,

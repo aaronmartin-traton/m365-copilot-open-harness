@@ -8,7 +8,7 @@
 //
 // Usage:
 //   M365_ATTESTATION_SECRET=<shared> node scripts/attestation-live-smoke.mjs [proxyUrl]
-//   (run under `node` on the local machine; Bun 1.3.14 times out on the playwright layer)
+//   (run under `node`; Bun 1.3.14 times out on the playwright layer)
 import { createHash, createHmac, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { attestationProofHeader, attestCommand } from "../client-adapters/attestation-helper.mjs";

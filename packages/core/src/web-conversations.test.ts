@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { BrowserRequest } from "./auth.js";
 import {
   M365WebConversationClient,
   M365WebConversationError,
@@ -7,7 +8,6 @@ import {
   type M365ChatPageFunction,
   type M365WebBrowser,
   type M365WebPage,
-  type M365WebRequest,
 } from "./web-conversations.js";
 
 /** A chat entry the fake navigation payload exposes. */
@@ -26,29 +26,34 @@ type FakeRequest = M365ChatFetchInput["body"];
 
 function fakeBrowser(responses: FakeResponse[], finalUrl = "https://m365.cloud.microsoft/chat/") {
   const requests: FakeRequest[] = [];
-  const bodies: FakeRequest[] = [];
-  let listener: ((request: M365WebRequest) => void) | undefined;
+  let listener: ((request: BrowserRequest) => void) | undefined;
   let closed = false;
 
   const page: M365WebPage = {
-    on: (_event: "request", callback: (request: M365WebRequest) => void) => { listener = callback; },
-    off: () => { listener = undefined; },
-    goto: async () => {
-      listener?.({ method: () => "POST", url: () => "https://m365.cloud.microsoft/chat", headers: () => ({
-        "x-client-eligibility": "eligibility",
-        "x-host-context": "host",
-        "x-route-id": "route",
-        "x-session-id": "session",
-        authorization: "must-not-forward",
-      }) });
+    onRequest: (callback) => {
+      listener = callback;
 
-      return null;
+      return () => {
+        listener = undefined;
+      };
     },
-    url: () => finalUrl,
+    navigate: async () => {
+      listener?.({
+        url: "https://m365.cloud.microsoft/chat",
+        method: "POST",
+        headers: {
+          "x-client-eligibility": "eligibility",
+          "x-host-context": "host",
+          "x-route-id": "route",
+          "x-session-id": "session",
+          authorization: "must-not-forward",
+        },
+      });
+    },
+    currentUrl: async () => finalUrl,
     waitForTimeout: async () => {},
     evaluate: async (_pageFunction: M365ChatPageFunction, input: M365ChatFetchInput) => {
       requests.push(input.body);
-      bodies.push(input.body);
       const response = responses.shift();
 
       if (!response) throw new Error("unexpected browser fetch");
@@ -57,13 +62,20 @@ function fakeBrowser(responses: FakeResponse[], finalUrl = "https://m365.cloud.m
     },
   };
 
-  const context: M365WebBrowser = {
-    pages: () => [page],
-    newPage: async () => page,
-    close: async () => { closed = true; },
+  const browser: M365WebBrowser = {
+    openPage: async () => page,
+    close: async () => {
+      closed = true;
+    },
   };
 
-  return { context, requests, bodies, get closed() { return closed; } };
+  return {
+    browser,
+    requests,
+    get closed() {
+      return closed;
+    },
+  };
 }
 
 describe("M365WebConversationClient", () => {
@@ -76,7 +88,7 @@ describe("M365WebConversationClient", () => {
 
     const client = new M365WebConversationClient({
       profileDir: "profile",
-      launchPersistentContext: async () => fake.context,
+      launchBrowser: async () => fake.browser,
     });
 
     await client.deleteConversation({ conversationId: "target" });
@@ -92,7 +104,8 @@ describe("M365WebConversationClient", () => {
 
   it("fails closed when the target is not in the refreshed list", async () => {
     const fake = fakeBrowser([{ status: 200, body: { store: { conversationPageHistoryList: { chats: [] } } } }]);
-    const client = new M365WebConversationClient({ launchPersistentContext: async () => fake.context });
+    const client = new M365WebConversationClient({ launchBrowser: async () => fake.browser });
+
     await expect(client.deleteConversation({ conversationId: "missing" })).rejects.toMatchObject({ code: "target_missing" });
     expect(fake.requests).toHaveLength(1);
     expect(fake.closed).toBe(true);
@@ -100,7 +113,8 @@ describe("M365WebConversationClient", () => {
 
   it("rejects a sign-in redirect without attempting credentials", async () => {
     const fake = fakeBrowser([], "https://login.microsoftonline.com/common/oauth2/authorize");
-    const client = new M365WebConversationClient({ launchPersistentContext: async () => fake.context });
+    const client = new M365WebConversationClient({ launchBrowser: async () => fake.browser });
+
     await expect(client.deleteConversation({ conversationId: "target" })).rejects.toBeInstanceOf(M365WebSessionUnavailableError);
     expect(fake.closed).toBe(true);
   });
@@ -111,7 +125,8 @@ describe("M365WebConversationClient", () => {
       { status: 403, body: {} },
     ]);
 
-    const client = new M365WebConversationClient({ launchPersistentContext: async () => fake.context });
+    const client = new M365WebConversationClient({ launchBrowser: async () => fake.browser });
+
     await expect(client.deleteConversation({ conversationId: "target" })).rejects.toEqual(expect.objectContaining({
       code: "delete_failed",
     } satisfies Partial<M365WebConversationError>));

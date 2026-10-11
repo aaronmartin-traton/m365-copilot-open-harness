@@ -37,6 +37,6 @@ for (const { name, scopes } of scopeSets) {
   if (lastError) throw lastError;
 }
 
-console.log("\nLogin complete. Tokens were saved to the local MSAL cache.");
+console.log("\nLogin complete. Tokens were saved to the local token cache.");
 
 console.log("You can now start m365-proxy without a secrets.json file.");

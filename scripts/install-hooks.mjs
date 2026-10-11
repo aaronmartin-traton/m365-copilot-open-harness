@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
 /**
  * install-hooks.mjs — installs the secret-scan pre-push hook into a clone.
- * Run it on the clone (egress to GitHub) AND on the clone
- * (egress to the the remote):
+ * Run it once per clone that can push:
  *     bun scripts/install-hooks.mjs
  * Safe to re-run; the hook is rewritten from the committed template with
  * the repo's absolute path baked in.

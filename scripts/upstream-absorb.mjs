@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 /**
- * upstream-absorb.mjs — declared-ownership fork gate. See .gitattributes.
+ * upstream-absorb.mjs — declared-ownership fork gate.
+ * See .gitattributes (the merge=ours ownership list).
  *
  * Fetches upstream, lists commits not yet recorded in
  * docs/upstream-manifest.json, flags any that touch OWNED (merge=ours)
@@ -152,7 +153,7 @@ const result = {
 if (jsonOut) {
   console.log(JSON.stringify(result, null, 2));
 } else {
-  console.log(`upstream absorption gate — .gitattributes policy`);
+  console.log(`upstream absorption gate — .gitattributes ownership policy`);
   console.log(`manifest: ${result.reviewedCount} reviewed entries`);
   if (pending.length === 0) {
     console.log(`OK — no unreviewed upstream commits.`);

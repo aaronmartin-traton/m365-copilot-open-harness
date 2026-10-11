@@ -1,7 +1,28 @@
 {
   "name": "@m365-copilot/core",
   "version": "0.2.0",
+  "description": "Core primitives for the M365 Copilot proxy: browser sign-in, the SignalR/WebSocket client, sessions, agent management and tool formatting.",
+  "license": "MIT",
+  "author": "asmartin-ai",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asmartin-ai/m365-copilot-proxy.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/asmartin-ai/m365-copilot-proxy#readme",
+  "bugs": {
+    "url": "https://github.com/asmartin-ai/m365-copilot-proxy/issues"
+  },
+  "keywords": [
+    "m365",
+    "microsoft-365",
+    "copilot",
+    "openai",
+    "proxy",
+    "signalr",
+    "reverse-engineering"
+  ],
   "exports": {
     ".": {
       "import": "./dist/index.mjs",
@@ -18,8 +39,6 @@
     "build": "tsdown src/index.ts --format esm --dts"
   },
   "dependencies": {
-    "@azure/msal-node": "^5.1.1",
-    "playwright": "^1.58.2",
     "ws": "^8.20.0",
     "zod": "^4.3.6"
   },

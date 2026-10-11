@@ -9,8 +9,8 @@
 // usage: node scripts/set-custom-instruction.mjs --payload <text> [--port 9222]
 // exit 0 = write + save + re-read matched; exit 1 = failure (message on stderr).
 //
-// Selectors may need live tuning on the local machine (the Settings→Personalization
-// DOM changes); the ticket Comments record the last-verified selectors.
+// The Settings→Personalization DOM changes over time, so the selectors may
+// need live tuning; re-verify them against the current page when they miss.
 
 import { readFileSync } from "node:fs";
 

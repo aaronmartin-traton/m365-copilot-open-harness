@@ -22,7 +22,7 @@ const chromium = pwMod.chromium ?? pwMod.default?.chromium;
 const shot = async (page, name) => { await page.screenshot({ path: join(OUT, name + ".png"), fullPage: false }).catch(() => {}); console.log(`[shot] ${name}`); };
 const dump = async (page, name) => { const t = await page.evaluate(() => document.body?.innerText?.slice(0, 1500) || "").catch(() => ""); writeFileSync(join(OUT, name + ".txt"), `URL: ${page.url()}\n\n${t}`); return t; };
 
-// Launch the persistent profile — already logged in from the msal cache / profile.
+// Launch the persistent profile — already logged in from the token cache / profile.
 // Keep it visible so interactive re-login can happen if the profile is signed out.
 const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
   headless: false,

@@ -11,7 +11,7 @@
 // This also (bonus) captures the live chat invocation the first-party client
 // sends, so we can diff our hand-built payload against the real one.
 //
-// Method: Playwright-drive the real UI from the msal/persistent-profile auth
+// Method: Playwright-drive the real UI from the persistent-profile auth
 // path (no password/MFA in this script), intercept ALL ws frames on
 // substrate.office.com/m365Copilot/Chathub, send a deliberately
 // long-generating prompt, then click Stop a couple seconds in.
@@ -35,7 +35,7 @@ const ROOT = process.cwd();
 const pwMod = await import("../packages/core/node_modules/playwright/index.js");
 const chromium = pwMod.chromium ?? pwMod.default?.chromium;
 
-// Launch the persistent profile — already logged in from the msal cache / profile.
+// Launch the persistent profile — already logged in from the token cache / profile.
 // Keep it visible so interactive re-login can happen if the profile is signed out.
 const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
   headless: false,

@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { z } from "zod/v4";
-import type { Response as PlaywrightResponse, chromium } from "playwright";
-import { getBrowserProfileDir } from "./auth.js";
+import {
+  BrowserSession,
+  browserExecutable,
+  getBrowserProfileDir,
+  type BrowserRequest,
+} from "./auth.js";
 import { createLogger } from "./log.js";
-
-/** playwright 1.58 inlines launchPersistentContext options; keep the seam typed. */
-type LaunchPersistentContextOptions = Parameters<typeof chromium.launchPersistentContext>[1];
 
 const log = createLogger("web-conversations");
 
@@ -62,42 +63,33 @@ type M365ChatRequest =
 /** A `/chat` response decoded at the boundary: a JSON object, or null for any other body. */
 type BrowserFetchResult = { status: number; body: JsonObject | null };
 
-/** Request facts the deletion flow reads from Playwright's request event. */
-export interface M365WebRequest {
-  method(): string;
-  url(): string;
-  headers(): Record<string, string>;
-}
-
 /** The `/chat` fetch the client runs inside the browser page. */
-export interface M365ChatFetchInput {
+export type M365ChatFetchInput = {
   headers: Record<string, string>;
   body: M365ChatRequest;
-}
+};
 
 /** The raw `/chat` response the browser page hands back for decoding in Node. */
-export interface M365ChatFetchOutput {
+export type M365ChatFetchOutput = {
   status: number;
   text: string;
-}
+};
 
-/** The page function Playwright executes for a `/chat` fetch. */
+/** The page function driven inside the browser page for a `/chat` fetch. */
 export type M365ChatPageFunction = (input: M365ChatFetchInput) => Promise<M365ChatFetchOutput>;
 
-/** The slice of Playwright's `Page` the deletion flow drives. */
+/** The slice of the CDP page the deletion flow drives. */
 export interface M365WebPage {
-  on(event: "request", listener: (request: M365WebRequest) => void): void;
-  off(event: "request", listener: (request: M365WebRequest) => void): void;
-  goto(url: string, options: { waitUntil: "domcontentloaded" }): Promise<PlaywrightResponse | null>;
-  url(): string;
+  onRequest(listener: (request: BrowserRequest) => void): () => void;
+  navigate(url: string): Promise<void>;
+  currentUrl(): Promise<string>;
   waitForTimeout(milliseconds: number): Promise<void>;
-  evaluate(pageFunction: M365ChatPageFunction, input: M365ChatFetchInput): Promise<M365ChatFetchOutput>;
+  evaluate<TInput, TResult>(pageFunction: (input: TInput) => Promise<TResult>, input: TInput): Promise<TResult>;
 }
 
-/** The slice of Playwright's `BrowserContext` the deletion flow drives. */
+/** The slice of the CDP browser session the deletion flow drives. */
 export interface M365WebBrowser {
-  pages(): M365WebPage[];
-  newPage(): Promise<M365WebPage>;
+  openPage(): Promise<M365WebPage>;
   close(): Promise<void>;
 }
 
@@ -119,7 +111,8 @@ export class M365WebSessionUnavailableError extends Error {
 }
 
 export interface M365WebConversationClientOptions {
-  launchPersistentContext?: (userDataDir: string, options?: LaunchPersistentContextOptions) => Promise<M365WebBrowser>;
+  /** Test seam: replaces the CDP browser launch. */
+  launchBrowser?: () => Promise<M365WebBrowser>;
   profileDir?: string;
   headless?: boolean;
 }
@@ -185,36 +178,32 @@ function hasConversation(store: NavigationStore, id: string): boolean {
 }
 
 export class M365WebConversationClient implements M365WebConversationClientLike {
-  private readonly launchPersistentContext: NonNullable<M365WebConversationClientOptions["launchPersistentContext"]>;
+  private readonly launchBrowser: NonNullable<M365WebConversationClientOptions["launchBrowser"]>;
   private readonly profileDir: string;
+  private readonly headless: boolean;
 
   constructor(options: M365WebConversationClientOptions = {}) {
-    this.launchPersistentContext = options.launchPersistentContext ?? (async (userDataDir, launchOptions) => {
-      // Load Playwright only when a due deletion actually needs a browser.
-      const { chromium } = await import("playwright");
-
-      const launchOptionsWithDefaults: NonNullable<LaunchPersistentContextOptions> = {
-        headless: options.headless ?? process.env.M365_WEB_HEADLESS !== "0",
-        ...launchOptions,
-      };
-
-      const chromiumPath = process.env.CHROMIUM_PATH;
-
-      if (chromiumPath !== undefined && !Object.hasOwn(launchOptionsWithDefaults, "executablePath")) {
-        launchOptionsWithDefaults.executablePath = chromiumPath;
-      }
-
-      return chromium.launchPersistentContext(userDataDir, launchOptionsWithDefaults);
-    });
     this.profileDir = options.profileDir ?? getBrowserProfileDir();
+    this.headless = options.headless ?? process.env.M365_WEB_HEADLESS !== "0";
+    this.launchBrowser = options.launchBrowser ?? (async () => {
+      // The same hand-rolled CDP browser the sign-in flow drives, over the same
+      // persistent profile, so M365's cookies are already there.
+      const session = await BrowserSession.launch({
+        executable: browserExecutable(),
+        profileDir: this.profileDir,
+        headless: this.headless,
+      });
+
+      return session;
+    });
   }
 
   async deleteConversation({ conversationId: id }: { conversationId: string }): Promise<void> {
     let browser: M365WebBrowser | undefined;
 
     try {
-      browser = await this.launchPersistentContext(this.profileDir, {});
-      const page = browser.pages()[0] ?? await browser.newPage();
+      browser = await this.launchBrowser();
+      const page = await browser.openPage();
       const headers = await this.openAndCaptureHeaders(page);
       const before = await this.post(page, headers, { action: "RefreshNavPane" });
       const beforeStore = navigationStore(before.body);
@@ -261,28 +250,35 @@ export class M365WebConversationClient implements M365WebConversationClientLike 
   private async openAndCaptureHeaders(page: M365WebPage): Promise<Record<string, string>> {
     const captured = new Map<AllowedContextHeader, string>();
 
-    const onRequest = (request: M365WebRequest) => {
-      if (request.method() !== "POST" || !new URL(request.url()).pathname.endsWith("/chat")) return;
-      const requestHeaders = request.headers();
+    const onRequest = (request: BrowserRequest) => {
+      let pathname: string;
+
+      try {
+        pathname = new URL(request.url).pathname;
+      } catch {
+        return;
+      }
+
+      if (request.method !== "POST" || !pathname.endsWith("/chat")) return;
 
       for (const name of ALLOWED_CONTEXT_HEADERS) {
-        const value = requestHeaders[name];
+        const value = request.headers[name];
 
         if (value) captured.set(name, value);
       }
     };
 
-    page.on("request", onRequest);
+    const unsubscribe = page.onRequest(onRequest);
 
     try {
-      await page.goto(CHAT_URL, { waitUntil: "domcontentloaded" });
+      await page.navigate(CHAT_URL);
 
       if (captured.size === 0) await page.waitForTimeout(5_000);
     } finally {
-      page.off("request", onRequest);
+      unsubscribe();
     }
 
-    if (isSignInHost(page.url())) throw new M365WebSessionUnavailableError();
+    if (isSignInHost(await page.currentUrl())) throw new M365WebSessionUnavailableError();
 
     if (captured.size === 0) throw new M365WebSessionUnavailableError("M365 web navigation did not expose UI context");
 
@@ -290,7 +286,7 @@ export class M365WebConversationClient implements M365WebConversationClientLike 
   }
 
   private async post(page: M365WebPage, headers: Record<string, string>, body: M365ChatRequest): Promise<BrowserFetchResult> {
-    const raw = await page.evaluate(async (input) => {
+    const raw = await page.evaluate(async (input: M365ChatFetchInput) => {
       const response = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...input.headers },

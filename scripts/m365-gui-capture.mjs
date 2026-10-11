@@ -1,8 +1,8 @@
 // Capture what Microsoft's OWN M365 Copilot web client sends/receives over the
 // substrate Chathub WebSocket — to VERIFY our Disengage model with eyes-on and to
 // diff the GUI's request payload (optionsSets / variants / agent / tone) against
-// ours. Uses the msal/persistent-profile auth path (no password/MFA in this
-// script); the msal cache + persistent Playwright profile keep the session logged in.
+// ours. Uses the persistent-profile auth path (no password/MFA in this
+// script); the token cache + persistent browser profile keep the session logged in.
 //
 // Usage: CHROMIUM_PATH=<path to chrome.exe> node scripts/m365-gui-capture.mjs ["task text"]
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -19,7 +19,7 @@ const chromium = pwMod.chromium ?? pwMod.default?.chromium;
 const TASK = process.argv[2] || "Edit config.json so the port is 8080 instead of 3000. Leave every other field unchanged.";
 const RS = "\x1e";
 
-// Launch the persistent profile — already logged in from the msal cache / profile.
+// Launch the persistent profile — already logged in from the token cache / profile.
 // headless:true would work too but the persistent profile is validated headful;
 // keep it visible so interactive re-login can happen if the profile is signed out.
 const context = await chromium.launchPersistentContext(getBrowserProfileDir(), {
