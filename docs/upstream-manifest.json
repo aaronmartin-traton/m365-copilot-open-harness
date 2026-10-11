@@ -801,7 +801,7 @@
       "sha": "cffee7d928234bee41d3595273977b96baddc678",
       "subject": "feat(bench): opt-in throttle pacing (M365_AVOID_THROTTLING)",
       "status": "rejected",
-      "reason": "Bench-only. scripts/bench is local-only (.gitattributes OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
+      "reason": "Bench-only. scripts/bench is local-only (merge=ours OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
       "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
     },
     {
@@ -815,7 +815,7 @@
       "sha": "006cbe00d406a3494905601ab1c1ab1831274e90",
       "subject": "chore(bench): phase-sweep + analyze-arms, run bench scripts in the Nix",
       "status": "rejected",
-      "reason": "Bench-only. scripts/bench is local-only (.gitattributes OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
+      "reason": "Bench-only. scripts/bench is local-only (merge=ours OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
       "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
     },
     {
@@ -906,14 +906,14 @@
       "sha": "d613836126b000dca2f578c2f1c53ab546a0b341",
       "subject": "Merge pull request #25 from cramt/fix/bench-timeout-resume",
       "status": "rejected",
-      "reason": "Bench-only. scripts/bench is local-only (.gitattributes OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
+      "reason": "Bench-only. scripts/bench is local-only (merge=ours OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
       "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
     },
     {
       "sha": "05f7eed11ca1f43aadfb7b300a70abb45d0ff824",
       "subject": "fix(bench): don't let one slow turn's timeout discard the whole run",
       "status": "rejected",
-      "reason": "Bench-only. scripts/bench is local-only (.gitattributes OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
+      "reason": "Bench-only. scripts/bench is local-only (merge=ours OWNED); upstream's version assumes their sweep harness. Port ideas by hand if a sweep needs them.",
       "evidence": "2026-10-06 triage, .scratch/upstream-absorb/issues/02-wave-2026-10-triage.md"
     },
     {

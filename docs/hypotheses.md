@@ -12,6 +12,9 @@ Findings should carry **n** (sample size), **service version under test**,
 and **falsification criteria** wherever they're claiming something stronger
 than "we eyeballed one run." See §M (Methods) for the experimental rig.
 
+Evidence pointers into `.scratch/` refer to the local ticket tracker, which is
+gitignored and not published.
+
 **Contents**
 
 - §M — Methods (rig, raw-data pointers, caveats, falsification criteria)
@@ -2276,8 +2279,8 @@ case. n here is only 2 — strong signal, not yet ship-grade.
 > The findings below remain valid evidence for any future return to intent verification,
 > but they are **not** shipped behavior. See `docs/adr/ADR-0002-EXECUTION-INTENT-VERIFIER.md`.
 
-**Claim.** The fail-closed 8H intent-verifier gate works live on the local machine with the
-frozen model: verifier-down fails closed (raw text, no execution) and restart recovers
+**Claim.** The fail-closed 8H intent-verifier gate works live on the local
+machine with the frozen model: verifier-down fails closed (raw text, no execution) and restart recovers
 to EXECUTE end-to-end. One n=1 observation is unsafe-FP-shaped (fence-only `ps aux` →
 EXECUTE) and is **not generalized** — raw-framing comparability is unresolved. The cache
 mechanism is separately evidenced offline (10A) but was **not reproduced live**.
@@ -2287,7 +2290,7 @@ mechanism is separately evidenced offline (10A) but was **not reproduced live**.
 
 - **Model identity (exact):** `GET http://127.0.0.1:1234/v1/models` →
   `bonsai-27b-q1 | owned_by=llamacpp`; direct verifier response echoed
-  `"model": "bonsai-27b-q1"` (content `EXECUTE`, 2175 reasoning chars). Laptop
+  `"model": "bonsai-27b-q1"` (content `EXECUTE`, 2175 reasoning chars). Local
   `llama-server.exe` (llama.cpp b10321), `Bonsai-27B-Q1_0.gguf`, `--alias bonsai-27b-q1
   --seed 42 -ngl 99 -c 8192`.
 - **Fail-closed PASS:** verifier down → `intent-verifier: … decision=TEXT latencyMs=45027
@@ -2340,7 +2343,7 @@ real gate and full planner text.
 ## 15. Verifier latency — `--cache-reuse 256` does NOT help the 10A workload (ticket 04, 2026-08-09) 🟡
 
 **Claim.** Enabling llama.cpp server KV-shift reuse (`--cache-reuse 256`, with
-`--cache-prompt` default-enabled, both verified in the local machine b10321 `--help`)
+`--cache-prompt` default-enabled, both verified in the local b10321 `--help`)
 does not reduce cold verifier latency on the frozen 10A workload.
 
 **Evidence (offline, no M365; two runs of `run-latency-10a.mjs`, frozen corpus
@@ -2378,7 +2381,7 @@ chunk minimum shows a win on the shared-system-prompt prefix.
 
 **Claim.** The frozen 32-case held-out split (16 near-pairs, model-unseen) run
 exactly once through the merged production path (`produceToolPath` +
-`getIntentVerifier`, default-on) with the exact local machine `bonsai-27b-q1` yields
+`getIntentVerifier`, default-on) with the exact local `bonsai-27b-q1` yields
 **0 unsafe execution FPs** and true selective accuracy **0.969**.
 
 **Evidence (n=32, one frozen run, no M365; `run-heldout.mjs`, seed 42, temp 0,
@@ -2409,9 +2412,9 @@ case's gold is changed (unfreeze); or the merged path no longer matches
 
 ## 17. Research graduation — local models on 8 GB Blackwell (2026-08-09) 🟡
 
-> **Hardware correction (2026-08-14).** The local machine is a the local machine with
-> an RTX PRO Blackwell 8 GB (RTX PRO 1000 or 2000, sm_120), not an RTX 5060.
-> All "RTX 5060 class" statements in this research refer to that local machine GPU.
+> **Hardware correction (2026-08-14).** The local machine has an RTX PRO
+> Blackwell 8 GB GPU (RTX PRO 1000 or 2000, sm_120), not an RTX 5060.
+> All "RTX 5060 class" statements in this research refer to that GPU.
 
 **Findings.** Six-lane research against primary sources, consolidated and
 adversarially reviewed (judge verdict NEEDS-REVISION, all findings applied).
@@ -2474,11 +2477,11 @@ between the user's suggested 10 and the proven-safe 18 — with ≥3 min spacing
 between fresh conversations, and a hard stop at the first empty-503 / at-limit
 error (report, do not retry). One conversation per probe.
 
-## 19. LM Studio can serve the frozen 8H verifier on the local machine (2026-08-10) — functional
+## 19. LM Studio can serve the frozen 8H verifier locally (2026-08-10) — functional
 
 **Question.** Can Bonsai-27B-Q1_0 (frozen 8H verifier model,
-`prism-ml/Bonsai-27B-gguf`) run under LM Studio on the local machine instead of the
-llama.cpp server used for the local machine bake-off, without breaking the verifier
+`prism-ml/Bonsai-27B-gguf`) run under LM Studio locally instead of the
+llama.cpp server used for the local bake-off, without breaking the verifier
 contract?
 
 **Evidence.** Installed via `lms get`; loaded id `bonsai-27b` (4.73 GB, ctx
@@ -2497,9 +2500,9 @@ contract?
   target machine is NVIDIA CUDA. No performance conclusion drawn here.
 
 **Decision.** Verifier contract (echo identity, reasoning separation, decision
-token within 2048) holds under LM Studio. local proxy runs set
+token within 2048) holds under LM Studio. Local proxy runs set
 `M365_INTENT_VERIFIER_MODEL=bonsai-27b` (LM Studio identifier); the llama.cpp
-`--alias bonsai-27b-q1` path stays valid for the local machine. Functional on the local machine
+`--alias bonsai-27b-q1` path stays valid locally. Functional locally
 only — latency/safety parity must be re-verified on the target machine.
 
 ---
@@ -2602,8 +2605,8 @@ defensive code — U+0120 tag-collapse normalization, dropping invalid or
 duplicate params — is primary evidence that malformed calls occur at this scale.
 
 Footprint is not the objection: Apache-2.0, 131k context, and Q4_K_M at **1.56
-GB** from measured GGUF sizes (F16 5.04 GB, Q8_0 2.68 GB), so it fits the 8GB
-local machine and CPU-only.
+GB** from measured GGUF sizes (F16 5.04 GB, Q8_0 2.68 GB), so it fits an 8 GB
+GPU and CPU-only.
 
 **Still worth a bench as a verifier candidate**, not an executor. The verifier's
 job is classification (`EXECUTE`/`TEXT`), it is a narrow task, and the 8H gate

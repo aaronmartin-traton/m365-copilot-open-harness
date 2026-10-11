@@ -1,7 +1,28 @@
 {
   "name": "@m365-copilot/proxy",
   "version": "0.2.0",
+  "description": "Standalone OpenAI-compatible HTTP service for the M365 Copilot proxy (Nitro), with the m365-proxy and m365-login binaries.",
+  "license": "MIT",
+  "author": "asmartin-ai",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asmartin-ai/m365-copilot-proxy.git",
+    "directory": "packages/proxy"
+  },
+  "homepage": "https://github.com/asmartin-ai/m365-copilot-proxy#readme",
+  "bugs": {
+    "url": "https://github.com/asmartin-ai/m365-copilot-proxy/issues"
+  },
+  "keywords": [
+    "m365",
+    "microsoft-365",
+    "copilot",
+    "openai",
+    "proxy",
+    "nitro",
+    "cli"
+  ],
   "bin": {
     "m365-proxy": "./bin/m365-proxy.mjs",
     "m365-login": "./bin/m365-login.mjs"

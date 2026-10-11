@@ -4,6 +4,24 @@
   "private": true,
   "type": "module",
   "description": "Disabled, non-publishable OpenClaw compatibility tombstone",
+  "license": "MIT",
+  "author": "asmartin-ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asmartin-ai/m365-copilot-proxy.git",
+    "directory": "packages/openclaw-plugin"
+  },
+  "homepage": "https://github.com/asmartin-ai/m365-copilot-proxy#readme",
+  "bugs": {
+    "url": "https://github.com/asmartin-ai/m365-copilot-proxy/issues"
+  },
+  "keywords": [
+    "m365",
+    "microsoft-365",
+    "copilot",
+    "openclaw",
+    "plugin"
+  ],
   "bin": {
     "m365-openclaw-setup": "./dist/setup.mjs"
   },

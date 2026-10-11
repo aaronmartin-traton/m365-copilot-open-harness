@@ -465,7 +465,7 @@ export async function getOrCreateAgent(
     log.info(`Full agent ID: ${agentId}`);
 
     // Cache it. Stale older-version agents are intentionally LEFT in place — never
-    // deleted — so a second proxy (other PC / build) sharing this tenant can't have
+    // deleted — so a second proxy sharing this tenant can't have
     // the agent it's mid-conversation with pulled out from under it. A few orphaned
     // lightweight bots are harmless; a deleted in-use agent breaks the other host.
     saveCachedAgent({ agentId, botId, instructionsHash: wantHash, createdAt: new Date().toISOString() });

@@ -547,7 +547,7 @@ intent and break multi-turn coherence).
 > attestation **control plane is no longer wired into the request path.** The
 > standalone `POST /v1/attestations` endpoint (`packages/proxy/routes/v1/attestations.post.ts`),
 > the `attestation.ts` module, and the public re-exports in `packages/proxy-lib/src/index.ts`
-> are **preserved as research artifacts only** (spec: *".scratch/simplify-tool-path/spec.md"*,
+> are **preserved as research artifacts only** (spec: the local ticket tracker,
 > Acceptance 1). What is **gone** from the runtime:
 > - header forwarding (`X-M365-Execution-Gate` / `X-M365-Attestation-Client` / `X-M365-Attestation-Proof`)
 >   is no longer read or forwarded by either Nitro route or `createApp()`;
@@ -739,7 +739,6 @@ The shared secret authenticates a configured adapter to the local proxy. It is *
 - `packages/proxy/routes/v1/attestations.post.ts` — loopback endpoint
 - `packages/proxy/routes/v1/chat/completions.post.ts`, `responses.post.ts` — header plumbing
 - `client-adapters/README.md` — reference adapters (pi / Oh My Pi / Codex)
-- `.scratch/client-attested-execution/spec.md` — design spec
 
 ---
 

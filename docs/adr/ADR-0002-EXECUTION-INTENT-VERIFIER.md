@@ -9,8 +9,8 @@
 > `intent-verifier.ts` module (below) and its frozen 8H corpus are preserved
 > as **research artifacts** under `packages/proxy-lib/src/`, no longer
 > exercised by production code. Execution-intent / authorization policy now
-> belongs to the consuming harness, not the translator. See
-> `.scratch/simplify-tool-path/spec.md` for the boundary decision.
+> belongs to the consuming harness, not the translator. The boundary decision
+> is recorded in the local ticket tracker (not published).
 
 ## Decision
 
@@ -55,8 +55,8 @@ checkouts; content preserved).
 
 ## Open alternatives
 
-1. Live validation on the local machine (real M365 threads, cache hit/miss, no
-   throttle interaction) — [verifier/01](../../.scratch/execution-intent-verifier/issues/01-live-validation.md).
+1. Live validation against real M365 threads (cache hit/miss, no throttle
+   interaction).
 2. ~~Default-on flip after live validation~~ — **done** (ticket 02:
    default-on with `M365_INTENT_VERIFIER=0` opt-out).
 3. Latency engineering (caching, pipelining, a faster verifier) — the

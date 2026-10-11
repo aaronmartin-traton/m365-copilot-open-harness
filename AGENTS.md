@@ -57,7 +57,14 @@ wrapper: it targets a live, undocumented, throttled API.
 | `@m365-copilot/proxy-lib` | OpenAI↔backend translation, `SessionPool`, handler, tool-call parsing |
 | `@m365-copilot/chatgpt-web` | opt-in browser-driven ChatGPT backend (`PROVIDER=chatgpt-web`) |
 | `@m365-copilot/proxy` | standalone Nitro service / `m365-proxy` binary |
-| `@m365-copilot/openclaw-plugin` | disabled, non-publishable tombstone |
+| `@m365-copilot/openclaw-plugin` | private, not published (disabled OpenClaw tombstone) |
+
+## Fork policy
+
+This repo is a declared-ownership fork. `.gitattributes` (`merge=ours`) marks the
+paths this fork owns, and `docs/upstream-manifest.json` records how each upstream
+commit was absorbed; `bun scripts/upstream-absorb.mjs` lists what still needs
+review.
 
 ## Build & test
 
@@ -68,8 +75,9 @@ bun run test:unit    # build + vitest. Use THIS, not bare `bun test` (Bun's runn
 bun run typecheck    # tsc --noEmit per package (tsdown does not typecheck)
 ```
 
-`bun run lint` is not a pass/fail gate; scope it to your change:
-`bunx oxlint <changed files>`.
+`bun run lint` (`oxlint packages`) is a CI gate: the vendored anti-slop plugin
+must stay at zero findings in the code this fork owns
+(`tools/oxlint/anti-slop/UPSTREAM.md`).
 
 Conventions: ESM with `.js`-suffixed relative imports; Zod at boundaries;
 `createLogger` (not `console.log`) in library code; Conventional Commits
@@ -88,5 +96,6 @@ Conventions: ESM with `.js`-suffixed relative imports; Zod at boundaries;
 ## Queued work
 
 Tickets live in `.scratch/<feature>/issues/` (one file each, with `Status:` and
-`Blocked by:` lines). Claim the earliest unblocked ticket; the feature spec is
-`.scratch/<feature>/spec.md`.
+`Blocked by:` lines); the feature spec is `.scratch/<feature>/spec.md`. The
+tracker is a local working aid: `.scratch/` is gitignored and deliberately not
+published. Claim the earliest unblocked ticket.

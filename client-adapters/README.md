@@ -27,10 +27,9 @@ The helper only posts to loopback HTTP. It adds `/v1/attestations` itself.
 
 ## 2. Add the provider headers
 
-These headers select the opt-in path. A request without both headers keeps the
-normal 8H verifier path. Send them on **every** request in the conversation.
-The tool-result request must carry them too. Without them the proxy rejects
-## 2. Add the provider headers
+These headers select the opt-in path. Send them on **every** request in the
+conversation; the tool-result request must carry them too. A request without
+them stays on the normal 8H verifier path.
 
 Generate the proof header once per client — it proves the provider config holds
 the shared secret, and without it the proxy ignores the gate headers and stays
@@ -131,7 +130,6 @@ mode, the Codex policy can approve commands without a prompt.
 - Full wire contract (payload fields, HMAC construction, state machine, failure
   modes, worked example): `docs/m365-copilot-api.md` §11 *Client-attested
   execution (opt-in)*.
-- `docs/research/client-approval-attestation.md`
 - pi: `packages/coding-agent/docs/models.md` and
   `examples/extensions/permission-gate.ts`
 - Oh My Pi: `omp://models.md`, `omp://hooks.md`

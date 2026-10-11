@@ -1,4 +1,5 @@
-# Declared-ownership fork — see .gitattributes for the policy.
+# Declared-ownership fork — merge=ours marks the paths this fork owns.
+# Upstream absorption is recorded in docs/upstream-manifest.json.
 # Paths below always resolve merge conflicts to OUR side.
 # Requires: git config merge.ours.driver true   (scripts/upstream-absorb.mjs auto-registers)
 
@@ -26,5 +27,4 @@ packages/core/src/throttle-telemetry.test.ts merge=ours
 packages/core/src/auth-recovery.ts merge=ours
 packages/core/src/auth-recovery.test.ts merge=ours
 docs/** merge=ours
-.scratch/** merge=ours
 scripts/bench/** merge=ours
