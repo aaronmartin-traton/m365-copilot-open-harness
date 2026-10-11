@@ -28,6 +28,42 @@ function timestamp(): string {
   return new Date().toISOString();
 }
 
+/**
+ * Credential shapes scrubbed from every persisted line (security review fix).
+ * One cheap regex per shape, no parsing, so the cost is negligible even on
+ * `M365_TRACE` payloads. Deliberately conservative: a token value ends at `&`,
+ * whitespace, a quote, or a backslash, so ordinary prose is left alone.
+ */
+const REDACTION_PATTERNS: ReadonlyArray<readonly [RegExp, string]> = [
+  // `access_token=…`, `refresh_token=…`, and any other `*token=` query param.
+  [/([A-Za-z0-9_]*token=)[^&\s"'\\]+/gi, "$1[REDACTED]"],
+  // `Authorization: Bearer …`, with or without quotes around either part.
+  [/(authorization"?\s*:\s*"?bearer\s+)[^\s"',}]+/gi, "$1[REDACTED]"],
+  // A bare `Bearer <credential>` with no header name in front of it.
+  [/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [REDACTED]"],
+  // A bare JWT: three base64url segments; the header always starts `eyJ`.
+  [/\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]+/g, "[REDACTED_JWT]"],
+];
+
+/**
+ * Scrub credential shapes from a log line or dumped frame before it is written
+ * to a file or stdout. Total by construction: malformed input comes back
+ * unchanged rather than throwing, so redaction can never break logging.
+ */
+export function redact(text: string): string {
+  try {
+    let out = text;
+
+    for (const [pattern, replacement] of REDACTION_PATTERNS) {
+      out = out.replace(pattern, replacement);
+    }
+
+    return out;
+  } catch {
+    return text;
+  }
+}
+
 function write(level: string, component: string, ...args: unknown[]) {
   if (!enabled) return;
 
@@ -35,7 +71,7 @@ function write(level: string, component: string, ...args: unknown[]) {
     .map((a) => (typeof a === "string" ? a : JSON.stringify(a, null, 2)))
     .join(" ");
 
-  const line = `[${timestamp()}] [${level}] [${component}] ${msg}\n`;
+  const line = redact(`[${timestamp()}] [${level}] [${component}] ${msg}\n`);
 
   if (stdoutEnabled) process.stdout.write(line);
 

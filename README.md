@@ -57,13 +57,20 @@ The launcher takes an optional port argument (`bun packages/proxy/bin/m365-proxy
 falling back to `$PORT`, then `4141`. The server binds `$HOST` (default `127.0.0.1`).
 `bun run proxy` is a shortcut for the same launcher.
 
+**Keep `HOST` on loopback.** The proxy has no authentication unless `M365_API_KEY` is
+set, so binding it to a network address lets anyone who can reach the port spend the
+signed-in account's quota and drive any tool the client offers. When the bound host is
+not loopback the server logs a prominent warning at startup.
+
 At startup the server authenticates once (`packages/proxy/plugins/auth.ts`): if the
 token cannot be obtained, boot aborts rather than serving a half-broken process.
 
-Point any OpenAI-compatible client at the base URL `http://127.0.0.1:4141/v1`. There
-is **no API key check** — any non-empty `apiKey` value (for example `dummy`) is
-accepted; the `Authorization` header is allowed by CORS but never validated. Choose a
-model id from `GET /v1/models` (see [Models](#models)).
+Point any OpenAI-compatible client at the base URL `http://127.0.0.1:4141/v1`. By
+default there is **no API key check** — any non-empty `apiKey` value (for example
+`dummy`) is accepted; the `Authorization` header is allowed by CORS but never
+validated. Set `M365_API_KEY` to require a key on every `/v1/*` request (see
+[Server authentication](#server-authentication--packagesproxyapi-keyts-packagesproxymiddlewareapi-keyts)).
+Choose a model id from `GET /v1/models` (see [Models](#models)).
 
 ```sh
 curl -s http://127.0.0.1:4141/v1/chat/completions \
@@ -118,7 +125,7 @@ Token and browser state live under `~/.config/opencode-m365/`:
 
 Every variable below is read from the process environment. Defaults are the values
 in the code when the variable is unset. Most of these are tuning knobs; the ones you
-are likely to need are `PROVIDER`, `PORT`/`HOST`, `CHROMIUM_PATH`, `M365_DEBUG`, and
+are likely to need are `PROVIDER`, `PORT`/`HOST`, `M365_API_KEY`, `CHROMIUM_PATH`, `M365_DEBUG`, and
 the `M365_BACKOFF_*` family.
 
 ### Backend selection — `packages/proxy-lib/src/backends.ts`
@@ -132,7 +139,13 @@ the `M365_BACKOFF_*` family.
 | Variable | Default | Effect |
 |---|---|---|
 | `PORT` | `4141` | Port when no CLI argument is given. The launcher copies it into `NITRO_PORT`. |
-| `HOST` | `127.0.0.1` | Bind address; copied into `NITRO_HOST`. |
+| `HOST` | `127.0.0.1` | Bind address; copied into `NITRO_HOST`. Keep it on loopback: the proxy has no authentication unless `M365_API_KEY` is set, and it warns at startup when the bound host is not loopback. |
+
+### Server authentication — `packages/proxy/api-key.ts`, `packages/proxy/middleware/api-key.ts`
+
+| Variable | Default | Effect |
+|---|---|---|
+| `M365_API_KEY` | unset (off) | When set, every `/v1/*` request must carry it as `Authorization: Bearer <key>` or `x-api-key: <key>`; a missing or wrong key returns `401` with an OpenAI-shaped error body. Unset, no key is required — the proxy must stay on loopback. |
 
 ### Auth and browser — `packages/core/src/auth.ts`, `packages/core/src/web-conversations.ts`
 

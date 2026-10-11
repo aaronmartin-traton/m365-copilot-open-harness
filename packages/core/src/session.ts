@@ -21,7 +21,7 @@ import {
   shouldAutoConfirm,
   ACTION_ALLOWED_MESSAGE_TYPES,
 } from "./native-actions.js";
-import { createLogger, trunc, FRAME_DIR } from "./log.js";
+import { createLogger, trunc, redact, FRAME_DIR } from "./log.js";
 import { prepareImageAttachments, type ImageInput } from "./images.js";
 import { ensureSteered, type SteeringFingerprint } from "./steering.js";
 
@@ -147,10 +147,14 @@ function dumpFrame(requestId: string, frameJson: string, direction: "recv" | "se
 
   try {
     mkdirSync(FRAME_DIR, { recursive: true });
-    appendFileSync(
-      join(FRAME_DIR, `${requestId}.ndjson`),
+
+    // Redact before the bytes hit disk: the WS URL's `access_token=` query param
+    // (and any credential echoed inside a frame) must never reach a dump.
+    const line = redact(
       JSON.stringify({ t: Date.now(), dir: direction, frame: JSON.parse(frameJson) }) + "\n",
     );
+
+    appendFileSync(join(FRAME_DIR, `${requestId}.ndjson`), line);
   } catch {
     // best effort
   }
