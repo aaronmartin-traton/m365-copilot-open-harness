@@ -26,6 +26,8 @@ export function parseImageDataUrl(
   const match = DATA_URL.exec(value);
 
   if (!match) throw new Error("image must be a base64 PNG, JPEG, or WebP data URL");
+  // SAFETY: DATA_URL's scheme alternation admits only image/png, image/jpeg, image/webp,
+  // so capture group 1 is exactly one of ParsedImageInput["mediaType"].
   const mediaType = match[1] as ParsedImageInput["mediaType"];
   const encoded = match[2];
   const padding = encoded.endsWith("==") ? 2 : encoded.endsWith("=") ? 1 : 0;

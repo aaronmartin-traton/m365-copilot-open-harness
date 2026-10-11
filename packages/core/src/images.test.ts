@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { prepareImageAttachments } from "./images.js";
 
-const jwt = (payload: object) => {
-  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
+/** The JWT claims this suite builds: string-valued identity claims. */
+type JwtClaims = Record<string, string>;
+
+const jwt = (payload: JwtClaims) => {
+  const encode = (value: JwtClaims) => Buffer.from(JSON.stringify(value)).toString("base64url");
 
   return `${encode({ alg: "none" })}.${encode(payload)}.`;
 };
@@ -34,6 +37,8 @@ describe("prepareImageAttachments", () => {
       "X-Scenario": "OfficeWebIncludedCopilot",
       "X-AnchorMailbox": "Oid:user-1@tenant-1",
     });
+    // SAFETY: `prepareImageAttachments` uploads a multipart FormData body; the fake
+    // fetch above captures exactly that init, so this reads back the upload it built.
     const form = request?.body as FormData;
     expect(form.get("scenario")).toBe("UploadImage");
     expect(form.get("conversationId")).toBe("conversation-1");

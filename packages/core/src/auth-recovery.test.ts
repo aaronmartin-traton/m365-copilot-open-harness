@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { createBackoffController } from "./auth-recovery.js";
+import { createBackoffController, type BackoffOptions } from "./auth-recovery.js";
 
-function setup(overrides: Record<string, unknown> = {}) {
+function setup(overrides: Partial<BackoffOptions> = {}) {
   let t = 0;
   const slept: number[] = [];
 

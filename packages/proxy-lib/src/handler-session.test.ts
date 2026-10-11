@@ -5,8 +5,12 @@ import { tmpdir } from "node:os";
 import { SessionPool } from "./session-pool.js";
 import { ChatCompletionRequest } from "./schemas.js";
 import { SessionStateStore } from "./session-store.js";
+import type { z } from "zod/v4";
 
 const dirs: string[] = [];
+
+/** Raw message list accepted by the request schema before it is parsed. */
+type MessagesInput = z.input<typeof ChatCompletionRequest>["messages"];
 
 function pool() {
   const dir = mkdtempSync(join(tmpdir(), "m365-handler-session-"));
@@ -17,7 +21,7 @@ function pool() {
   });
 }
 
-function messages(input: unknown) {
+function messages(input: MessagesInput) {
   return ChatCompletionRequest.parse({ messages: input }).messages;
 }
 

@@ -9,13 +9,9 @@ export default defineEventHandler(async (event) => {
 
   if (!loopback) return handleAttestationRequest(null, undefined, false);
 
-  let body: unknown;
-
-  try {
-    body = await readBody(event);
-  } catch {
-    body = null;
-  }
+  // A body that fails to read is the gate's 400, not a route error: the control
+  // request still reaches handleAttestationRequest, which owns body validation.
+  const body = await readBody(event).catch(() => null);
 
   return handleAttestationRequest(
     body,

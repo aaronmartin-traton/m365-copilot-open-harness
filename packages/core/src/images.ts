@@ -1,4 +1,6 @@
 
+import { z } from "zod/v4";
+
 export const MAX_IMAGE_BYTES = Number(process.env.M365_IMAGE_MAX_BYTES ?? 20 * 1024 * 1024);
 
 export type ImageMediaType = "image/png" | "image/jpeg" | "image/webp";
@@ -26,14 +28,20 @@ export interface PreparedImageAttachment {
   };
 }
 
-interface UploadResponse {
-  docId?: string;
-  fileName?: string;
-  fileType?: string;
-  result?: { value?: string };
+/** Shape of the M365 `UploadFile` response body (fields beyond these are ignored). */
+const UploadResponse = z.object({
+  docId: z.string().optional(),
+  fileName: z.string().optional(),
+  fileType: z.string().optional(),
+  result: z.object({ value: z.string().optional() }).optional(),
+});
+
+interface TokenClaims {
+  oid: string;
+  tid: string;
 }
 
-function tokenClaims(token: string): { oid: string; tid: string } {
+function tokenClaims(token: string): TokenClaims {
   const payload = token.split(".")[1];
 
   if (!payload) throw new Error("M365 image upload token is not a JWT");
@@ -88,9 +96,9 @@ export async function prepareImageAttachments(
     const raw = await response.text();
 
     if (!response.ok) throw new Error(`M365 image upload failed: HTTP ${response.status} ${raw.slice(0, 500)}`);
-    let payload: UploadResponse;
+    let payload: z.infer<typeof UploadResponse>;
 
-    try { payload = JSON.parse(raw) as UploadResponse; }
+    try { payload = UploadResponse.parse(JSON.parse(raw)); }
     catch { throw new Error("M365 image upload returned invalid JSON"); }
 
     if (payload.result?.value !== "Success" || !payload.docId) {

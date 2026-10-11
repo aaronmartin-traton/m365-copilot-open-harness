@@ -4,6 +4,8 @@ import type { ParsedToolCall } from "@m365-copilot/core";
 
 const CLIENTS = ["pi", "omp", "codex"] as const;
 
+const AttestationClientSchema = z.enum(CLIENTS);
+
 const TTL_MS = 60_000;
 
 const CAPACITY = 1_000;
@@ -22,6 +24,14 @@ export const AttestationRequestSchema = z.object({
 });
 
 export type AttestationRequest = z.infer<typeof AttestationRequestSchema>;
+
+/** Error bodies serialized back over the loopback control endpoint. */
+type AttestationErrorBody = { error: { type: string; message: string } };
+
+/** The success body serialized back over the loopback control endpoint. */
+type AttestationAllowBody = { decision: "allow" };
+
+type AttestationResponseBody = AttestationErrorBody | AttestationAllowBody;
 
 interface Candidate {
   client: AttestationClient;
@@ -189,16 +199,22 @@ export function getAttestationGate(): AttestationGate | null {
   return singleton;
 }
 
-function response(status: number, body: unknown): Response {
+function response(status: number, body: AttestationResponseBody): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
 }
 
-/** Process the loopback control request after the server identifies its peer. */
-export function handleAttestationRequest(
-  body: unknown,
+/**
+ * Process the loopback control request after the server identifies its peer.
+ *
+ * The decoded body is untrusted: it has no contract until
+ * `AttestationRequestSchema` accepts it here, so it is taken as an opaque value
+ * (the caller hands over raw decoded JSON) and rejected with 400 otherwise.
+ */
+export function handleAttestationRequest<DecodedBody>(
+  body: DecodedBody,
   signature: string | undefined,
   isLoopback: boolean,
 ): Response {
@@ -236,11 +252,13 @@ export function requestedAttestationClient(
 ): AttestationClient | undefined {
   if (executionGate !== "attestation-v1") return undefined;
 
-  if (!client || !(CLIENTS as readonly string[]).includes(client)) return undefined;
+  const parsedClient = AttestationClientSchema.safeParse(client);
+
+  if (!parsedClient.success) return undefined;
   const secret = getAttestationSecret();
 
   if (!secret || !proof) return undefined;
-  const expected = createHmac("sha256", secret).update(`attestation-v1\n${client}`, "utf8").digest();
+  const expected = createHmac("sha256", secret).update(`attestation-v1\n${parsedClient.data}`, "utf8").digest();
   const actual = Buffer.from(proof, "hex");
 
   if (actual.length !== expected.length) return undefined;
@@ -251,7 +269,7 @@ export function requestedAttestationClient(
     return undefined;
   }
 
-  return client as AttestationClient;
+  return parsedClient.data;
 }
 
 /** The configured shared secret, or undefined when the gate is off. */

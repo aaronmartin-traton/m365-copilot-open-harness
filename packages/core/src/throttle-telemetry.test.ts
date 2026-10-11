@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mkdtempSync, readFileSync, existsSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 
 import {
   emitThrottleEvent,
@@ -33,13 +34,40 @@ const fileLines = (): string[] => {
   return existsSync(p) ? readFileSync(p, "utf8").trim().split("\n").filter(Boolean) : [];
 };
 
+/**
+ * The NDJSON line contract the module promises on disk. Decoding (rather than
+ * asserting) means a line that drifts from `ThrottleEvent` fails the test.
+ */
+const persistedEventSchema = z.object({
+  ts: z.string(),
+  event: z.enum([
+    "empty-throttle",
+    "backoff-enter",
+    "backoff-exit",
+    "disengaged",
+    "at-limit",
+    "throttled",
+  ]),
+  convIdHash: z.string().optional(),
+  level: z.number().optional(),
+  backoffUntil: z.number().optional(),
+  durationMs: z.number().optional(),
+  framing: z.string().optional(),
+  retryOutcome: z.string().optional(),
+  current: z.number().optional(),
+  max: z.number().optional(),
+});
+
+/** Decode one persisted NDJSON line into the module's event contract. */
+const parsePersistedEvent = (line: string): ThrottleEvent => persistedEventSchema.parse(JSON.parse(line));
+
 describe("throttle telemetry — NDJSON emission", () => {
   it("appends one NDJSON line per event to the configured file", () => {
     emitThrottleEvent({ ts: "t1", event: "empty-throttle", convIdHash: "abc" });
     emitThrottleEvent({ ts: "t2", event: "at-limit", current: 600, max: 600 });
     const lines = fileLines();
     expect(lines).toHaveLength(2);
-    const first = JSON.parse(lines[0]) as ThrottleEvent;
+    const first = parsePersistedEvent(lines[0]);
     expect(first.event).toBe("empty-throttle");
     expect(first.convIdHash).toBe("abc");
     expect(first.ts).toBe("t1");
@@ -122,7 +150,7 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
     noteRequestOutcome(true, "conv-1");
     expect(counts()["empty-throttle"]).toBe(1);
     expect(counts()["backoff-enter"]).toBe(0); // backoff gate really skipped
-    const line = JSON.parse(fileLines()[0]) as ThrottleEvent;
+    const line = parsePersistedEvent(fileLines()[0]);
     expect(line.event).toBe("empty-throttle");
     expect(line.convIdHash).toBe(hashConversationId("conv-1"));
   });
@@ -137,7 +165,7 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
     expect(counts()["empty-throttle"]).toBe(3);
 
     const enter = fileLines()
-      .map((l) => JSON.parse(l) as ThrottleEvent)
+      .map(parsePersistedEvent)
       .find((e) => e.event === "backoff-enter")!;
 
     expect(enter.level).toBe(1);
@@ -153,7 +181,7 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
     noteRequestOutcome(false, "conv-a"); // clean response lifts backoff
 
     const exit = fileLines()
-      .map((l) => JSON.parse(l) as ThrottleEvent)
+      .map(parsePersistedEvent)
       .find((e) => e.event === "backoff-exit");
 
     expect(exit).toBeDefined();
@@ -177,7 +205,7 @@ describe("throttle telemetry — backoff wiring via noteRequestOutcome", () => {
     noteRequestOutcome(true, "conv-d");
 
     const exit = fileLines()
-      .map((l) => JSON.parse(l) as ThrottleEvent)
+      .map(parsePersistedEvent)
       .find((e) => e.event === "backoff-exit");
 
     expect(exit).toBeDefined();

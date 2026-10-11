@@ -8,10 +8,13 @@ update through the skill, never by hand-editing files under this directory.
 
 - Origin: the `install-anti-slop` skill's bundled plugin
   (`scripts/install.mjs` payload).
-- Source commit: **unknown** — the skill ships the plugin as bundled assets
-  without an embedded revision. Recorded as unknown rather than guessed.
-  Re-running the installer against a newer skill release is how this is
-  refreshed.
+- Source commit: **c44ef22ca116d0ba62a3ff663a0bd13a3f3fa40b** (the
+  `install-anti-slop` skill's recorded source revision). The installed tree is
+  byte-identical to the bundle that skill ships — verified by staging the bundle
+  into a temp directory and `diff -rq` against this directory, whose only
+  difference is this file. The previous revision recorded here was "unknown"
+  because the bundle carries no embedded revision; it is now recoverable from
+  the skill's own metadata, and the byte comparison ties it to these assets.
 - License of the vendored readability rule:
   `vendor/eslint-stylistic/LICENSE` (travels with the copy).
 

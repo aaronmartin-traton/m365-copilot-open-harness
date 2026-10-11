@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { z } from "zod";
 import { createLogger } from "./log.js";
 import { emitThrottleEvent, hashConversationId } from "./throttle-telemetry.js";
 
@@ -154,13 +155,26 @@ const disabled = () =>
 const BACKOFF_STATE_FILE = process.env.M365_BACKOFF_STATE_FILE ||
   join(homedir(), ".config", "opencode-m365", "backoff-state.json");
 
+/** The on-disk shape of the persisted backoff state (the same fields `BackoffState` carries). */
+const StoredBackoffState = z.object({
+  empties: z.array(z.object({ t: z.number(), conv: z.string() })),
+  backoffUntil: z.number().nullish(),
+  level: z.number(),
+});
+
 function loadBackoffState(): BackoffState | undefined {
   if (!existsSync(BACKOFF_STATE_FILE)) return undefined;
 
   try {
-    const parsed = JSON.parse(readFileSync(BACKOFF_STATE_FILE, "utf8"));
+    const parsed = StoredBackoffState.safeParse(JSON.parse(readFileSync(BACKOFF_STATE_FILE, "utf8")));
 
-    if (Array.isArray(parsed?.empties) && typeof parsed?.level === "number") return parsed;
+    if (!parsed.success) return undefined;
+
+    return {
+      empties: parsed.data.empties,
+      backoffUntil: parsed.data.backoffUntil ?? null,
+      level: parsed.data.level,
+    };
   } catch {}
 
   return undefined;

@@ -69,9 +69,8 @@ export function driftStats(fingerprint: string): DriftStats {
   const ring = sink.get(bucketOf(fingerprint)) ?? [];
   const disengaged = ring.filter((s) => s.disengaged).length;
 
-  const deaScores = ring
-    .filter((s) => typeof s.deaScore === "number")
-    .map((s) => s.deaScore as number);
+  // A turn with no reported score contributes nothing — it is not a zero.
+  const deaScores = ring.flatMap((s) => (s.deaScore === undefined ? [] : [s.deaScore]));
 
   return {
     fingerprint: bucketOf(fingerprint),
@@ -105,9 +104,7 @@ export function driftAlert(): string | null {
   const sDisengaged = steered.filter((s) => s.disengaged).length;
   const sRate = sDisengaged / sTurns;
 
-  const sDeaScores = steered
-    .filter((s) => typeof s.deaScore === "number")
-    .map((s) => s.deaScore as number);
+  const sDeaScores = steered.flatMap((s) => (s.deaScore === undefined ? [] : [s.deaScore]));
 
   const sMean =
     sDeaScores.length > 0

@@ -16,6 +16,25 @@ const secondCall: ParsedToolCall = {
   function: { name: "write_file", arguments: JSON.stringify({ path: "a.txt", content: "hi" }) },
 };
 
+/** One tool-call entry inside a streamed delta. */
+interface SseToolCallDelta {
+  index: number;
+  id: string;
+  function: { name: string; arguments: string };
+}
+
+/** One `data: {...}` payload from the SSE stream, limited to what these tests read. */
+interface SseEvent {
+  system_fingerprint?: string;
+  /** Absent on the terminal error chunk, which carries `error` instead. */
+  choices?: Array<{
+    delta?: { role?: string; content?: string | null; tool_calls?: SseToolCallDelta[] } | null;
+    finish_reason?: string | null;
+  }>;
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+  error?: { message?: string; type?: string; code?: string; param?: string };
+}
+
 function args(over: Partial<RenderResponseArgs> = {}): RenderResponseArgs {
   return {
     stream: false,
@@ -32,7 +51,7 @@ function args(over: Partial<RenderResponseArgs> = {}): RenderResponseArgs {
 
 /** Read an SSE body once; return the raw text and the parsed `data: {json}` events
  * (skipping keepalive comments and [DONE]). */
-async function readSSE(resp: Response): Promise<{ text: string; events: Array<Record<string, any>> }> {
+async function readSSE(resp: Response): Promise<{ text: string; events: SseEvent[] }> {
   const text = await resp.text();
 
   return {
@@ -46,7 +65,8 @@ async function readSSE(resp: Response): Promise<{ text: string; events: Array<Re
 
 describe("renderResponse non-stream", () => {
   it("renders text as the OpenAI chat.completion envelope", async () => {
-    const a = args({ stream: false });
+    const produce = vi.fn(async () => ({ kind: "text" as const, text: "hello" }));
+    const a = args({ stream: false, produce });
     const resp = await renderResponse(a);
     expect(resp.status).toBe(200);
     const body = await resp.json();
@@ -60,7 +80,7 @@ describe("renderResponse non-stream", () => {
     expect(body.choices[0].finish_reason).toBe(outputFinishReason("hello"));
     expect(body.usage).toEqual({ prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 });
     expect(a.produce).toHaveBeenCalledOnce();
-    expect((a.produce as ReturnType<typeof vi.fn>).mock.calls[0][0]).toBeUndefined();
+    expect(produce.mock.calls[0][0]).toBeUndefined();
     expect(a.usage).toHaveBeenCalledOnce();
   });
 
@@ -115,7 +135,7 @@ describe("renderResponse streaming", () => {
     const resp = await renderResponse(a);
     expect(resp.status).toBe(200);
     const { text, events } = await readSSE(resp);
-    expect(events[0].choices[0].delta.role).toBe("assistant");
+    expect(events[0].choices?.[0]?.delta?.role).toBe("assistant");
     expect(text.trimEnd().endsWith("data: [DONE]")).toBe(true);
   });
 
@@ -133,7 +153,7 @@ describe("renderResponse streaming", () => {
 
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
-      .filter((c): c is string => typeof c === "string");
+      .filter((c): c is string => c != null);
 
     expect(content).toEqual(["hel", "lo"]);
     // finalization must not re-emit the full text
@@ -156,7 +176,7 @@ describe("renderResponse streaming", () => {
 
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
-      .filter((c): c is string => typeof c === "string");
+      .filter((c): c is string => c != null);
 
     expect(content).toEqual(["hel", "lo world"]);
     expect(content.some((c) => c === "hello world")).toBe(false);
@@ -175,7 +195,7 @@ describe("renderResponse streaming", () => {
 
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
-      .filter((c): c is string => typeof c === "string");
+      .filter((c): c is string => c != null);
 
     expect(content).toHaveLength(0);
 
@@ -202,7 +222,7 @@ describe("renderResponse streaming", () => {
     const { events } = await readSSE(resp);
 
     const toolDeltas = events
-      .flatMap((e) => (e.choices?.[0]?.delta?.tool_calls ?? []) as any[])
+      .flatMap((e) => e.choices?.[0]?.delta?.tool_calls ?? [])
       .filter(Boolean);
 
     expect(toolDeltas.map((d) => d.index)).toEqual([0, 1]);
@@ -219,7 +239,7 @@ describe("renderResponse streaming", () => {
     const { events } = await readSSE(resp);
     const withUsage = events.filter((e) => e.usage != null);
     expect(withUsage).toHaveLength(1);
-    expect(withUsage[0].choices[0].finish_reason).not.toBeNull();
+    expect(withUsage[0].choices?.[0]?.finish_reason).not.toBeNull();
     expect(withUsage[0].usage).toEqual({ prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 });
     expect(a.usage).toHaveBeenCalledOnce();
   });
@@ -285,7 +305,7 @@ describe("renderResponse streaming", () => {
 
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
-      .filter((c): c is string => typeof c === "string");
+      .filter((c): c is string => c != null);
 
     expect(content).toEqual(["hello"]);
     expect(content.some((c) => c.includes("goodbye"))).toBe(false);
@@ -300,7 +320,7 @@ describe("renderResponse streaming", () => {
 
     const content = events
       .map((e) => e.choices?.[0]?.delta?.content)
-      .filter((c): c is string => typeof c === "string");
+      .filter((c): c is string => c != null);
 
     expect(content).toEqual(["hello"]);
     expect(events.filter((e) => e.choices?.[0]?.finish_reason != null)).toHaveLength(1);

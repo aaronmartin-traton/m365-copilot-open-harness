@@ -3,6 +3,27 @@ import { ChatCompletionRequest, ToolCall } from "./schemas.js";
 import { handleChatCompletion } from "./handler.js";
 import type { SessionPool } from "./session-pool.js";
 
+/** A JSON value: scalars, arrays, and string-keyed objects, exactly what `JSON.stringify` renders losslessly. */
+type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { readonly [key: string]: JsonValue | undefined };
+
+/** A JSON value, i.e. exactly what `JSON.parse` can produce for a request field we forward verbatim. */
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+
 const ContentPart = z.object({
   type: z.string(),
   text: z.string().optional(),
@@ -33,19 +54,19 @@ const FunctionTool = z.object({
   type: z.literal("function"),
   name: z.string(),
   description: z.string().optional(),
-  parameters: z.unknown().optional(),
+  parameters: jsonValueSchema.optional(),
 });
 
 export const ResponsesRequest = z.object({
   model: z.string().optional().default("gpt-5.5-think-deeper"),
   instructions: z.string().optional(),
   input: z.union([z.string(), z.array(z.unknown())]),
-  tools: z.array(z.unknown()).optional().default([]),
-  tool_choice: z.unknown().optional(),
+  tools: z.array(jsonValueSchema).optional().default([]),
+  tool_choice: jsonValueSchema.optional(),
   parallel_tool_calls: z.boolean().optional().default(false),
   previous_response_id: z.string().nullable().optional(),
-  reasoning: z.unknown().optional(),
-  text: z.unknown().optional(),
+  reasoning: jsonValueSchema.optional(),
+  text: jsonValueSchema.optional(),
   stream: z.boolean().optional().default(false),
   store: z.boolean().optional().default(false),
   prompt_cache_key: z.string().optional(),
@@ -90,13 +111,13 @@ type OutputItem =
     };
 
 function contentText(content: string | Array<z.infer<typeof ContentPart>>): string {
-  if (typeof content === "string") return content;
+  if (Array.isArray(content)) return content.map((part) => part.text ?? "").filter(Boolean).join("\n");
 
-  return content.map((part) => part.text ?? "").filter(Boolean).join("\n");
+  return content;
 }
 
 function toChatContent(content: string | Array<z.infer<typeof ContentPart>>): ChatMessageInput["content"] {
-  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return content;
 
   return content.flatMap((part): Array<{ type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } } | { type: "text"; text: string }> => {
     if ((part.type === "input_image" || part.type === "image_url") && part.image_url) {
@@ -117,7 +138,7 @@ function toChatMessages(body: ResponsesRequestBody): ChatMessageInput[] {
 
   if (body.instructions) messages.push({ role: "system", content: body.instructions });
 
-  if (typeof body.input === "string") {
+  if (!Array.isArray(body.input)) {
     messages.push({ role: "user", content: body.input });
 
     return messages;
@@ -163,7 +184,7 @@ function toChatMessages(body: ResponsesRequestBody): ChatMessageInput[] {
   return messages;
 }
 
-function toChatTools(rawTools: unknown[]) {
+function toChatTools(rawTools: JsonValue[]) {
   return rawTools.flatMap((rawTool) => {
     const tool = FunctionTool.safeParse(rawTool);
 
@@ -180,7 +201,7 @@ function toChatTools(rawTools: unknown[]) {
   });
 }
 
-function toChatToolChoice(choice: unknown) {
+function toChatToolChoice(choice: JsonValue | undefined) {
   if (choice === "auto" || choice === "none" || choice === "required") return choice;
   const selected = z.object({ type: z.literal("function"), name: z.string() }).safeParse(choice);
 
@@ -189,22 +210,43 @@ function toChatToolChoice(choice: unknown) {
     : undefined;
 }
 
-interface ResponseEnvelope {
+type ResponseEnvelope = {
   id: string;
+  object: "response";
   created_at: number;
   completed_at: number;
   status: "completed";
+  error: null;
+  incomplete_details: null;
+  instructions: string | null;
+  max_output_tokens: null;
+  model: string;
   output: OutputItem[];
-  [key: string]: unknown;
-}
+  parallel_tool_calls: boolean;
+  previous_response_id: string | null;
+  reasoning: JsonValue;
+  store: boolean;
+  text: JsonValue;
+  tool_choice: JsonValue;
+  tools: JsonValue[];
+  truncation: "disabled";
+  system_fingerprint?: string;
+  usage: {
+    input_tokens: number;
+    input_tokens_details: { cached_tokens: number };
+    output_tokens: number;
+    total_tokens: number;
+  };
+  metadata: JsonValue;
+};
 
 function responseEnvelope(body: ResponsesRequestBody, id: string, createdAt: number, output: OutputItem[], usage: z.infer<typeof ChatCompletionResponse>["usage"], fingerprint?: string): ResponseEnvelope {
-  return {
+  const envelope: ResponseEnvelope = {
     id,
-    object: "response" as const,
+    object: "response",
     created_at: createdAt,
     completed_at: createdAt,
-    status: "completed" as const,
+    status: "completed",
     error: null,
     incomplete_details: null,
     instructions: body.instructions ?? null,
@@ -219,7 +261,6 @@ function responseEnvelope(body: ResponsesRequestBody, id: string, createdAt: num
     tool_choice: body.tool_choice ?? "auto",
     tools: body.tools,
     truncation: "disabled",
-    ...(fingerprint ? { system_fingerprint: fingerprint } : {}),
     usage: {
       input_tokens: usage?.prompt_tokens ?? 0,
       input_tokens_details: { cached_tokens: 0 },
@@ -228,9 +269,13 @@ function responseEnvelope(body: ResponsesRequestBody, id: string, createdAt: num
     },
     metadata: {},
   };
+
+  if (fingerprint) envelope.system_fingerprint = fingerprint;
+
+  return envelope;
 }
 
-function sse(type: string, payload: unknown): string {
+function sse(type: string, payload: JsonValue): string {
   return `event: ${type}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
@@ -331,9 +376,8 @@ async function buildResponse(
 ): Promise<BuiltResponse> {
   const id = `resp_${crypto.randomUUID().replaceAll("-", "")}`;
 
-  const metadataSessionId = body.client_metadata && typeof body.client_metadata.session_id === "string"
-    ? body.client_metadata.session_id
-    : undefined;
+  const sessionIdClaim = z.string().safeParse(body.client_metadata?.session_id);
+  const metadataSessionId = sessionIdClaim.success ? sessionIdClaim.data : undefined;
 
   let sessionKey = options.sessionKey;
   let managedKey: string | undefined;
@@ -392,6 +436,9 @@ async function buildResponse(
   return { envelope: responseEnvelope(body, id, Math.floor(Date.now() / 1000), output, completion.usage, completion.system_fingerprint) };
 }
 
+/** Body of a failed upstream response, as forwarded verbatim to the client's `response.failed` event. */
+const UpstreamErrorBody = z.object({ error: jsonValueSchema.optional() });
+
 function streamDeferredResponse(pending: Promise<BuiltResponse>): Response {
   const enc = new TextEncoder();
 
@@ -405,9 +452,14 @@ function streamDeferredResponse(pending: Promise<BuiltResponse>): Response {
         const built = await pending;
 
         if ("error" in built) {
-          let error: unknown = { message: "M365 upstream error", type: "upstream_error" };
+          const fallback = { message: "M365 upstream error", type: "upstream_error" };
+          let error: JsonValue = fallback;
 
-          try { error = JSON.parse(await built.error.text()).error ?? error; } catch {}
+          try {
+            const decoded = UpstreamErrorBody.safeParse(JSON.parse(await built.error.text()));
+
+            if (decoded.success) error = decoded.data.error ?? fallback;
+          } catch {}
 
           controller.enqueue(enc.encode(sse("response.failed", { type: "response.failed", error })));
 

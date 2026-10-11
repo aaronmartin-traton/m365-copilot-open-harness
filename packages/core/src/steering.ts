@@ -19,6 +19,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { z } from "zod";
 import { createLogger } from "./log.js";
 
 const log = createLogger("steering");
@@ -79,35 +80,27 @@ export function steeringStateFile(): string {
   return process.env.M365_STEERING_FILE ?? join(homedir(), ".config", "opencode-m365", "steering.json");
 }
 
-function normalizeState(raw: unknown): SteeringState {
-  const base = freshState();
+/**
+ * Persisted per-channel breaker. Every field is decoded on its own: the file is
+ * written by older/newer builds, so a bad field degrades to its default instead
+ * of invalidating the whole document.
+ */
+const persistedBreakerSchema = z.object({
+  failures: z.number().transform((n) => Math.max(0, n)).catch(0),
+  open: z.boolean().catch(false),
+  openedAt: z.number().nullable().catch(null),
+});
 
-  if (!raw || typeof raw !== "object") return base;
-  const r = raw as Record<string, unknown>;
-
-  const merged: SteeringState = {
-    ...base,
-    channel: r.channel === "textarea" ? r.channel : null,
-    payload: typeof r.payload === "string" && r.payload.length > 0 ? r.payload : null,
-    lastVerifiedAt: typeof r.lastVerifiedAt === "number" ? r.lastVerifiedAt : null,
-    lastAttemptAt: typeof r.lastAttemptAt === "number" ? r.lastAttemptAt : null,
-  };
-
-  const br = (r.breakers ?? {}) as Record<string, unknown>;
-
-  for (const ch of ["textarea"] as const) {
-    const b = br[ch] as Record<string, unknown> | undefined;
-    merged.breakers[ch] = b && typeof b === "object"
-      ? {
-          failures: typeof b.failures === "number" ? Math.max(0, b.failures) : 0,
-          open: b.open === true,
-          openedAt: typeof b.openedAt === "number" ? b.openedAt : null,
-        }
-      : freshBreaker();
-  }
-
-  return merged;
-}
+/** Persisted steering-state document; tolerant of any missing or mistyped field. */
+const persistedStateSchema = z
+  .object({
+    channel: z.literal("textarea").nullable().catch(null),
+    payload: z.string().min(1).nullable().catch(null),
+    breakers: z.object({ textarea: persistedBreakerSchema }).catch(() => freshState().breakers),
+    lastVerifiedAt: z.number().nullable().catch(null),
+    lastAttemptAt: z.number().nullable().catch(null),
+  })
+  .catch(() => freshState());
 
 export function readSteeringState(): SteeringState {
   const file = steeringStateFile();
@@ -115,7 +108,8 @@ export function readSteeringState(): SteeringState {
   try {
     if (!existsSync(file)) return freshState();
 
-    return normalizeState(JSON.parse(readFileSync(file, "utf8")));
+    // A malformed document (bad JSON, or any non-object root) degrades to fresh state.
+    return persistedStateSchema.parse(JSON.parse(readFileSync(file, "utf8")));
   } catch (err) {
     log.error(`steering state unreadable (${file}): ${err instanceof Error ? err.message : String(err)} — using defaults`);
 
@@ -262,22 +256,19 @@ function makeNonce(prefix: string): string {
   return `${prefix}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
-interface CanaryOutput {
-  fullText?: string;
-  disengaged?: boolean;
-  throttle?: boolean;
-}
+/**
+ * Decoded `_steering-canary.mjs` stdout. Unknown fields degrade to the
+ * conservative default: no reply text, no frames.
+ */
+const canaryOutputSchema = z
+  .object({
+    fullText: z.string().catch(""),
+    disengaged: z.boolean().catch(false),
+    throttle: z.boolean().catch(false),
+  })
+  .catch(() => ({ fullText: "", disengaged: false, throttle: false }));
 
-function parseCanaryOutput(raw: unknown): CanaryOutput {
-  if (!raw || typeof raw !== "object") return {};
-  const r = raw as Record<string, unknown>;
-
-  return {
-    fullText: typeof r.fullText === "string" ? r.fullText : undefined,
-    disengaged: r.disengaged === true,
-    throttle: r.throttle === true,
-  };
-}
+type CanaryOutput = z.infer<typeof canaryOutputSchema>;
 
 /**
  * Mapping-canary probe (live-gated): plant a fresh codeword→reply mapping that
@@ -303,12 +294,12 @@ export async function verifyChannel(channel: SteeringChannel, payload: string): 
   let parsed: CanaryOutput;
 
   try {
-    parsed = parseCanaryOutput(JSON.parse(stdout));
+    parsed = canaryOutputSchema.parse(JSON.parse(stdout));
   } catch {
     return { ok: false, reason: "error", detail: "canary runner output unparseable" };
   }
 
-  const reply = parsed.fullText ?? "";
+  const reply = parsed.fullText;
 
   if (parsed.disengaged) return { ok: false, reason: "disengaged" };
 

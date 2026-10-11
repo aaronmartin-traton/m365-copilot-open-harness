@@ -1,41 +1,45 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { ModelProvider, ProviderTurn } from "@m365-copilot/core";
+import { createApp } from "./index.js";
+import { handleResponse, ResponsesRequest } from "./responses.js";
+import { SessionPool } from "./session-pool.js";
 
-const calls: string[] = [];
+const prompts: string[] = [];
 
-vi.mock("@m365-copilot/core", async (importActual) => {
-  const actual = await importActual<typeof import("@m365-copilot/core")>();
+/** A faithful `ModelProvider` stand-in: the turn path runs on this, injected through the pool. */
+class FakeModelSession implements ModelProvider {
+  readonly id = "m365";
+  readonly sessionId = "app-session";
+  conversationId = "app-conversation";
+  turnCount = 0;
 
-  class FakeModelSession {
-    turnCount = 0;
-    conversationId = "app-conversation";
-    sessionId = "app-session";
-    newConversation() {}
-    reset() {}
-    id = "m365";
-    supportsTools() { return true; }
-    describeModel(model: string) { return model; }
-    recoverFromRefusal(rebuild: (framing: "softened") => string) { return rebuild("softened"); }
-    async refreshTools() { return false; }
-    async run(prompt: string) {
-      calls.push(prompt);
+  newConversation() {}
 
-      return {
-        fullText: "app response",
-        hasContent: true,
-        images: [],
-        throttle: { current: 1, max: 600 },
-        stopReason: "completed",
-        turnCount: ++this.turnCount,
-        usage: { content_origin: "GPT" },
-        async *[Symbol.asyncIterator]() { yield "app response"; },
-      };
-    }
+  supportsTools() { return true; }
+
+  describeModel(model: string) { return model; }
+
+  listModels() { return ["gpt-5.5-think-deeper"]; }
+
+  recoverFromRefusal(rebuild: (framing: "softened") => string) { return rebuild("softened"); }
+
+  async refreshTools() { return false; }
+
+  async run(prompt: string): Promise<ProviderTurn> {
+    prompts.push(prompt);
+
+    return {
+      fullText: "app response",
+      hasContent: true,
+      images: [],
+      throttle: { current: 1, max: 600 },
+      stopReason: "completed",
+      turnCount: ++this.turnCount,
+      usage: { content_origin: "GPT" },
+      async *[Symbol.asyncIterator]() { yield "app response"; },
+    };
   }
-
-  return { ...actual, ModelSession: FakeModelSession };
-});
-
-const { createApp } = await import("./index.js");
+}
 
 function request(path: string, init: RequestInit = {}) {
   return new Request(`http://localhost${path}`, init);
@@ -54,28 +58,27 @@ describe("framework-free app routes", () => {
     expect((await models.json()).data).toBeInstanceOf(Array);
   });
 
-  it("serves Responses and preserves the session key", async () => {
-    calls.length = 0;
-    const app = createApp();
+  it("reuses one conversation for repeated Responses requests with the same session key", async () => {
+    prompts.length = 0;
+    let sessions = 0;
 
-    const response = await app.fetch(request("/v1/responses", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-m365-session-key": "thread-1" },
-      body: JSON.stringify(responseBody),
-    }));
+    const pool = new SessionPool({}, {
+      createSession: () => {
+        sessions += 1;
 
+        return new FakeModelSession();
+      },
+    });
+
+    const response = await handleResponse(ResponsesRequest.parse(responseBody), pool, { sessionKey: "thread-1" });
     expect(response.status).toBe(200);
     expect((await response.json()).object).toBe("response");
-    expect(calls[0]).toContain("hello");
+    expect(prompts[0]).toContain("hello");
 
-    const followUp = await app.fetch(request("/v1/responses", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-m365-session-key": "thread-1" },
-      body: JSON.stringify(responseBody),
-    }));
-
+    const followUp = await handleResponse(ResponsesRequest.parse(responseBody), pool, { sessionKey: "thread-1" });
     expect(followUp.status).toBe(200);
-    expect(calls).toHaveLength(2);
+    expect(prompts).toHaveLength(2);
+    expect(sessions).toBe(1);
   });
 
   it("returns CORS and 400 for malformed Chat and Responses bodies", async () => {

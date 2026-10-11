@@ -1,66 +1,106 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { z } from "zod/v4";
+import type { ModelProvider, ProviderTurn } from "@m365-copilot/core";
+import { handleResponse, ResponsesRequest, type ResponsesRequestBody } from "./responses.js";
+import { SessionPool } from "./session-pool.js";
 
-const scripted = {
-  text: "translated response",
-  fail: false,
-  toolCalls: [] as Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>,
-  prompts: [] as string[],
-};
+/** A tool call a scripted turn reports. */
+interface ScriptedToolCall {
+  id: string;
+  type: "function";
+  function: { name: string; arguments: string };
+}
 
-vi.mock("@m365-copilot/core", async (importActual) => {
-  const actual = await importActual<typeof import("@m365-copilot/core")>();
+/** The scripted behaviour of the next turns; each test resets what it depends on. */
+interface ScriptedTurns {
+  text: string;
+  fail: boolean;
+  toolCalls: ScriptedToolCall[];
+  prompts: string[];
+}
 
-  class FakeModelSession {
-    turnCount = 0;
-    conversationId = "response-conversation";
-    sessionId = "response-session";
-    newConversation() { this.conversationId = "response-conversation-2"; }
-    reset() {}
-    id = "m365";
-    supportsTools() { return true; }
-    describeModel(model: string) { return model; }
-    recoverFromRefusal(rebuild: (framing: "softened") => string) { return rebuild("softened"); }
-    async refreshTools() { return false; }
-    async run(prompt: string) {
-      scripted.prompts.push(prompt);
+const scripted: ScriptedTurns = { text: "translated response", fail: false, toolCalls: [], prompts: [] };
 
-      if (scripted.fail) throw new Error("upstream failed");
-      const text = scripted.text;
-      const hasContent = text.length > 0 || scripted.toolCalls.length > 0;
+/** A faithful `ModelProvider` stand-in: canned turns, injected through the pool's seam. */
+class FakeModelSession implements ModelProvider {
+  readonly id = "m365";
+  readonly sessionId = "response-session";
+  conversationId = "response-conversation";
+  turnCount = 0;
 
-      return {
-        fullText: text,
-        hasContent,
-        images: [],
-        throttle: { current: 1, max: 600 },
-        stopReason: hasContent ? "completed" : "empty",
-        turnCount: ++this.turnCount,
-        usage: { content_origin: "GPT" },
-        async *[Symbol.asyncIterator]() {
-          if (text) yield text;
-        },
-      };
-    }
+  newConversation() { this.conversationId = "response-conversation-2"; }
+
+  supportsTools() { return true; }
+
+  describeModel(model: string) { return model; }
+
+  listModels() { return ["gpt-5.5-think-deeper"]; }
+
+  recoverFromRefusal(rebuild: (framing: "softened") => string) { return rebuild("softened"); }
+
+  async refreshTools() { return false; }
+
+  async run(prompt: string): Promise<ProviderTurn> {
+    scripted.prompts.push(prompt);
+
+    if (scripted.fail) throw new Error("upstream failed");
+    const text = scripted.text;
+    const hasContent = text.length > 0 || scripted.toolCalls.length > 0;
+
+    return {
+      fullText: text,
+      hasContent,
+      images: [],
+      throttle: { current: 1, max: 600 },
+      stopReason: hasContent ? "completed" : "empty",
+      turnCount: ++this.turnCount,
+      usage: { content_origin: "GPT" },
+      async *[Symbol.asyncIterator]() {
+        if (text) yield text;
+      },
+    };
   }
+}
 
-  return { ...actual, ModelSession: FakeModelSession };
+/** A pool whose conversations all run on the fake provider. */
+function newPool(): SessionPool {
+  return new SessionPool({}, { createSession: () => new FakeModelSession() });
+}
+
+/** The Responses envelope fields these tests read back. */
+const ResponseEnvelope = z.object({
+  id: z.string(),
+  object: z.string(),
+  status: z.string(),
+  error: z.null(),
+  usage: z.object({ input_tokens: z.number(), output_tokens: z.number(), total_tokens: z.number() }),
+  output: z.array(z.object({
+    type: z.string(),
+    role: z.string().optional(),
+    status: z.string().optional(),
+    content: z.array(z.object({ type: z.string(), text: z.string() })).optional(),
+  })),
 });
 
-const { handleResponse, ResponsesRequest } = await import("./responses.js");
+/** The error body an invalid `previous_response_id` returns. */
+const ErrorBody = z.object({ error: z.object({ type: z.string(), message: z.string() }) });
 
-const { SessionPool } = await import("./session-pool.js");
+type ResponseEnvelope = z.infer<typeof ResponseEnvelope>;
 
-function base(input: unknown, extra: Record<string, unknown> = {}) {
+/** Request fields a test may add on top of the input under test. */
+type ResponseExtras = Partial<Omit<ResponsesRequestBody, "input" | "model">>;
+
+function base(input: ResponsesRequestBody["input"], extra: ResponseExtras = {}) {
   return ResponsesRequest.parse({ model: "gpt-5.5-think-deeper", input, ...extra });
 }
 
-async function responseFor(input: unknown, extra: Record<string, unknown> = {}) {
+async function responseFor(input: ResponsesRequestBody["input"], extra: ResponseExtras = {}) {
   scripted.text = "translated response";
   scripted.fail = false;
   scripted.prompts.length = 0;
-  const response = await handleResponse(base(input, extra), new SessionPool());
+  const response = await handleResponse(base(input, extra), newPool());
 
-  return { response, body: await response.json() as Record<string, unknown> };
+  return { response, body: ResponseEnvelope.parse(await response.json()) };
 }
 
 describe("Responses adapter conversion", () => {
@@ -116,7 +156,7 @@ describe("Responses envelopes and streaming", () => {
   });
 
   it("emits ordered SSE lifecycle and output events", async () => {
-    const response = await handleResponse(base("hello", { stream: true }), new SessionPool());
+    const response = await handleResponse(base("hello", { stream: true }), newPool());
     const text = await response.text();
     const events = [...text.matchAll(/^event: ([^\n]+)/gm)].map((match) => match[1]);
     expect(events).toEqual([
@@ -130,7 +170,7 @@ describe("Responses envelopes and streaming", () => {
     scripted.fail = true;
 
     try {
-      const response = await handleResponse(base("hello", { stream: true }), new SessionPool());
+      const response = await handleResponse(base("hello", { stream: true }), newPool());
       const text = await response.text();
       expect(response.status).toBe(200);
       expect(text).toContain("event: response.failed");
@@ -139,15 +179,18 @@ describe("Responses envelopes and streaming", () => {
     }
   });
   it("continues by previous response id and rejects a pruned id", async () => {
-    const pool = new SessionPool({}, { remotePruner: async () => {} });
+    const pool = new SessionPool({}, {
+      createSession: () => new FakeModelSession(),
+      remotePruner: async () => {},
+    });
+
     const first = await handleResponse(base("hello"), pool);
-    const firstBody = await first.json() as { id: string };
+    const firstBody = ResponseEnvelope.parse(await first.json());
     const continued = await handleResponse(base("follow-up", { previous_response_id: firstBody.id }), pool);
     expect(continued.status).toBe(200);
     await pool.prune({ sessionKey: `response:${firstBody.id}` });
     const pruned = await handleResponse(base("after prune", { previous_response_id: firstBody.id }), pool);
     expect(pruned.status).toBe(404);
-    expect((await pruned.json()).error.message).toBe("Unknown or pruned previous_response_id");
+    expect(ErrorBody.parse(await pruned.json()).error.message).toBe("Unknown or pruned previous_response_id");
   });
 });
-

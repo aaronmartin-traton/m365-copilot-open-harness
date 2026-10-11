@@ -25,6 +25,20 @@ const DASH = /^-([ \t]|$)/;
 // alternatives, so nothing readable is lost.
 const YAML_KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s:#'"{[][^:]*?):(?:[ \t]+(.*)|[ \t]*)$/;
 
+/** A value the subset reader produces: JSON scalars, sequences, and mappings. */
+export type YamlValue = string | number | boolean | null | YamlValue[] | YamlMapping;
+
+/** A mapping the subset reader produces: string keys over `YamlValue` members. */
+export interface YamlMapping {
+  [key: string]: YamlValue;
+}
+
+/** The lines of one node and the index just past them. */
+interface YamlChildLines {
+  lines: string[];
+  next: number;
+}
+
 class YamlSubsetError extends Error {}
 
 /**
@@ -49,22 +63,37 @@ export function yamlBlockEnd(lines: string[], from: number, isArray: boolean): n
 }
 
 /** A YAML block (the lines under an empty `key:`) as the declared type, or undefined. */
-export function parseYamlBlockValue(block: string[], declaredType: "array" | "object"): unknown {
-  let value: unknown;
+export function parseYamlBlockValue(block: string[], declaredType: "array" | "object"): YamlValue | undefined {
+  const lines = block.map((l) => l.replace(/\t/g, "  "));
+  const first = lines.findIndex((l) => l.trim() !== "");
+
+  if (first < 0) return undefined;
+  const body = lines.slice(first);
+  const indent = indentOf(body[0]);
+  const head = body[0].trimStart();
 
   try {
-    value = parseYamlNode(block.map((l) => l.replace(/\t/g, "  ")));
+    // The node the block opens with decides which declared type it can fill: a
+    // sequence fills `array`, a mapping fills `object`, and neither fills the other.
+    if (DASH.test(head)) return declaredType === "array" ? parseYamlSequence(body, indent) : undefined;
+
+    if (YAML_KEY.test(head)) return declaredType === "object" ? parseYamlMapping(body, indent) : undefined;
+
+    // Any other block is one scalar line. A flow scalar (`[1, 2]`, `{a: 1}`) is
+    // JSON, so it decodes to a sequence or a mapping and fills the same types.
+    const flow = head.trim();
+    const node = parseYamlNode(body);
+
+    if (declaredType === "array") return Array.isArray(node) ? node : undefined;
+
+    return flow.startsWith("{") && flow.endsWith("}") ? node : undefined;
   } catch {
     return undefined;
   }
-
-  if (declaredType === "array") return Array.isArray(value) ? value : undefined;
-
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? value : undefined;
 }
 
 /** Inline JSON for an array/object param (`edits: [{...}]`), or undefined. */
-export function parseInlineJsonValue(raw: string, declaredType: "array" | "object"): unknown {
+export function parseInlineJsonValue(raw: string, declaredType: "array" | "object"): YamlValue | undefined {
   const s = raw.trim();
   const open = declaredType === "array" ? "[" : "{";
   const close = declaredType === "array" ? "]" : "}";
@@ -78,7 +107,7 @@ export function parseInlineJsonValue(raw: string, declaredType: "array" | "objec
   }
 }
 
-function parseYamlNode(lines: string[]): unknown {
+function parseYamlNode(lines: string[]): YamlValue {
   const first = lines.findIndex((l) => l.trim() !== "");
 
   if (first < 0) throw new YamlSubsetError("empty block");
@@ -96,7 +125,7 @@ function parseYamlNode(lines: string[]): unknown {
 }
 
 /** Lines below `from` until one at `indent` or less. */
-function childLines(lines: string[], from: number, indent: number): { lines: string[]; next: number } {
+function childLines(lines: string[], from: number, indent: number): YamlChildLines {
   let j = from;
 
   for (; j < lines.length; j++) {
@@ -106,8 +135,8 @@ function childLines(lines: string[], from: number, indent: number): { lines: str
   return { lines: lines.slice(from, j), next: j };
 }
 
-function parseYamlSequence(lines: string[], indent: number): unknown[] {
-  const items: unknown[] = [];
+function parseYamlSequence(lines: string[], indent: number): YamlValue[] {
+  const items: YamlValue[] = [];
   let i = 0;
 
   while (i < lines.length) {
@@ -145,8 +174,8 @@ function parseYamlSequence(lines: string[], indent: number): unknown[] {
   return items;
 }
 
-function parseYamlMapping(lines: string[], indent: number): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
+function parseYamlMapping(lines: string[], indent: number): YamlMapping {
+  const out: YamlMapping = {};
   let i = 0;
 
   while (i < lines.length) {
@@ -183,7 +212,7 @@ function parseYamlMapping(lines: string[], indent: number): Record<string, unkno
 }
 
 /** The value after `key:` or `- ` (`inline`), with the lines nested under it. */
-function parseYamlValue(inline: string, nested: string[], parentIndent: number): unknown {
+function parseYamlValue(inline: string, nested: string[], parentIndent: number): YamlValue {
   const block = inline.match(/^([|>])([-+]?)$/);
 
   if (block) return parseYamlBlockScalar(nested, parentIndent, block[1] === ">", block[2]);
@@ -196,7 +225,7 @@ function parseYamlValue(inline: string, nested: string[], parentIndent: number):
   return parseYamlScalar(inline);
 }
 
-function parseYamlScalar(raw: string): unknown {
+function parseYamlScalar(raw: string): YamlValue {
   const s = raw.trim();
 
   if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) {

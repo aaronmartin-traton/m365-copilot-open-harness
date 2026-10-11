@@ -3,26 +3,22 @@ import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
-/** Capture logger.info calls so the F1 observability record is assertable. */
-const infoCalls: string[] = [];
-
-const loggerMock = vi.hoisted(() => ({
-  createLogger: (component: string) => ({
-    info: (...args: unknown[]) => {
-      infoCalls.push(`[${component}] ${args.map((a) => String(a)).join(" ")}`);
-    },
-    error: () => {},
-    debug: () => {},
-  }),
-}));
-
-vi.mock("@m365-copilot/core", () => loggerMock);
-
 import {
   getIntentVerifier,
   resetIntentVerifier,
+  setIntentVerifierLog,
   INTENT_VERIFIER_PROMPT,
+  type ChatTemplateKwargs,
 } from "./intent-verifier.js";
+
+/** Capture logger.info calls so the F1 observability record is assertable. */
+const infoCalls: string[] = [];
+
+setIntentVerifierLog({
+  info: (...args) => {
+    infoCalls.push(`[intent-verifier] ${args.map((a) => String(a)).join(" ")}`);
+  },
+});
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -188,6 +184,13 @@ describe("intent-verifier — arbitration table (stub fetch)", () => {
   });
 });
 
+/** The JSON body the verifier sends, echoed back by the stub for assertions. */
+type EchoedRequestBody = {
+  model: string;
+  messages: Array<{ role: string; content: string }>;
+  chat_template_kwargs?: ChatTemplateKwargs;
+};
+
 describe("intent-verifier — chat_template_kwargs forwarding", () => {
   beforeEach(() => {
     enableGate();
@@ -212,7 +215,7 @@ describe("intent-verifier — chat_template_kwargs forwarding", () => {
 
   it("forwards chat_template_kwargs when the env var is set", async () => {
     process.env.M365_INTENT_VERIFIER_TEMPLATE_KWARGS = '{"enable_thinking":false}';
-    let sent: unknown = null;
+    let sent: EchoedRequestBody | null = null;
     stubFetch(async (_url, init) => {
       sent = JSON.parse(String(init.body));
 
@@ -223,7 +226,7 @@ describe("intent-verifier — chat_template_kwargs forwarding", () => {
   });
 
   it("omits chat_template_kwargs when unset (request unchanged)", async () => {
-    let sent: unknown = null;
+    let sent: EchoedRequestBody | null = null;
     stubFetch(async (_url, init) => {
       sent = JSON.parse(String(init.body));
 

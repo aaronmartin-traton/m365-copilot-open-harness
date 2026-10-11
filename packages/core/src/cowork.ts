@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { z } from "zod";
 import { getTokenForScope } from "./auth.js";
 import { decodeJwt } from "./copilot.js";
 import { decodeSocketPacket } from "./cowork-protocol.js";
@@ -10,6 +11,88 @@ const IC3_SCOPE = ["https://ic3.teams.office.com/.default"];
 const REGISTRAR_URL = "https://edge.skype.com/registrar/prod/V3/registrations";
 
 const DEFAULT_CONTAINER_CONFIG = "renderUi=true;searchBackend=bing;citationsEnabled=true;acceptLanguage=en-US;model=fable-5:claude";
+
+// --- Wire vocabulary ---
+// Every field on the Trouter socket is JSON, so the frames are modelled as JSON
+// rather than an open `unknown` bag: the recursive value type is the contract,
+// and the schemas below parse a frame into the fields this probe dispatches on.
+// A field Trouter mistypes reads as absent, so one odd value never costs us the
+// whole frame.
+
+/** Any JSON value: what `JSON.parse` yields for a Trouter frame field. */
+type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
+
+/** A JSON object — the shape of a Trouter frame field. */
+interface JsonObject {
+  [key: string]: JsonValue;
+}
+
+const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ]),
+);
+
+/** A `5:::` event frame, including the `trouter.connected` handshake. */
+const TrouterEventFrame = z.object({
+  name: z.string().optional().catch(undefined),
+  args: z.array(z.object({ surl: z.string().optional().catch(undefined) })).optional().catch(undefined),
+});
+
+/** A `3:::` delivery frame: the message this probe acknowledges and reads. */
+const TrouterDeliveryFrame = z.object({
+  method: z.string().optional().catch(undefined),
+  id: z.string().optional().catch(undefined),
+  status: JsonValueSchema.optional(),
+  headers: z.record(z.string(), JsonValueSchema).optional().catch(undefined),
+  body: z.string().optional().catch(undefined),
+});
+
+type TrouterDelivery = z.infer<typeof TrouterDeliveryFrame>;
+
+/** A delivery ack's header values, keyed by header name. */
+interface DeliveryAckHeaders {
+  [key: string]: JsonValue;
+}
+
+/** The ack sent back for a `3:::` delivery frame. */
+interface DeliveryAck {
+  id?: string;
+  status: number;
+  headers: DeliveryAckHeaders;
+  body: string;
+}
+
+/** One `properties.copilotTextSegments` entry: only `text` is read. An entry of
+ *  another type reads as an entry with no text, as `segment?.text` did. */
+const CopilotTextSegment = z
+  .object({
+    text: z.string().optional().catch(undefined),
+  })
+  .catch({});
+
+/** The Copilot agent resource carried in a delivery body. */
+const CopilotAgentResource = z.object({
+  messagetype: z.string().optional().catch(undefined),
+  content: z.string().optional().catch(undefined),
+  properties: z
+    .object({
+      copilotTaskState: z.string().optional().catch(undefined),
+      copilotTextSegments: z.array(CopilotTextSegment).optional().catch(undefined),
+    })
+    .optional()
+    .catch(undefined),
+});
+
+/** A delivery body: the message activity whose `resource` carries the reply. */
+const DeliveryBody = z.object({
+  resource: CopilotAgentResource.optional().catch(undefined),
+});
 
 export interface CoworkProbeOptions {
   runtimeHost?: string;
@@ -106,28 +189,38 @@ async function receiveCoworkReply(input: ReceiveInput): Promise<CoworkProbeResul
         }
 
         const packet = decodeSocketPacket(frame);
-        const payload = packet.data ? safeJson(packet.data) : null;
 
-        if (packet.type === 5 && payload?.name === "trouter.connected") {
-          const info = payload.args?.[0] ?? {};
-          await registerEndpoint(epid, info.surl, input.ic3Token);
-          await sendCoworkMessage(input);
+        if (packet.type === 5) {
+          const event = TrouterEventFrame.safeParse(safeJson(packet.data));
+
+          if (event.success && event.data.name === "trouter.connected") {
+            await registerEndpoint(epid, event.data.args?.[0]?.surl, input.ic3Token);
+            await sendCoworkMessage(input);
+          }
 
           return;
         }
 
-        if (packet.type !== 3 || !payload?.method || payload.status) return;
+        if (packet.type !== 3) return;
+        const delivery = TrouterDeliveryFrame.safeParse(safeJson(packet.data));
+
+        if (!delivery.success || !delivery.data.method || delivery.data.status) return;
         deliveries++;
-        socket.send(socketMessage(buildDeliveryAck(payload)));
-        const event = typeof payload.body === "string" ? safeJson(payload.body) : null;
-        const resource = event?.resource;
+        socket.send(socketMessage(buildDeliveryAck(delivery.data)));
+        const body = delivery.data.body;
+
+        if (body === undefined) return;
+        const activity = DeliveryBody.safeParse(safeJson(body));
+
+        if (!activity.success) return;
+        const resource = activity.data.resource;
 
         if (resource?.messagetype !== "RichText/Copilot_AgentResponse") return;
         const properties = resource.properties ?? {};
 
-        const text = typeof resource.content === "string" && resource.content
+        const text = resource.content
           ? resource.content
-          : (properties.copilotTextSegments ?? []).map((segment: any) => segment?.text ?? "").join("");
+          : (properties.copilotTextSegments ?? []).map((segment) => segment.text ?? "").join("");
 
         if (properties.copilotTaskState === "completed") finish(undefined, text);
       } catch (error) {
@@ -179,16 +272,16 @@ async function sendCoworkMessage(input: ReceiveInput): Promise<void> {
   if (!response.ok) throw new Error(`Cowork send failed: HTTP ${response.status} ${await response.text()}`);
 }
 
-function socketEvent(name: string, args: unknown[]): string {
+function socketEvent(name: string, args: JsonValue[]): string {
   return `5:::${JSON.stringify({ name, args })}`;
 }
 
-function socketMessage(value: unknown): string {
+function socketMessage(value: DeliveryAck): string {
   return `3:::${JSON.stringify(value)}`;
 }
 
-function buildDeliveryAck(delivery: any) {
-  const headers: Record<string, unknown> = { "trouter-client": { cd: 1 } };
+function buildDeliveryAck(delivery: TrouterDelivery): DeliveryAck {
+  const headers: DeliveryAckHeaders = { "trouter-client": { cd: 1 } };
 
   for (const name of ["MS-CV", "trouter-request"]) {
     if (delivery.headers?.[name] !== undefined) headers[name] = delivery.headers[name];
@@ -197,6 +290,7 @@ function buildDeliveryAck(delivery: any) {
   return { id: delivery.id, status: 200, headers, body: "" };
 }
 
-function safeJson(value: string): any {
-  try { return JSON.parse(value); } catch { return null; }
+/** The JSON a frame field carries; `undefined` when the text is not JSON. */
+function safeJson(value: string): JsonValue | undefined {
+  try { return JSON.parse(value); } catch { return undefined; }
 }

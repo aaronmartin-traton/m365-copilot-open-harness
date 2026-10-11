@@ -31,6 +31,13 @@ export interface ConversationState {
   pendingNote: string | null;
 }
 
+/** Pool occupancy for the health payload: live and stored conversations, plus scheduler state. */
+export interface SessionPoolDiagnostics {
+  activeSessions: number;
+  persistedSessions: number;
+  scheduler: SchedulerStats;
+}
+
 export type ConversationPruneSelector = { sessionKey: string } | { conversationId: string };
 
 export type RemoteConversationPruner = (ids: {
@@ -112,17 +119,18 @@ export class SessionPool {
     const persisted = persistent ? this.stateStore.get(key) : undefined;
     log.info(`${persisted ? "Restoring" : "New"} ${persistent ? "keyed" : "ephemeral"} conversation ${key}, ${this.conversations.size} active`);
 
+    const sessionOptions: ModelSessionOptions = { ...this.sessionOptions };
+
+    if (persisted?.restorable) {
+      sessionOptions.sessionId = persisted.sessionId;
+      sessionOptions.conversationId = persisted.conversationId;
+      sessionOptions.turnCount = persisted.turnCount;
+    }
+
     const state: ConversationState = {
       key,
       persistent,
-      session: this.createSession({
-        ...this.sessionOptions,
-        ...(persisted?.restorable ? {
-          sessionId: persisted.sessionId,
-          conversationId: persisted.conversationId,
-          turnCount: persisted.turnCount,
-        } : {}),
-      }),
+      session: this.createSession(sessionOptions),
       sentMessageCount: persisted?.restorable ? persisted.sentMessageCount : 0,
       lastAccessedAt: persisted?.lastAccessedAt ?? this.now(),
       pendingNote: null,
@@ -241,7 +249,7 @@ export class SessionPool {
     return this.scheduler.schedule(options, task);
   }
 
-  diagnostics(): { activeSessions: number; persistedSessions: number; scheduler: SchedulerStats } {
+  diagnostics(): SessionPoolDiagnostics {
     return {
       activeSessions: this.conversations.size,
       persistedSessions: this.stateStore.size,

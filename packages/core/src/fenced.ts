@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { z } from "zod/v4";
 import { createLogger } from "./log.js";
 import { parseInlineJsonValue, parseYamlBlockValue, yamlBlockEnd } from "./yaml-block.js";
 import type { ParsedToolCall, ToolDef } from "./tools.js";
@@ -164,16 +165,40 @@ export function buildSpecMap(tools: ToolDef[]): Map<string, FencedToolSpec> {
   return m;
 }
 
-function scalarToString(v: unknown): string {
+// --- Argument values ---------------------------------------------------------
+
+/** A JSON value as it can appear in a fenced tool call's argument object. */
+type FencedArgValue = string | number | boolean | null | FencedArgValue[] | FencedArgObject;
+
+/** The parsed `arguments` object of one fenced tool call. */
+type FencedArgObject = { [key: string]: FencedArgValue };
+
+/** Decodes any JSON value. Promotes the untyped `JSON.parse` / YAML-block results
+ *  into `FencedArgValue` so the renderers never branch on a raw representation. */
+const FencedArgValueSchema: z.ZodType<FencedArgValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(FencedArgValueSchema),
+    z.record(z.string(), FencedArgValueSchema),
+  ]),
+);
+
+const TextValueSchema = z.string();
+
+/** Render one scalar argument the way its fence header/body shows it: text
+ *  verbatim, numbers/booleans/collections as their JSON form, absent as "". */
+function scalarToString(v: FencedArgValue | undefined): string {
   if (v === null || v === undefined) return "";
+  const text = TextValueSchema.safeParse(v);
 
-  if (typeof v === "string") return v;
-
-  return JSON.stringify(v);
+  return text.success ? text.data : JSON.stringify(v);
 }
 
 /** Render one concrete tool call (name + args object) as a fenced block. */
-export function renderFencedCall(spec: FencedToolSpec, args: Record<string, unknown>): string {
+export function renderFencedCall(spec: FencedToolSpec, args: FencedArgObject): string {
   return "```" + spec.name + "\n" + renderFencedBody(spec, (h) => args[h]) + "\n```";
 }
 
@@ -190,7 +215,7 @@ function renderFencedTemplate(spec: FencedToolSpec): string {
  * undefined header is omitted, so the template's placeholder values (`<h>`)
  * render every header while a real call skips missing ones.
  */
-function renderFencedBody(spec: FencedToolSpec, valueOf: (key: string) => unknown): string {
+function renderFencedBody(spec: FencedToolSpec, valueOf: (key: string) => FencedArgValue | undefined): string {
   const lines: string[] = [];
 
   for (const h of spec.headerParams) {
@@ -224,7 +249,7 @@ export function formatFencedToolDefinitions(tools: ToolDef[], variantOverride?: 
   // `reply_tool` is a tool-injection strategy, not a framing one — it runs the
   // baseline framing plus a synthetic reply() tool (see tools.ts).
   const key = variant === "reply_tool" ? "baseline" : variant;
-  const build = FRAMING_VARIANTS[key] ?? FRAMING_VARIANTS.baseline;
+  const build = framingBuilderFor(key);
 
   return build(tools);
 }
@@ -265,7 +290,7 @@ function toolsBlock(tools: ToolDef[]): string {
   return `<tools>\n${defs}\n</tools>`;
 }
 
-const FRAMING_VARIANTS: Record<string, FramingBuilder> = {
+const FRAMING_VARIANTS = {
   // V0 — the shipped framing (control). Shell-first + strict-rules + anti-confab.
   baseline(tools) {
     const shell = findShellTool(tools);
@@ -441,7 +466,17 @@ A session usually opens by looking at the files (\`ls -la\`, then \`cat\` the re
 
 ${toolsBlock(tools)}`;
   },
-};
+} satisfies Record<string, FramingBuilder>;
+
+/** The framing builder registered under `key`, or the `baseline` control when the
+ *  variant (an env/control-file string) names no registered strategy. */
+function framingBuilderFor(key: string): FramingBuilder {
+  for (const [name, build] of Object.entries(FRAMING_VARIANTS)) {
+    if (name === key) return build;
+  }
+
+  return FRAMING_VARIANTS.baseline;
+}
 
 // --- Parsing -----------------------------------------------------------------
 
@@ -580,7 +615,7 @@ function wrapBashForPowerShell(script: string): string {
   return `$script = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encoded}')); & ${executable} -lc $script`;
 }
 
-function makeCall(name: string, args: Record<string, unknown>): ParsedToolCall {
+function makeCall(name: string, args: FencedArgObject): ParsedToolCall {
   return {
     id: `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
     type: "function",
@@ -588,7 +623,7 @@ function makeCall(name: string, args: Record<string, unknown>): ParsedToolCall {
   };
 }
 
-function parseHeaderScalar(type: string | undefined, value: string): unknown | undefined {
+function parseHeaderScalar(type: string | undefined, value: string): FencedArgValue | undefined {
   if (type === "boolean") {
     if (value === "true") return true;
 
@@ -612,15 +647,19 @@ function parseHeaderScalar(type: string | undefined, value: string): unknown | u
   // An array/object header must be JSON. Falling back to the raw string would hand
   // the harness a value of the wrong shape that still clears the required-param
   // check; undefined drops the block instead (the caller's "unreadable" path).
-  if (type === "array" || type === "object") return parseInlineJsonValue(value, type);
+  if (type === "array" || type === "object") {
+    const parsed = FencedArgValueSchema.safeParse(parseInlineJsonValue(value, type));
+
+    return parsed.success ? parsed.data : undefined;
+  }
 
   return value;
 }
 
 /** Parse the inner text of one fenced block into an arguments object, schema-aware. */
-function parseFencedInner(spec: FencedToolSpec, inner: string): Record<string, unknown> | null {
+function parseFencedInner(spec: FencedToolSpec, inner: string): FencedArgObject | null {
   const lines = inner.split("\n");
-  const args: Record<string, unknown> = {};
+  const args: FencedArgObject = {};
 
   // Header: contiguous "key: value" lines whose key is a known header param,
   // terminated by a blank line (consumed) or the first non-header line (kept).
@@ -641,10 +680,11 @@ function parseFencedInner(spec: FencedToolSpec, inner: string): Record<string, u
         // `key:` line (upstream #50, see yaml-block.ts).
         if (m[2].trim() === "" && (type === "array" || type === "object")) {
           const end = yamlBlockEnd(lines, i + 1, type === "array");
-          const block = end > i + 1 ? parseYamlBlockValue(lines.slice(i + 1, end), type) : undefined;
+          const raw = end > i + 1 ? parseYamlBlockValue(lines.slice(i + 1, end), type) : undefined;
+          const block = FencedArgValueSchema.safeParse(raw);
 
-          if (block !== undefined) {
-            args[m[1]] = block;
+          if (block.success) {
+            args[m[1]] = block.data;
             i = end - 1;
             continue;
           }
@@ -698,7 +738,7 @@ function parseFencedInner(spec: FencedToolSpec, inner: string): Record<string, u
   return args;
 }
 
-interface FencedParseResult {
+export interface FencedParseResult {
   calls: ParsedToolCall[];
   /** Text with the matched tool fences removed (for mixed-output detection). */
   leftover: string;
@@ -724,9 +764,9 @@ export function parseFencedToolCalls(
     if (!args) continue;
 
     if (spec.name === "shell_command" && spec.bodyParam && /powershell/i.test(spec.description ?? "")) {
-      const script = args[spec.bodyParam];
+      const script = TextValueSchema.safeParse(args[spec.bodyParam]);
 
-      if (typeof script === "string") args[spec.bodyParam] = wrapBashForPowerShell(script);
+      if (script.success) args[spec.bodyParam] = wrapBashForPowerShell(script.data);
     }
 
     calls.push(makeCall(spec.name, args));

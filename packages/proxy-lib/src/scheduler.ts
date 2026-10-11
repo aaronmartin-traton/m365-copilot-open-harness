@@ -26,14 +26,15 @@ export class SchedulerBusyError extends Error {
   }
 }
 
-interface QueueEntry<T> {
+interface QueueEntry {
   enqueuedAt: number;
   newConversation: boolean;
   maintenance: boolean;
   signal?: AbortSignal;
-  task: () => Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason: unknown) => void;
+  /** Runs the queued task and settles the caller's promise with its outcome. */
+  run: () => Promise<void>;
+  /** Rejects the caller's promise without running the task. */
+  rejectWith: (reason: Error) => void;
   removeAbort?: () => void;
 }
 
@@ -52,7 +53,7 @@ export class RequestScheduler {
   private readonly newThreadBurst: number;
   private readonly now: () => number;
   private active = 0;
-  private queue: Array<QueueEntry<unknown>> = [];
+  private queue: QueueEntry[] = [];
   private tokens: number;
   private lastRefillAt: number;
   private wakeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -84,22 +85,24 @@ export class RequestScheduler {
     }
 
     return new Promise<T>((resolve, reject) => {
-      const entry: QueueEntry<T> = {
+      const entry: QueueEntry = {
         enqueuedAt: this.now(),
         newConversation: options.newConversation,
         maintenance: options.maintenance === true,
         signal: options.signal,
-        task,
-        resolve,
-        reject,
+        run: async () => {
+          try { resolve(await task()); }
+          catch (error) { reject(error); }
+        },
+        rejectWith: reject,
       };
 
       if (options.signal) {
         const onAbort = () => {
-          const index = this.queue.indexOf(entry as QueueEntry<unknown>);
+          const index = this.queue.indexOf(entry);
 
           if (index >= 0) this.queue.splice(index, 1);
-          reject(abortError());
+          entry.rejectWith(abortError());
           this.pump();
         };
 
@@ -107,7 +110,7 @@ export class RequestScheduler {
         entry.removeAbort = () => options.signal?.removeEventListener("abort", onAbort);
       }
 
-      this.queue.push(entry as QueueEntry<unknown>);
+      this.queue.push(entry);
       this.pump();
     });
   }
@@ -160,13 +163,13 @@ export class RequestScheduler {
       entry.removeAbort?.();
 
       if (entry.signal?.aborted) {
-        entry.reject(abortError());
+        entry.rejectWith(abortError());
         continue;
       }
 
       this.active++;
       this.totalWaitMs += Math.max(0, this.now() - entry.enqueuedAt);
-      void entry.task().then(entry.resolve, entry.reject).finally(() => {
+      void entry.run().finally(() => {
         this.active--;
         this.completed++;
         this.pump();

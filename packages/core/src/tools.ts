@@ -1,3 +1,4 @@
+import { z } from "zod/v4";
 import { createLogger } from "./log.js";
 import {
   buildSpecMap,
@@ -7,6 +8,7 @@ import {
   formatFencedToolDefinitions,
   parseFencedToolCalls,
   renderFencedCall,
+  type FencedParseResult,
 } from "./fenced.js";
 import type { ImageInput } from "./images.js";
 
@@ -20,14 +22,31 @@ const log = createLogger("tools");
 
 // --- Types (standalone, no zod dependency) ---
 
+/** Any JSON value: what `JSON.parse` yields for a client-supplied payload. */
+type JsonValue = string | number | boolean | null | JsonValue[] | JsonObject;
+
+/** A JSON object — the shape of a tool call's parsed `arguments`. */
+type JsonObject = { [key: string]: JsonValue };
+
+/** One JSON-Schema property of a tool parameter: `type` is what the fenced
+ *  renderer reads; every other keyword (`description`, `enum`, `items`, …) stays
+ *  the JSON value the client sent. */
+export interface ToolParameterProperty {
+  type?: string;
+  [keyword: string]: JsonValue | undefined;
+}
+
+/** A tool's JSON-Schema `parameters` block as OpenAI clients send it. */
+export interface ToolParameters {
+  type?: string;
+  properties?: Record<string, ToolParameterProperty>;
+  required?: string[];
+}
+
 export interface ToolFunction {
   name: string;
   description?: string;
-  parameters?: {
-    properties?: Record<string, { type?: string; [k: string]: unknown }>;
-    required?: string[];
-    [k: string]: unknown;
-  };
+  parameters?: ToolParameters;
 }
 
 export interface ToolDef {
@@ -64,6 +83,28 @@ export type ToolChoice =
   | { type: "function"; function: { name: string } }
   | undefined;
 
+// --- JSON payload decoding ---
+
+/** Decodes any JSON value — the boundary parse for the untyped payloads this
+ *  module receives (tool-call `arguments`, M365's `{"final": …}` wrapper). */
+const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ]),
+);
+
+const JsonObjectSchema = z.record(z.string(), JsonValueSchema);
+
+const TextValueSchema = z.string();
+
+/** The object form of `tool_choice` — the model must call the one named function. */
+const NamedToolChoiceSchema = z.object({ function: z.object({ name: z.string() }) });
+
 // --- Tool call format ---
 
 // Fenced Markdown is the format we instruct and primarily parse (see fenced.ts).
@@ -75,6 +116,14 @@ export type ToolChoice =
 // was removed (§9).
 const TOOL_CALL_REGEX = /\{\s*"(?:tool|name)"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*\{[\s\S]*?\}\s*\}/g;
 
+/** The object `TOOL_CALL_REGEX` matches: a `tool`/`name` label plus the arguments
+ *  payload M365 emitted instead of a fenced call. */
+const StrayToolCallSchema = z.object({
+  tool: z.string().optional(),
+  name: z.string().optional(),
+  arguments: JsonValueSchema,
+});
+
 // M365 invents bookkeeping objects ({"confidence": 0.5}) and wraps its answer in
 // {"final": "..."} — neither is a real tool call. Strip confidence everywhere;
 // drop final when it rides alongside tool calls (it's usually a premature
@@ -83,6 +132,9 @@ const CONFIDENCE_REGEX = /\{\s*"confidence"\s*:\s*-?[0-9.]+\s*\}/g;
 
 const FINAL_OBJECT_REGEX = /\{\s*"final"\s*:\s*"(?:[^"\\]|\\.)*"\s*\}/g;
 
+/** The `{"final": "<text>"}` wrapper M365 invents around an answer. */
+const FinalObjectSchema = z.object({ final: z.string() });
+
 /** Strip invented confidence/final objects from a no-tool-call response and
  *  unwrap a lone {"final": "..."} answer into bare text. Returns null if empty. */
 function cleanLooseText(text: string): string | null {
@@ -90,9 +142,9 @@ function cleanLooseText(text: string): string | null {
 
   for (const m of out.match(FINAL_OBJECT_REGEX) ?? []) {
     try {
-      const value = JSON.parse(m).final;
+      const value = FinalObjectSchema.safeParse(JSON.parse(m));
 
-      if (typeof value === "string") out = out.replace(m, value);
+      if (value.success) out = out.replace(m, value.data.final);
     } catch {
       // leave the literal text in place if it isn't valid JSON
     }
@@ -116,11 +168,9 @@ export function formatToolChoiceInstruction(toolChoice: ToolChoice): string {
 
   if (toolChoice === "required") return "\nYou MUST call at least one tool.";
 
-  if (typeof toolChoice === "object" && toolChoice.function) {
-    return `\nYou MUST call "${toolChoice.function.name}".`;
-  }
+  const called = NamedToolChoiceSchema.safeParse(toolChoice);
 
-  return "";
+  return called.success ? `\nYou MUST call "${called.data.function.name}".` : "";
 }
 
 export function getMessageImages(msg: Message): ImageInput[] {
@@ -132,29 +182,49 @@ export function getMessageImages(msg: Message): ImageInput[] {
 export function getMessageContent(msg: Message): string {
   if (msg.content === null || msg.content === undefined) return "";
 
-  if (typeof msg.content === "string") return msg.content;
+  if (!Array.isArray(msg.content)) return msg.content;
 
   return msg.content.map((part) => "text" in part ? part.text || "" : "").join("");
 }
 
-/** A short one-line description of what a tool call did, for labelling its result
- *  (e.g. the shell command, or the file path). Newlines collapsed, truncated. */
-function toolCallSummary(rawArgs: string): string {
-  let args: Record<string, unknown> = {};
+/** Tool-call `arguments` as they reach us: the JSON string the OpenAI contract
+ *  declares, or the already-parsed object a lenient client sends. */
+type ToolArguments = string | JsonObject;
+
+/** Decode one tool call's `arguments` field into a JSON argument object; `{}`
+ *  when the payload is absent or unreadable (the call still renders). */
+function decodeToolArguments(raw: ToolArguments): JsonObject {
+  const direct = JsonObjectSchema.safeParse(raw);
+
+  if (direct.success) return direct.data;
+
+  const text = TextValueSchema.safeParse(raw);
+
+  if (!text.success) return {};
 
   try {
-    args = typeof rawArgs === "string" ? JSON.parse(rawArgs || "{}") : (rawArgs ?? {});
+    const parsed = JsonObjectSchema.safeParse(JSON.parse(text.data || "{}"));
+
+    return parsed.success ? parsed.data : {};
   } catch {
-    return "";
+    return {};
   }
+}
+
+/** A short one-line description of what a tool call did, for labelling its result
+ *  (e.g. the shell command, or the file path). Newlines collapsed, truncated. */
+function toolCallSummary(rawArgs: ToolArguments): string {
+  const args = decodeToolArguments(rawArgs);
 
   const primary =
     args.command ?? args.cmd ?? args.script ?? args.path ?? args.file ??
-    args.filename ?? args.query ?? Object.values(args).find((v) => typeof v === "string");
+    args.filename ?? args.query ?? Object.values(args).find((v) => TextValueSchema.safeParse(v).success);
 
-  if (typeof primary !== "string") return "";
+  const text = TextValueSchema.safeParse(primary);
 
-  return primary.replace(/\s+/g, " ").replace(/"/g, "'").trim().slice(0, 100);
+  if (!text.success) return "";
+
+  return text.data.replace(/\s+/g, " ").replace(/"/g, "'").trim().slice(0, 100);
 }
 
 /**
@@ -245,14 +315,7 @@ export function formatMessages(
   for (const m of messages) {
     if (m.role === "assistant" && m.tool_calls && m.tool_calls.length > 0) {
       const calls = m.tool_calls.map((tc) => {
-        const rawArgs = tc.function.arguments;
-        let argsObj: Record<string, unknown> = {};
-
-        try {
-          argsObj = typeof rawArgs === "string" ? JSON.parse(rawArgs || "{}") : (rawArgs ?? {});
-        } catch {
-          // fall through with empty args; better than crashing the transcript
-        }
+        const argsObj = decodeToolArguments(tc.function.arguments);
 
         // Prefer the request's tool schema; otherwise synthesize one from the
         // recorded argument keys so a tool no longer in scope still renders.
@@ -524,12 +587,11 @@ export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
   // below strips.
   const specMap = tools && tools.length > 0 ? buildSpecMap(tools) : null;
 
-  const fenced = specMap
-    ? parseFencedToolCalls(text, specMap)
-    : { calls: [] as ParsedToolCall[], leftover: text };
+  const noFencedCalls: FencedParseResult = { calls: [], leftover: text };
+  const fenced = specMap ? parseFencedToolCalls(text, specMap) : noFencedCalls;
 
-  const resolveName = (raw: unknown): string | undefined =>
-    typeof raw === "string" ? (specMap?.get(raw)?.name ?? raw) : undefined;
+  const resolveName = (raw: string | undefined): string | undefined =>
+    raw === undefined ? undefined : (specMap?.get(raw)?.name ?? raw);
 
   // Tolerance fallback: a stray JSON tool call {"tool": "...", "arguments": {...}}
   const jsonRegex = new RegExp(TOOL_CALL_REGEX.source, "g");
@@ -538,21 +600,22 @@ export function parseToolCalls(text: string, tools?: ToolDef[]): ParseResult {
 
   while ((match = jsonRegex.exec(fenced.leftover)) !== null) {
     try {
-      const parsed = JSON.parse(match[0]);
-      const name = resolveName(parsed.tool ?? parsed.name);
+      const parsed = StrayToolCallSchema.safeParse(JSON.parse(match[0]));
 
-      if (name) {
-        jsonCalls.push({
-          id: `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
-          type: "function",
-          function: {
-            name,
-            arguments: typeof parsed.arguments === "string"
-              ? parsed.arguments
-              : JSON.stringify(parsed.arguments ?? {}),
-          },
-        });
-      }
+      if (!parsed.success) continue;
+      const name = resolveName(parsed.data.tool ?? parsed.data.name);
+
+      if (!name) continue;
+      const textArgs = TextValueSchema.safeParse(parsed.data.arguments);
+
+      jsonCalls.push({
+        id: `call_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`,
+        type: "function",
+        function: {
+          name,
+          arguments: textArgs.success ? textArgs.data : JSON.stringify(parsed.data.arguments),
+        },
+      });
     } catch {
       log.error("Failed to parse tool call JSON:", match[0]);
     }

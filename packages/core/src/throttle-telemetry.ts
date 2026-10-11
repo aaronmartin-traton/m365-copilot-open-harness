@@ -64,6 +64,16 @@ const counts: Record<ThrottleEventType, number> = {
   throttled: 0,
 };
 
+/** Every event type, in the order the counts are reported on /health. */
+const THROTTLE_EVENT_TYPES: readonly ThrottleEventType[] = [
+  "empty-throttle",
+  "backoff-enter",
+  "backoff-exit",
+  "disengaged",
+  "at-limit",
+  "throttled",
+];
+
 /** Record one telemetry event. Passive + best-effort; never throws upstream. */
 export function emitThrottleEvent(ev: ThrottleEvent): void {
   if (process.env.M365_NO_TELEMETRY === "1") {
@@ -94,5 +104,5 @@ export function getThrottleEventCounts(): Readonly<Record<ThrottleEventType, num
 
 /** Test hook: clear the in-memory counts. Does not touch the on-disk log. */
 export function resetThrottleEventCounts(): void {
-  for (const k of Object.keys(counts) as ThrottleEventType[]) counts[k] = 0;
+  for (const k of THROTTLE_EVENT_TYPES) counts[k] = 0;
 }

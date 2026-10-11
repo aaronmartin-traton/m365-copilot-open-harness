@@ -41,13 +41,6 @@ interface LocalCompletion {
   usage: Usage;
 }
 
-/** The choices array of one SSE chunk. */
-interface SseChoices {
-  index: number;
-  delta: { role?: string; content?: string };
-  finish_reason: string | null;
-}
-
 /**
  * Detect if this is a metadata-only request (title generation) and return local response.
  * Returns null if this is a normal conversation request.

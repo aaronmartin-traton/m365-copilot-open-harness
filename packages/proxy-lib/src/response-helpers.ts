@@ -7,8 +7,14 @@
 
 /**
  * Standard JSON response with Content-Type: application/json.
+ *
+ * The body is an endpoint payload assembled from schema-validated values and is
+ * serialized verbatim, never read back here. `TBody` keeps that payload's own
+ * contract at the call site instead of restating it as a lossy structural type —
+ * payloads built from core interfaces (e.g. `ParsedToolCall`) have no
+ * `JsonValue`-compatible index signature to restate it as.
  */
-export function jsonResponse(status: number, body: unknown): Response {
+export function jsonResponse<TBody>(status: number, body: TBody): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },

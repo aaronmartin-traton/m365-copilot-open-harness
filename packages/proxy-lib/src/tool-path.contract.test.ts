@@ -33,6 +33,7 @@ function narrow<T extends ToolPathResult["kind"]>(
 ): Extract<ToolPathResult, { kind: T }> {
   expect(r.kind).toBe(kind);
 
+  // SAFETY: the preceding assertion pins `r.kind` to `kind`, so `r` is the union member for T.
   return r as Extract<ToolPathResult, { kind: T }>;
 }
 
@@ -59,7 +60,8 @@ function fakeTurn(fullText: string) {
   return runTurn;
 }
 
-function depsLike(runTurn: ReturnType<typeof fakeTurn>, extra: Partial<ToolPathDeps> = {}) {
+function depsLike(runTurn: ToolPathDeps["runTurn"], extra: Partial<ToolPathDeps> = {}) {
+  // SAFETY: the literal supplies every required dependency; `extra` only overrides optional fields.
   return {
     runTurn,
     markSent: vi.fn(),

@@ -10,7 +10,6 @@ import {
   hashConversationId,
   type ProviderTurn,
   type ProviderUsage,
-  type ProviderUsageValue,
 } from "@m365-copilot/core";
 import { ChatCompletionRequest } from "./schemas.js";
 import { SchedulerBusyError } from "./scheduler.js";

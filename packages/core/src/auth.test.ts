@@ -43,7 +43,7 @@ function fakeEventSource() {
     } satisfies AuthCodeEventSource,
     handlers,
     emit(url: string) {
-      for (const handler of [...handlers]) handler({ url: () => url });
+      for (const handler of handlers) handler({ url: () => url });
     },
   };
 }

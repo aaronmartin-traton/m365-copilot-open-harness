@@ -9,6 +9,7 @@ import {
   type ImageOrientation,
 } from "@m365-copilot/core";
 import { SchedulerBusyError } from "./scheduler.js";
+import { jsonResponse } from "./response-helpers.js";
 
 const log = createLogger("images-generation");
 
@@ -47,7 +48,7 @@ export const ImageGenerationRequest = z.object({
 export type ImageGenerationBody = z.infer<typeof ImageGenerationRequest>;
 
 /** OpenAI `size` values map onto the orientation hint passed to M365. */
-const SIZE_TO_ORIENTATION: Readonly<Record<string, ImageOrientation | undefined>> = {
+const SIZE_TO_ORIENTATION: Readonly<Record<(typeof SIZES)[number], ImageOrientation | undefined>> = {
   auto: undefined,
   "1024x1024": "square",
   "512x512": "square",
@@ -66,13 +67,6 @@ const FAILURE_STATUS: Record<ImageGenFailureReason, { status: number; type: stri
   content_filtered: { status: 400, type: "content_filter" },
   no_image: { status: 400, type: "invalid_request_error" },
 };
-
-function json(status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
 
 interface ImageGenerationHandlerOptions {
   signal?: AbortSignal;
@@ -116,7 +110,7 @@ export async function handleImageGeneration(
       );
 
       if (images.length === 0) {
-        return json(FAILURE_STATUS.no_image.status, {
+        return jsonResponse(FAILURE_STATUS.no_image.status, {
           error: { message: "No image was generated for the given prompt.", type: FAILURE_STATUS.no_image.type },
         });
       }
@@ -126,7 +120,7 @@ export async function handleImageGeneration(
           if (!image.base64) {
             log.error("Generated image is missing base64 payload");
 
-            return json(500, { error: { message: "Image data is incomplete", type: "server_error" } });
+            return jsonResponse(500, { error: { message: "Image data is incomplete", type: "server_error" } });
           }
 
           data.push({ b64_json: image.base64 });
@@ -134,7 +128,7 @@ export async function handleImageGeneration(
           if (!image.url) {
             log.error("Generated image is missing url");
 
-            return json(500, { error: { message: "Image data is incomplete", type: "server_error" } });
+            return jsonResponse(500, { error: { message: "Image data is incomplete", type: "server_error" } });
           }
 
           data.push({ url: image.url });
@@ -142,17 +136,17 @@ export async function handleImageGeneration(
       }
     }
 
-    return json(200, { created: Math.floor(Date.now() / 1000), data });
+    return jsonResponse(200, { created: Math.floor(Date.now() / 1000), data });
   } catch (err) {
     if (opts.signal?.aborted) {
-      return json(499, { error: { message: "Request aborted", type: "request_aborted" } });
+      return jsonResponse(499, { error: { message: "Request aborted", type: "request_aborted" } });
     }
 
     if (err instanceof ImageGenerationError) {
       const mapped = FAILURE_STATUS[err.reason];
       log.info(`Image generation failed (${err.reason}): ${err.message}`);
 
-      return json(mapped.status, { error: { message: err.message, type: mapped.type } });
+      return jsonResponse(mapped.status, { error: { message: err.message, type: mapped.type } });
     }
 
     // SchedulerBusyError from the pool gate: signal the client to back off.
@@ -165,6 +159,6 @@ export async function handleImageGeneration(
 
     log.error(`Image generation error: ${err instanceof Error ? err.message : String(err)}`);
 
-    return json(502, { error: { message: "Image generation failed", type: "server_error" } });
+    return jsonResponse(502, { error: { message: "Image generation failed", type: "server_error" } });
   }
 }

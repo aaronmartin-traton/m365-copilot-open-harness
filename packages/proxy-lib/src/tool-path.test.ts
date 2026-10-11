@@ -9,6 +9,7 @@ function narrow<T extends ToolPathResult["kind"]>(
 ): Extract<ToolPathResult, { kind: T }> {
   expect(r.kind).toBe(kind);
 
+  // SAFETY: the preceding assertion pins `r.kind` to `kind`, so `r` is the union member for T.
   return r as Extract<ToolPathResult, { kind: T }>;
 }
 

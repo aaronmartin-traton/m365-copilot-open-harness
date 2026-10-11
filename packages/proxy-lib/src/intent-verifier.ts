@@ -18,8 +18,19 @@
 
 import { createHash } from "node:crypto";
 import { createLogger } from "@m365-copilot/core";
+import { z } from "zod/v4";
 
-const log = createLogger("intent-verifier");
+/** The logging surface the verifier depends on, injected at module scope. */
+export interface IntentVerifierLog {
+  info(...args: unknown[]): void;
+}
+
+let log: IntentVerifierLog = createLogger("intent-verifier");
+
+/** Replace the module logger with a faithful in-process recorder (test seam). */
+export function setIntentVerifierLog(next: IntentVerifierLog): void {
+  log = next;
+}
 
 // ---------------------------------------------------------------------------
 // Frozen verifier prompt (content-identical to the experiment artifact;
@@ -137,34 +148,85 @@ const DEFAULT_ENDPOINT = "http://127.0.0.1:1234/v1/chat/completions";
 
 const DEFAULT_MODEL = "bonsai-27b-q1";
 
+/** A JSON value permitted inside `chat_template_kwargs`. */
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+/** A JSON object forwarded verbatim to the model endpoint as `chat_template_kwargs`. */
+export type ChatTemplateKwargs = { [key: string]: JsonValue };
+
+const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(jsonValueSchema),
+    z.record(z.string(), jsonValueSchema),
+  ]),
+);
+
+const chatTemplateKwargsSchema: z.ZodType<ChatTemplateKwargs> = z.record(
+  z.string(),
+  jsonValueSchema,
+);
+
 /**
  * Parse the optional `M365_INTENT_VERIFIER_TEMPLATE_KWARGS` env var (a JSON
  * object forwarded as `chat_template_kwargs`). Unset/empty -> undefined (no
  * kwargs, request unchanged). Invalid JSON throws at construction — a loud
  * config error, never silently ignored and never fail-closed-as-UNCERTAIN.
  */
-function parseTemplateKwargs(raw: string | undefined): Record<string, unknown> | undefined {
+function parseTemplateKwargs(raw: string | undefined): ChatTemplateKwargs | undefined {
   const value = raw?.trim();
 
   if (!value) return undefined;
-  let parsed: unknown;
+  let decoded: unknown;
 
   try {
-    parsed = JSON.parse(value);
+    decoded = JSON.parse(value);
   } catch {
     throw new Error(
       `intent-verifier: M365_INTENT_VERIFIER_TEMPLATE_KWARGS is not valid JSON: ${value}`,
     );
   }
 
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+  const parsed = chatTemplateKwargsSchema.safeParse(decoded);
+
+  if (!parsed.success) {
     throw new Error(
       `intent-verifier: M365_INTENT_VERIFIER_TEMPLATE_KWARGS must be a JSON object, got: ${value}`,
     );
   }
 
-  return parsed as Record<string, unknown>;
+  return parsed.data;
 }
+
+/** OpenAI-compatible chat-completions request forwarded to the verifier endpoint. */
+interface VerifierRequest {
+  model: string;
+  messages: Array<{ role: "system" | "user"; content: string }>;
+  temperature: number;
+  seed: number;
+  max_tokens: number;
+  chat_template_kwargs?: ChatTemplateKwargs;
+}
+
+/** The verifier endpoint's chat-completions response, decoded before use. */
+const verifierResponseSchema = z.object({
+  model: z.json().optional(),
+  choices: z
+    .array(
+      z.object({
+        message: z
+          .object({
+            content: z.string().nullish(),
+            reasoning_content: z.string().nullish(),
+          })
+          .optional(),
+      }),
+    )
+    .optional(),
+});
 
 class BonsaiIntentVerifier implements IntentVerifier {
   private readonly endpoint: string;
@@ -172,7 +234,7 @@ class BonsaiIntentVerifier implements IntentVerifier {
   private readonly maxTokens: number;
   private readonly timeoutMs: number;
   private readonly retryBackoffMs: number;
-  private readonly templateKwargs: Record<string, unknown> | undefined;
+  private readonly templateKwargs: ChatTemplateKwargs | undefined;
   private readonly kwargsHash: string;
   private readonly promptHash: string;
 
@@ -303,20 +365,25 @@ class BonsaiIntentVerifier implements IntentVerifier {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
     try {
+      const body: VerifierRequest = {
+        model: this.model,
+        messages: [
+          { role: "system", content: INTENT_VERIFIER_PROMPT },
+          { role: "user", content: `Assistant response:\n${plannerText}` },
+        ],
+        temperature: 0,
+        seed: 42,
+        max_tokens: this.maxTokens,
+      };
+
+      if (this.templateKwargs !== undefined) {
+        body.chat_template_kwargs = this.templateKwargs;
+      }
+
       const resp = await fetch(this.endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: this.model,
-          messages: [
-            { role: "system", content: INTENT_VERIFIER_PROMPT },
-            { role: "user", content: `Assistant response:\n${plannerText}` },
-          ],
-          temperature: 0,
-          seed: 42,
-          max_tokens: this.maxTokens,
-          ...(this.templateKwargs ? { chat_template_kwargs: this.templateKwargs } : {}),
-        }),
+        body: JSON.stringify(body),
         signal: controller.signal,
       });
 
@@ -328,10 +395,13 @@ class BonsaiIntentVerifier implements IntentVerifier {
         return { token: null, reasoningChars: 0, error: `HTTP ${resp.status}` };
       }
 
-      const j = (await resp.json()) as {
-        model?: unknown;
-        choices?: Array<{ message?: { content?: string; reasoning_content?: string } }>;
-      };
+      const decoded = verifierResponseSchema.safeParse(await resp.json());
+
+      if (!decoded.success) {
+        return { token: null, reasoningChars: 0, error: "invalid" };
+      }
+
+      const j = decoded.data;
 
       if (j.model !== undefined && j.model !== null && String(j.model) !== this.model) {
         return { token: null, reasoningChars: 0, error: "model-mismatch" };

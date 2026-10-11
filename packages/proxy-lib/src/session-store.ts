@@ -1,27 +1,44 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
+import { z } from "zod/v4";
 
-export interface PersistedSessionState {
-  sessionId: string;
-  conversationId: string;
-  turnCount: number;
-  sentMessageCount: number;
-  lastAccessedAt: number;
-  restorable: boolean;
-  nextPruneAttemptAt: number | null;
-}
+/**
+ * One conversation's persisted continuity state, plus the schema that decodes
+ * it from `session-state.json`. That file is external input — it survives
+ * crashes, hand-edits and older proxy versions — so every field is validated
+ * here before any caller reads it.
+ */
+const PersistedSessionStateSchema = z.object({
+  sessionId: z.string(),
+  conversationId: z.string(),
+  turnCount: z.number(),
+  sentMessageCount: z.number(),
+  lastAccessedAt: z.number(),
+  restorable: z.boolean(),
+  nextPruneAttemptAt: z.number().nullable(),
+});
 
-interface StoreData {
-  version: 2;
-  sessions: Record<string, PersistedSessionState>;
-  responseIds: Record<string, string>;
-}
+export type PersistedSessionState = z.infer<typeof PersistedSessionStateSchema>;
 
-interface LegacyStoreData {
-  version: 1;
-  sessions: Record<string, Omit<PersistedSessionState, "restorable" | "nextPruneAttemptAt">>;
-}
+/** Version-1 records predate the prune/restore flags. */
+const LegacySessionStateSchema = PersistedSessionStateSchema.omit({
+  restorable: true,
+  nextPruneAttemptAt: true,
+});
+
+const StoreDataSchema = z.object({
+  version: z.literal(2),
+  sessions: z.record(z.string(), PersistedSessionStateSchema),
+  responseIds: z.record(z.string(), z.string()),
+});
+
+const LegacyStoreDataSchema = z.object({
+  version: z.literal(1),
+  sessions: z.record(z.string(), LegacySessionStateSchema),
+});
+
+type StoreData = z.infer<typeof StoreDataSchema>;
 
 export class SessionStateStore {
   private readonly path: string;
@@ -87,27 +104,18 @@ export class SessionStateStore {
     if (!existsSync(this.path)) return { version: 2, sessions: {}, responseIds: {} };
 
     try {
-      const parsed = JSON.parse(readFileSync(this.path, "utf8")) as Partial<StoreData> | LegacyStoreData;
+      const raw: unknown = JSON.parse(readFileSync(this.path, "utf8"));
+      const current = StoreDataSchema.safeParse(raw);
 
-      if (parsed?.version === 2 && parsed.sessions && typeof parsed.sessions === "object" &&
-          parsed.responseIds && typeof parsed.responseIds === "object") {
-        return {
-          version: 2,
-          sessions: parsed.sessions as Record<string, PersistedSessionState>,
-          responseIds: parsed.responseIds as Record<string, string>,
-        };
-      }
+      if (current.success) return current.data;
 
-      if (parsed?.version === 1 && parsed.sessions && typeof parsed.sessions === "object") {
+      const legacy = LegacyStoreDataSchema.safeParse(raw);
+
+      if (legacy.success) {
         const sessions: Record<string, PersistedSessionState> = {};
 
-        for (const [key, state] of Object.entries(parsed.sessions)) {
-          if (!state || typeof state !== "object") continue;
-          sessions[key] = {
-            ...(state as Omit<PersistedSessionState, "restorable" | "nextPruneAttemptAt">),
-            restorable: true,
-            nextPruneAttemptAt: null,
-          };
+        for (const [key, state] of Object.entries(legacy.data.sessions)) {
+          sessions[key] = { ...state, restorable: true, nextPruneAttemptAt: null };
         }
 
         return { version: 2, sessions, responseIds: {} };

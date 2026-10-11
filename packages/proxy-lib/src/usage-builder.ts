@@ -28,6 +28,12 @@ export interface UsageInput {
   fields?: ProviderUsage;
 }
 
+/** Provider telemetry for the winning turn, plus the models this lane served. */
+type UsageFields = ProviderUsage & {
+  requested_model?: string;
+  routed_model?: string;
+};
+
 export function buildUsage(input: UsageInput): UsageBlock {
   const base: Record<string, number | ProviderUsageValue> & Pick<UsageBlock, "prompt_tokens" | "completion_tokens" | "total_tokens"> = {
     prompt_tokens: 0,
@@ -37,7 +43,7 @@ export function buildUsage(input: UsageInput): UsageBlock {
 
   const prefix = `x_${input.providerId.replace(/-/g, "_")}_`;
 
-  const fields: Record<string, ProviderUsageValue> = { ...input.fields };
+  const fields: UsageFields = { ...input.fields };
 
   if (input.requestedModel !== undefined) fields.requested_model = input.requestedModel;
 

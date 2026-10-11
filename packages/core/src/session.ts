@@ -1,6 +1,7 @@
 import WebSocket from "ws";
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { z } from "zod/v4";
 import {
   SignalRHandshakeResponse,
   DeltaUpdate,
@@ -9,6 +10,8 @@ import {
   CompletionFrame,
   CloseFrame,
   TurnResultFrame,
+  BotMessage,
+  ThrottlingInfo,
 } from "./schemas.js";
 import { decodeJwt, getToneForModel, m365StopReason, m365UsageFields, type CopilotStream } from "./copilot.js";
 import type { ProviderImage, TurnResult } from "./provider.js";
@@ -25,6 +28,74 @@ import { ensureSteered, type SteeringFingerprint } from "./steering.js";
 const RS = "\x1E";
 
 const log = createLogger("session");
+
+// --- Frame vocabulary ---
+// Everything on this socket is JSON, so the frames are modelled as JSON rather
+// than an open `unknown` bag: the recursive value type is the contract, and the
+// per-frame schemas below parse a frame into the fields this file dispatches on.
+
+/** Any JSON value: what `JSON.parse` yields and what a SignalR frame carries. */
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+/** A JSON object — the shape of a frame body. */
+type JsonObject = { [key: string]: JsonValue };
+
+const JsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
+  z.union([
+    z.string(),
+    z.number(),
+    z.boolean(),
+    z.null(),
+    z.array(JsonValueSchema),
+    z.record(z.string(), JsonValueSchema),
+  ]),
+);
+
+/**
+ * The SignalR frame fields this session dispatches on, plus every other JSON
+ * field the frame carries (the frame-specific schemas and the forensics dump
+ * read those). A mistyped dispatch field reads as absent, as before, so one odd
+ * value never costs us the whole frame.
+ */
+const SignalRFrame = z
+  .object({
+    type: z.number().optional().catch(undefined),
+    target: z.string().optional().catch(undefined),
+    arguments: z.array(JsonValueSchema).optional().catch(undefined),
+    item: JsonValueSchema.optional(),
+  })
+  .catchall(JsonValueSchema);
+
+type SignalRFrame = z.infer<typeof SignalRFrame>;
+
+/** The final `type:2` stream item — the conversation's end state. */
+const StreamItemFrame = z.object({
+  messages: z.array(JsonValueSchema).optional().catch(undefined),
+  throttling: ThrottlingInfo.optional().catch(undefined),
+  turnState: z.string().optional().catch(undefined),
+  result: JsonValueSchema.optional(),
+});
+
+type StreamItemFrame = z.infer<typeof StreamItemFrame>;
+
+/**
+ * One message from a streaming `update` frame or the final `type:2` item.
+ * Extends the shared message schema with the native-action trigger fields
+ * (`MaybeTriggerMessage` in native-actions.ts) and keeps unclaimed fields, so a
+ * resumed action echoes the trigger message verbatim.
+ */
+const SessionMessage = BotMessage.partial()
+  .extend({
+    author: z.string(),
+    layout: z.string().optional(),
+    copilotMessageType: z.string().optional(),
+    actionId: z.string().optional(),
+    sourceRequestId: z.string().optional(),
+    isConsequential: z.boolean().optional(),
+  })
+  .catchall(z.unknown());
+
+type SessionMessage = z.infer<typeof SessionMessage>;
 
 // The exact frame the real m365.cloud.microsoft "Stop generating" button sends
 // (captured June 2026, scripts/cancel-frame-capture.mjs). It's a normal type:1
@@ -66,19 +137,19 @@ const IMAGE_GEN_OPTIONS_SETS = [
 // in production; gives us forensic data when M365 starts emitting new fields.
 const DUMP_FRAMES = !!process.env.M365_DUMP_FRAMES;
 
-/** A SignalR frame, as received or sent, for per-request forensics. */
-interface SignalRFrame {
-  [field: string]: unknown;
-}
-
-function dumpFrame(requestId: string, parsed: SignalRFrame, direction: "recv" | "send") {
+/**
+ * Append one frame to this request's forensic NDJSON, when M365_DUMP_FRAMES=1.
+ * The frame arrives as serialized JSON: exactly what came off the socket, or
+ * what we are about to send. It is written back as a structured `frame` object.
+ */
+function dumpFrame(requestId: string, frameJson: string, direction: "recv" | "send") {
   if (!DUMP_FRAMES) return;
 
   try {
     mkdirSync(FRAME_DIR, { recursive: true });
     appendFileSync(
       join(FRAME_DIR, `${requestId}.ndjson`),
-      JSON.stringify({ t: Date.now(), dir: direction, frame: parsed }) + "\n",
+      JSON.stringify({ t: Date.now(), dir: direction, frame: JSON.parse(frameJson) }) + "\n",
     );
   } catch {
     // best effort
@@ -393,7 +464,7 @@ export class CopilotSession {
       // envelope's arguments[0], reused verbatim (minus `message`) to resume an
       // action. `sawAction` records that the model triggered a custom action this
       // turn; `actionResumed` guards against double-resuming the same trigger.
-      let baseArgs: Record<string, unknown> | null = null;
+      let baseArgs: JsonObject | null = null;
       let sawAction = false;
       let actionResumed = false;
       let interceptedLocalTool = false;
@@ -428,8 +499,7 @@ export class CopilotSession {
         if (waiting) {
           const w = waiting;
           waiting = null;
-          // SAFETY: done:true carries no value; undefined is the contract.
-          w.resolve({ value: undefined as unknown as string, done: true });
+          w.resolve({ value: undefined, done: true });
         }
       };
 
@@ -457,41 +527,27 @@ export class CopilotSession {
         if (r.emit) onDelta(r.emit);
       };
 
-      /** One progress frame from the image-generation stream. */
-      interface ImageProgress {
-        contentGenerationProgressList?: unknown;
-        ImageReferenceUrls?: unknown;
-        fileToken?: unknown;
-        pollUrl?: unknown;
-        size?: unknown;
-        orientation?: unknown;
-        status?: unknown;
-      }
+      /** Capture any image-generation progress carried by one bot message. */
+      const captureImages = (message: SessionMessage) => {
+        const list = message.contentGenerationProgressList;
 
-      const captureImages = (message: unknown) => {
-        if (!message || typeof message !== "object" || !("contentGenerationProgressList" in message)) return;
-        const list = (message as ImageProgress).contentGenerationProgressList;
-
-        if (!Array.isArray(list)) return;
+        if (list === undefined) return;
 
         for (const entry of list) {
-          if (!entry || typeof entry !== "object" || !("ImageReferenceUrls" in entry)) continue;
-          // SAFETY: ImageProgress declares every field read below.
-          const record = entry as ImageProgress & { ImageReferenceUrls?: unknown };
-          const urls = record.ImageReferenceUrls;
+          const urls = entry.ImageReferenceUrls;
 
-          if (!Array.isArray(urls) || urls.length === 0 || typeof urls[0] !== "string") continue;
-          const key = typeof record.fileToken === "string" ? record.fileToken : urls[0];
-          const status = typeof record.status === "number" ? record.status : 0;
+          if (urls === undefined || urls.length === 0) continue;
+          const key = entry.fileToken ?? urls[0];
+          const status = entry.status ?? 0;
           const previous = imagesByToken.get(key);
 
           if (previous && (previous.status ?? 0) >= status) continue;
           imagesByToken.set(key, {
-            referenceUrls: urls.filter((url): url is string => typeof url === "string"),
-            fileToken: typeof record.fileToken === "string" ? record.fileToken : undefined,
-            pollUrl: typeof record.pollUrl === "string" ? record.pollUrl : undefined,
-            size: typeof record.size === "string" ? record.size : undefined,
-            orientation: typeof record.orientation === "string" ? record.orientation : undefined,
+            referenceUrls: urls,
+            fileToken: entry.fileToken,
+            pollUrl: entry.pollUrl,
+            size: entry.size,
+            orientation: entry.orientation,
             status,
           });
         }
@@ -568,8 +624,7 @@ export class CopilotSession {
               if (streamError) return Promise.reject(streamError);
 
               if (streamDone) {
-                // SAFETY: done:true carries no value; undefined is the contract.
-                return Promise.resolve({ value: undefined as unknown as string, done: true });
+                return Promise.resolve({ value: undefined, done: true });
               }
 
               return new Promise((res, rej) => {
@@ -634,7 +689,7 @@ export class CopilotSession {
         try {
           if (ws.readyState === WebSocket.OPEN && handshakeDone) {
             log.info("Aborted — sending Stop frame to cancel the turn");
-            dumpFrame(requestId, { target: "stop", type: 1 }, "send");
+            dumpFrame(requestId, JSON.stringify({ target: "stop", type: 1 }), "send");
             ws.send(STOP_FRAME);
             setTimeout(() => { try { ws.close(); } catch {} }, 2_000);
           } else {
@@ -663,10 +718,10 @@ export class CopilotSession {
         const frames = raw.split(RS).filter((f) => f.length > 0);
 
         for (const frame of frames) {
-          let parsed: unknown;
+          let json: unknown;
 
           try {
-            parsed = JSON.parse(frame);
+            json = JSON.parse(frame);
           } catch {
             if (!handshakeDone) {
               handshakeDone = true;
@@ -676,13 +731,21 @@ export class CopilotSession {
             continue;
           }
 
-          if (parsed === null || typeof parsed !== "object") continue;
+          const parsed = SignalRFrame.safeParse(json);
 
-          dumpFrame(requestId, parsed as SignalRFrame, "recv");
+          if (!parsed.success) {
+            // A bare JSON array is not a frame we dispatch on — keep it in the
+            // forensic dump anyway, as before.
+            if (Array.isArray(json)) dumpFrame(requestId, frame, "recv");
+
+            continue;
+          }
+
+          dumpFrame(requestId, frame, "recv");
 
           if (!handshakeDone) {
             handshakeDone = true;
-            const hs = SignalRHandshakeResponse.safeParse(parsed);
+            const hs = SignalRHandshakeResponse.safeParse(parsed.data);
 
             if (hs.success && hs.data.error) {
               ws.close();
@@ -695,7 +758,7 @@ export class CopilotSession {
             continue;
           }
 
-          handleMsg(parsed);
+          handleMsg(parsed.data);
         }
       });
 
@@ -718,132 +781,153 @@ export class CopilotSession {
       });
 
       const sendChat = () => {
-        const args = {
-              source: "officeweb",
-              clientCorrelationId: requestId,
-              sessionId,
-              // Code interpreter on the agent-less path only (see const above).
-              // M365_EXTRA_OPTIONSSETS (comma-sep) merges in on ANY path — used to
-              // test whether matching the official GUI's rich optionsSets stops the
-              // agent-path "replace X→Y" Disengage (F17/F21). The GUI sends a rich
-              // set + NO agent; we send [] + agent and Disengage.
-              optionsSets: [
-                ...((this.enableCodeInterpreter && !agentId && !process.env.M365_NO_CODE_INTERPRETER) ? CODE_INTERPRETER_OPTIONS_SETS : []),
-                ...(wantImages ? IMAGE_GEN_OPTIONS_SETS : []),
-                ...(process.env.M365_EXTRA_OPTIONSSETS ? process.env.M365_EXTRA_OPTIONSSETS.split(",").map((s) => s.trim()).filter(Boolean) : []),
-                ...(attachments.length > 0 ? [
-                  "cwcgptvsan",
-                  "flux_v3_gptv_enable_upload_multi_image_in_turn_wo_ch",
-                  "gptvnorm2048",
-                  "cwc_fileupload_odb",
-                ] : []),
-              ],
-              streamingMode: "ConciseWithPadding",
-              spokenTextMode: "None",
-              options: {},
-              extraExtensionParameters: {},
-              allowedMessageTypes: [
-                "Chat",
-                "Suggestion",
-                "InternalSearchQuery",
-                "Disengaged",
-                "InternalLoaderMessage",
-                "Progress",
-                "RenderCardRequest",
-                "SemanticSerp",
-                "GenerateContentQuery",
-                "SearchQuery",
-                "ConfirmationCard",
-                "DeveloperLogs",
-                "EndOfRequest",
-                "ReferencesListComplete",
-                "GeneratedCode",        // code-interpreter execution frames
-                ...(wantImages ? ["GenerateGraphicArt"] : []),
-                "GenerateContentQuery",
-                // Native custom-action vocabulary (H-NATIVE-6): the server only
-                // SENDS these trigger frames if the client says it can handle them.
-                ...(nativeActions ? ACTION_ALLOWED_MESSAGE_TYPES : []),
-              ],
-              sliceIds: [] as string[],
-              threadLevelGptId: agentId
-                ? { id: agentId, source: "MOS3" }
-                : {},
-              traceId: requestId,
-              isStartOfSession: isFirst,
-              clientInfo: {
-                clientPlatform: "mcmcopilot-web",
-                clientAppName: "Office",
-                clientEntrypoint: "mcmcopilot-officeweb",
-                clientSessionId: sessionId,
-                clientAppType: "Web",
-                deviceOS: "Linux",
-                deviceType: "Desktop",
-              },
-              message: {
-                author: "user",
-                inputMethod: "Keyboard",
-                text,
-                entityAnnotationTypes: [
-                  "People",
-                  "File",
-                  "Event",
-                  "Email",
-                  "TeamsMessage",
-                ],
-                requestId,
-                locationInfo: { timeZoneOffset: 1, timeZone: "Europe/Copenhagen" },
-                locale: "en-gb",
-                messageType: "Chat",
-                experienceType: "Default",
-                adaptiveCards: [] as any[],
-                clientPreferences: {},
-                ...(attachments.length > 0 ? {
-                  messageAnnotations: attachments.map((attachment) => attachment.annotation),
-                  connectedFederatedConnections: ["dummyId"],
-                } : {}),
-              },
-              ...(agentId
-                ? {
-                    gpts: [{
-                      id: agentId,
-                      source: "MOS3",
-                      version: "1.0.0",
-                      clientOverrides: {
-                        // The real capability channel (H8.2/H8.3/H8.7) — RegisteredPlugins,
-                        // ScenarioModels, CodeInterpreter, … ride here per the decompile.
-                        capabilities: nativeActions?.capabilities ?? [],
-                        "deepResearchModels@odata.type": "Collection(String)",
-                      },
-                    }],
-                  }
-                : {}),
-              // Inline agent definition — attach a custom action WITHOUT sideloading
-              // through Teams/Graph (H-NATIVE-7). Best-effort schema from the decompile;
-              // run with M365_DUMP_FRAMES=1 to see what the server accepts.
-              ...(nativeActions?.gptDefinitions ? { gptDefinitions: nativeActions.gptDefinitions } : {}),
-              // plugins[]: an explicit native-action list wins; otherwise Bing on the
-              // plain (agent-less) path only, exactly as before.
-              ...(nativeActions?.plugins
-                ? { plugins: nativeActions.plugins }
-                : (!agentId ? { plugins: [{ Id: "BingWebSearch", Source: "BuiltIn" }] } : {})),
-              // Skill flags that gate the action/confirmation flow — the real client
-              // sends these in the chat payload (bundle 8af68b68f4a2 destructure at
-              // :9373-9378 → payload :11111). Without them the server has no reason to
-              // run the confirmation-dialog / auto-invoke skills, so an attached action
-              // never triggers. Only sent on the native-action path.
-              ...(nativeActions
-                ? {
-                    enableConfirmationDialogSkill: true,
-                    enableAgentAutoInvoke: true,
-                    enableMsgExtAuthSkill: true,
-                    enablePPCAuthSkill: true,
-                  }
-                : {}),
-              isSbsSupported: true,
-              tone: getToneForModel(model),
-              renderReferencesBehindEOS: true,
-              disconnectBehavior: "continue",
+        // The payload is assembled in statements: fields that do not apply to
+        // this turn are simply absent, and the optional native-action blocks are
+        // added only when enabled.
+        const message = {
+          author: "user",
+          inputMethod: "Keyboard",
+          text,
+          entityAnnotationTypes: [
+            "People",
+            "File",
+            "Event",
+            "Email",
+            "TeamsMessage",
+          ],
+          requestId,
+          locationInfo: { timeZoneOffset: 1, timeZone: "Europe/Copenhagen" },
+          locale: "en-gb",
+          messageType: "Chat",
+          experienceType: "Default",
+          adaptiveCards: [],
+          clientPreferences: {},
         };
+
+        if (attachments.length > 0) {
+          Object.assign(message, {
+            messageAnnotations: attachments.map((attachment) => attachment.annotation),
+            connectedFederatedConnections: ["dummyId"],
+          });
+        }
+
+        const threadLevelGptId: JsonObject = {};
+
+        if (agentId) {
+          threadLevelGptId.id = agentId;
+          threadLevelGptId.source = "MOS3";
+        }
+
+        const args = {
+          source: "officeweb",
+          clientCorrelationId: requestId,
+          sessionId,
+          // Code interpreter on the agent-less path only (see const above).
+          // M365_EXTRA_OPTIONSSETS (comma-sep) merges in on ANY path — used to
+          // test whether matching the official GUI's rich optionsSets stops the
+          // agent-path "replace X→Y" Disengage (F17/F21). The GUI sends a rich
+          // set + NO agent; we send [] + agent and Disengage.
+          optionsSets: [
+            ...((this.enableCodeInterpreter && !agentId && !process.env.M365_NO_CODE_INTERPRETER) ? CODE_INTERPRETER_OPTIONS_SETS : []),
+            ...(wantImages ? IMAGE_GEN_OPTIONS_SETS : []),
+            ...(process.env.M365_EXTRA_OPTIONSSETS ? process.env.M365_EXTRA_OPTIONSSETS.split(",").map((s) => s.trim()).filter(Boolean) : []),
+            ...(attachments.length > 0 ? [
+              "cwcgptvsan",
+              "flux_v3_gptv_enable_upload_multi_image_in_turn_wo_ch",
+              "gptvnorm2048",
+              "cwc_fileupload_odb",
+            ] : []),
+          ],
+          streamingMode: "ConciseWithPadding",
+          spokenTextMode: "None",
+          options: {},
+          extraExtensionParameters: {},
+          allowedMessageTypes: [
+            "Chat",
+            "Suggestion",
+            "InternalSearchQuery",
+            "Disengaged",
+            "InternalLoaderMessage",
+            "Progress",
+            "RenderCardRequest",
+            "SemanticSerp",
+            "GenerateContentQuery",
+            "SearchQuery",
+            "ConfirmationCard",
+            "DeveloperLogs",
+            "EndOfRequest",
+            "ReferencesListComplete",
+            "GeneratedCode",        // code-interpreter execution frames
+            ...(wantImages ? ["GenerateGraphicArt"] : []),
+            "GenerateContentQuery",
+            // Native custom-action vocabulary (H-NATIVE-6): the server only
+            // SENDS these trigger frames if the client says it can handle them.
+            ...(nativeActions ? ACTION_ALLOWED_MESSAGE_TYPES : []),
+          ],
+          sliceIds: [],
+          threadLevelGptId,
+          traceId: requestId,
+          isStartOfSession: isFirst,
+          clientInfo: {
+            clientPlatform: "mcmcopilot-web",
+            clientAppName: "Office",
+            clientEntrypoint: "mcmcopilot-officeweb",
+            clientSessionId: sessionId,
+            clientAppType: "Web",
+            deviceOS: "Linux",
+            deviceType: "Desktop",
+          },
+          message,
+          isSbsSupported: true,
+          tone: getToneForModel(model),
+          renderReferencesBehindEOS: true,
+          disconnectBehavior: "continue",
+        };
+
+        if (agentId) {
+          Object.assign(args, {
+            gpts: [{
+              id: agentId,
+              source: "MOS3",
+              version: "1.0.0",
+              clientOverrides: {
+                // The real capability channel (H8.2/H8.3/H8.7) — RegisteredPlugins,
+                // ScenarioModels, CodeInterpreter, … ride here per the decompile.
+                capabilities: nativeActions?.capabilities ?? [],
+                "deepResearchModels@odata.type": "Collection(String)",
+              },
+            }],
+          });
+        }
+
+        // Inline agent definition — attach a custom action WITHOUT sideloading
+        // through Teams/Graph (H-NATIVE-7). Best-effort schema from the decompile;
+        // run with M365_DUMP_FRAMES=1 to see what the server accepts.
+        if (nativeActions?.gptDefinitions) {
+          Object.assign(args, { gptDefinitions: nativeActions.gptDefinitions });
+        }
+
+        // plugins[]: an explicit native-action list wins; otherwise Bing on the
+        // plain (agent-less) path only, exactly as before.
+        if (nativeActions?.plugins) {
+          Object.assign(args, { plugins: nativeActions.plugins });
+        } else if (!agentId) {
+          Object.assign(args, { plugins: [{ Id: "BingWebSearch", Source: "BuiltIn" }] });
+        }
+
+        // Skill flags that gate the action/confirmation flow — the real client
+        // sends these in the chat payload (bundle 8af68b68f4a2 destructure at
+        // :9373-9378 → payload :11111). Without them the server has no reason to
+        // run the confirmation-dialog / auto-invoke skills, so an attached action
+        // never triggers. Only sent on the native-action path.
+        if (nativeActions) {
+          Object.assign(args, {
+            enableConfirmationDialogSkill: true,
+            enableAgentAutoInvoke: true,
+            enableMsgExtAuthSkill: true,
+            enablePPCAuthSkill: true,
+          });
+        }
 
         baseArgs = args;
 
@@ -869,10 +953,12 @@ export class CopilotSession {
           type: 1,
         };
 
-        const payload = JSON.stringify(chatMsg) + RS + JSON.stringify(metrics) + RS;
+        const chatFrame = JSON.stringify(chatMsg);
+        const metricsFrame = JSON.stringify(metrics);
+        const payload = chatFrame + RS + metricsFrame + RS;
         log.debug("WS send:", trunc(payload, 500));
-        dumpFrame(requestId, chatMsg, "send");
-        dumpFrame(requestId, metrics, "send");
+        dumpFrame(requestId, chatFrame, "send");
+        dumpFrame(requestId, metricsFrame, "send");
         ws.send(payload);
         resolve(stream);
       };
@@ -883,9 +969,9 @@ export class CopilotSession {
       // ResumeInvokeAction message, so the server-side orchestrator makes the real
       // outbound call (H-NATIVE-6). Returns true if it sent a resume (⇒ keep socket
       // open for the result). No-op unless native actions are enabled.
-      const maybeResumeAction = (m: unknown): boolean => {
+      const maybeResumeAction = (m: SessionMessage): boolean => {
         if (!nativeActions || actionResumed || !baseArgs) return false;
-        const conf = parseActionConfirmation(m as any);
+        const conf = parseActionConfirmation(m);
 
         if (!conf) return false;
         sawAction = true;
@@ -899,24 +985,23 @@ export class CopilotSession {
         actionResumed = true;
         const resumeArgs = { ...baseArgs, message: buildResumeInvokeAction(conf) };
         const frame = { arguments: [resumeArgs], invocationId: "0", target: "chat", type: 4 };
-        dumpFrame(requestId, frame, "send");
+        const frameJson = JSON.stringify(frame);
+        dumpFrame(requestId, frameJson, "send");
         log.info(`Native action: auto-confirming actionId=${conf.actionId} via ResumeInvokeAction`);
 
-        try { ws.send(JSON.stringify(frame) + RS); } catch (e) { log.error("resume send failed:", (e as Error).message); }
+        try { ws.send(frameJson + RS); } catch (e) { log.error("resume send failed:", e instanceof Error ? e.message : String(e)); }
 
         return true;
       };
 
-      function handleMsg(raw: unknown) {
-        const base = raw as { type?: number; target?: string; arguments?: unknown[] };
-
-        if (base.type === 6) {
+      function handleMsg(raw: SignalRFrame) {
+        if (raw.type === 6) {
           ws.send(JSON.stringify({ type: 6 }) + RS);
 
           return;
         }
 
-        if (base.type === 7) {
+        if (raw.type === 7) {
           const frame = CloseFrame.safeParse(raw);
 
           if (frame.success && frame.data.error) {
@@ -928,7 +1013,7 @@ export class CopilotSession {
           return;
         }
 
-        if (base.type === 3) {
+        if (raw.type === 3) {
           const frame = CompletionFrame.safeParse(raw);
 
           if (frame.success && frame.data.error) {
@@ -940,12 +1025,13 @@ export class CopilotSession {
           return;
         }
 
-        if (base.type === 2) {
+        if (raw.type === 2) {
           // Stream item — the FINAL state of the conversation, with authoritative
           // throttle/turnCount/scores. Mine it before closing.
-          const item = (raw as { item?: { messages?: any[]; throttling?: any; turnState?: string; result?: unknown } }).item;
+          const parsedItem = StreamItemFrame.safeParse(raw.item);
 
-          if (item) {
+          if (parsedItem.success) {
+            const item = parsedItem.data;
             const result = TurnResultFrame.safeParse(item.result);
 
             if (result.success) {
@@ -964,7 +1050,12 @@ export class CopilotSession {
 
             let resumedHere = false;
 
-            for (const m of item.messages ?? []) {
+            for (const rawMessage of item.messages ?? []) {
+              const parsedMessage = SessionMessage.safeParse(rawMessage);
+
+              if (!parsedMessage.success) continue;
+              const m = parsedMessage.data;
+
               if (m.author !== "bot") continue;
               captureImages(m);
 
@@ -974,12 +1065,10 @@ export class CopilotSession {
 
               if (m.messageId) messageId = m.messageId;
 
-              if (typeof m.turnCount === "number") turnCountServer = m.turnCount;
+              if (m.turnCount !== undefined) turnCountServer = m.turnCount;
 
-              if (Array.isArray(m.scores)) {
+              if (m.scores) {
                 for (const s of m.scores) {
-                  if (typeof s?.component !== "string" || typeof s?.score !== "number") continue;
-
                   if (!(s.component in maxScores) || s.score > maxScores[s.component]) {
                     maxScores[s.component] = s.score;
                   }
@@ -1000,10 +1089,10 @@ export class CopilotSession {
           return;
         }
 
-        if (base.type === 1 && base.target === "update" && Array.isArray(base.arguments)) {
+        if (raw.type === 1 && raw.target === "update") {
           if (interceptedLocalTool) return;
 
-          for (const arg of base.arguments) {
+          for (const arg of raw.arguments ?? []) {
             const delta = DeltaUpdate.safeParse(arg);
 
             if (delta.success) {
@@ -1043,7 +1132,7 @@ export class CopilotSession {
                     }
                   }
 
-                  if (typeof m.turnCount === "number") turnCountServer = m.turnCount;
+                  if (m.turnCount !== undefined) turnCountServer = m.turnCount;
 
                   if (m.turnState) turnState = m.turnState;
                   // A confirmation TRIGGER for a native action arrives here as a
