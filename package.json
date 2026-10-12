@@ -14,7 +14,9 @@
     "test:live": "bun run build:libs && M365_LIVE=1 bun run vitest run",
     "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/chatgpt-web && tsc --noEmit -p packages/proxy-lib && tsc --noEmit -p packages/proxy",
     "lint": "oxlint packages",
-    "lint:fix": "oxlint --fix packages"
+    "lint:fix": "oxlint --fix packages",
+    "setup": "bun run build:libs && bun packages/proxy/bin/m365-setup.mjs",
+    "doctor": "bun run build:libs && bun packages/proxy/bin/m365-setup.mjs --check-only"
   },
   "devDependencies": {
     "@oxlint/plugins": "1.86.0",

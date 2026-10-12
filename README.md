@@ -37,15 +37,32 @@ decisions are in [`CONTEXT.md`](CONTEXT.md).
   browser over the Chrome DevTools Protocol; there is no bundled browser any more.
   Point `CHROMIUM_PATH` at an existing Chromium/Edge executable, or let the proxy find
   one in the usual Edge/Chrome/Chromium install locations and on `PATH`.
-- **Playwright is only for the opt-in ChatGPT Web lane** (`PROVIDER=chatgpt-web`),
-  which is the sole remaining Playwright user. It needs the bundled browser:
-  `bunx playwright install --with-deps chromium`. Sign-in does not use Playwright.
+- **Playwright is only for the deprecated ChatGPT Web lane** (`PROVIDER=chatgpt-web`),
+  the sole remaining Playwright user. The `openai` and `m365` lanes need no Playwright.
+- **No browser at all for the `openai` lane.** Neither does a local one: point
+  `OPENAI_BASE_URL` at LM Studio, llama.cpp, vLLM or Ollama's OpenAI shim and the
+  proxy drives it unchanged.
 - **A Microsoft 365 account with Copilot** that can complete interactive sign-in
-  (password plus MFA in the browser window).
+  (password plus MFA in the browser window) — for the default `m365` lane only.
+  For `PROVIDER=openai` you need an OpenAI API key instead, or nothing at all if
+  you point `OPENAI_BASE_URL` at a local server.
 - No `engines` field is declared in any package; the runtime is Bun (the launcher
   and login scripts carry a `#!/usr/bin/env bun` shebang).
 
 ## Install and run
+
+The short version — one command installs, builds, checks what you are missing and
+signs you in:
+
+```sh
+bun run setup          # install -> build -> prerequisites -> browser sign-in
+bun run proxy          # start on http://127.0.0.1:4141
+```
+
+`bun run doctor` runs only the checks (safe, read-only, never opens a browser) if
+you want to see what is missing before committing to a sign-in.
+
+Driving it by hand instead:
 
 ```sh
 bun install
@@ -91,6 +108,7 @@ Other root scripts:
 | `bun run build:libs` | Builds only the library packages the tests import from `dist/` |
 | `bun run test:unit` | Builds the libraries, then runs Vitest |
 | `bun run test:live` | Same, with `M365_LIVE=1` (hits the real API) |
+| `bun run setup` / `bun run doctor` | Install + build + check prerequisites (+ sign in); `--check-only` via `doctor` |
 | `bun run typecheck` | `tsc --noEmit` for `core`, `chatgpt-web`, `proxy-lib`, `proxy` |
 | `bun run lint` | `oxlint packages` |
 
@@ -132,7 +150,17 @@ the `M365_BACKOFF_*` family.
 
 | Variable | Default | Effect |
 |---|---|---|
-| `PROVIDER` | `m365` | Selects the backend: `m365` (the SignalR/WebSocket lane) or `chatgpt-web` (opt-in browser lane). Any other value throws rather than silently falling back. |
+| `PROVIDER` | `m365` | Selects the backend: `m365` (the SignalR/WebSocket lane), `openai` (the OpenAI API, or any local OpenAI-compatible server), or `chatgpt-web` (**deprecated**). Any other value throws rather than silently falling back. |
+
+### OpenAI and local-model lanes — `packages/core/src/openai.ts`
+
+| Variable | Default | Effect |
+|---|---|---|
+| `OPENAI_API_KEY` | unset | The API key. Required against `api.openai.com`; a self-hosted endpoint may need none. |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Any OpenAI-compatible `/v1` root — `http://localhost:1234/v1` for LM Studio, or a llama.cpp / vLLM / Ollama OpenAI shim. |
+| `OPENAI_MODELS` | built-in list | Comma-separated ids to advertise on `/v1/models`. `bun run doctor` prints what the server actually serves. |
+| `OPENAI_CONTEXT_WINDOW` | `1050000` | Context window advertised to harnesses. |
+| `OPENAI_MAX_OUTPUT_TOKENS` | `1050000` | Output ceiling advertised to harnesses. |
 
 ### Server and launcher — `packages/proxy/bin/m365-proxy.mjs`
 
@@ -175,8 +203,8 @@ the `M365_BACKOFF_*` family.
 |---|---|---|
 | `M365_SESSION_STATE_FILE` | `~/.config/opencode-m365/session-state.json` | Where conversation continuity is persisted across restarts. |
 | `M365_SESSION_MEMORY_TTL_MS` | `1800000` (30 min) | Idle in-memory session TTL. |
-| `M365_SESSION_TTL_MINUTES` | unset (reaper off) | When set to a positive number, idle conversations older than this are pruned. |
-| `M365_WEB_PRUNE_PROVEN` | unset (reaper disabled) | Set to `1` to enable the automatic prune reaper (the Nitro route also runs it on every `/health`). |
+| `M365_WEB_PRUNE_PROVEN` | unset (**reaper enabled**) | Set to `0` to disable automatic deletion of idle M365 threads. The Nitro route also runs the reaper on every `/health`, and a timer runs it every minute. |
+| `M365_SESSION_TTL_MINUTES` | `10080` (7 days) | How long a thread may sit idle before it is deleted upstream. `0` disables reaping. Deletion is one-way. |
 | `M365_PRUNE_TOKEN` | unset | Bearer token required by `POST /v1/conversations/prune`; while unset, that route returns `404`. |
 | `M365_TEMPORARY_CHAT` | off | Set to `1` to send `disableMemory=1` (temporary chat, no server-side memory). |
 
@@ -261,7 +289,14 @@ the `M365_BACKOFF_*` family.
 | `M365_LOCAL_SHELL` | `git-bash` | Shell backend on Windows: `git-bash` or `wsl`. |
 | `M365_GIT_BASH_PATH` | `%ProgramFiles%\Git\bin\bash.exe` | Git Bash executable path. |
 
-### ChatGPT Web lane — `packages/chatgpt-web/src/browser.ts`
+### ChatGPT Web lane (**deprecated**) — `packages/chatgpt-web/src/browser.ts`
+
+> **Deprecated: superseded by `PROVIDER=openai`.** This lane drives a personal
+> chatgpt.com session, which cannot honour the requested `model` — the site's own
+> picker decides what answers, so the slug is metadata only. It is kept working so
+> existing deployments do not break on upgrade, and will be removed. Use
+> `PROVIDER=openai` (including against a local server) for a lane where `model`
+> really selects the model.
 
 | Variable | Default | Effect |
 |---|---|---|
