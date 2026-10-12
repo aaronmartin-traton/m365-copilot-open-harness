@@ -15,6 +15,9 @@ import {
   getAvailableModels,
   M365WebConversationClient,
   ModelSession,
+  openAiContextWindow,
+  openAiModelNames,
+  OpenAiProvider,
   type ModelProvider,
   type ModelSessionOptions,
 } from "@m365-copilot/core";
@@ -24,7 +27,7 @@ import {
   chatGptWebModelNames,
 } from "@m365-copilot/chatgpt-web";
 
-export type BackendId = "m365" | "chatgpt-web";
+export type BackendId = "m365" | "openai" | "chatgpt-web";
 
 export interface BackendDescriptor {
   id: BackendId;
@@ -65,6 +68,24 @@ const M365_BACKEND: BackendDescriptor = {
   },
 };
 
+/**
+ * The OpenAI API lane: spends an `OPENAI_API_KEY` rather than an M365
+ * subscription, and — unlike the ChatGPT Web lane it supersedes — the `model`
+ * field really selects the model. Stateless upstream, so no `deleteConversation`:
+ * the idle reaper must not call the M365 web API with this lane's threads.
+ */
+const OPENAI_BACKEND: BackendDescriptor = {
+  id: "openai",
+  ownedBy: "openai",
+  listModels: openAiModelNames,
+  contextWindowFor: openAiContextWindow,
+  maxOutputTokens: Number(process.env.OPENAI_MAX_OUTPUT_TOKENS) || DEFAULT_CONTEXT_WINDOW,
+  createSession: (options) => new OpenAiProvider(options),
+};
+
+/** @deprecated Superseded by the `openai` lane: a chatgpt.com session cannot
+ *  honour the requested model, so `model` on that lane is metadata only. Kept
+ *  working so existing deployments do not break on upgrade. */
 const CHATGPT_WEB_BACKEND: BackendDescriptor = {
   id: "chatgpt-web",
   ownedBy: "chatgpt-web",
@@ -80,6 +101,7 @@ const CHATGPT_WEB_BACKEND: BackendDescriptor = {
 
 const BACKENDS: Record<BackendId, BackendDescriptor> = {
   m365: M365_BACKEND,
+  openai: OPENAI_BACKEND,
   "chatgpt-web": CHATGPT_WEB_BACKEND,
 };
 

@@ -1,11 +1,12 @@
 export {
   getToken,
   getTokenSilent,
+  browserExecutable,
+  getBrowserProfileDir,
   getTokenForScope,
   getImageArtifactToken,
   getTokenStatus,
   loginInteractive,
-  getBrowserProfileDir,
   tokenCacheFile,
   AuthenticationError,
   type TokenStatus,
@@ -52,6 +53,19 @@ export {
 } from "./steering.js";
 
 export { getOrCreateAgent, getAgentAvailability, environmentUrlFromName, type AgentAvailability } from "./agent.js";
+
+export {
+  OpenAiProvider,
+  OpenAiError,
+  openAiApiKey,
+  openAiBaseUrl,
+  openAiModelNames,
+  openAiContextWindow,
+  openAiRequiresKey,
+  discoverOpenAiModels,
+  readOpenAiStream,
+  type OpenAiSessionOptions,
+} from "./openai.js";
 
 export {
   decodeJwt,
