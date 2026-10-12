@@ -85,6 +85,8 @@ export interface M365WebPage {
   currentUrl(): Promise<string>;
   waitForTimeout(milliseconds: number): Promise<void>;
   evaluate<TInput, TResult>(pageFunction: (input: TInput) => Promise<TResult>, input: TInput): Promise<TResult>;
+  /** Rejects when the browser connection drops; never resolves. */
+  readonly closed: Promise<never>;
 }
 
 /** The slice of the CDP browser session the deletion flow drives. */
@@ -268,21 +270,25 @@ export class M365WebConversationClient implements M365WebConversationClientLike 
       }
     };
 
+    // Stay subscribed until the drain is over: the `/chat` POST can land any
+    // time between the navigation committing and the headers being read.
     const unsubscribe = page.onRequest(onRequest);
 
     try {
       await page.navigate(CHAT_URL);
 
       if (captured.size === 0) await page.waitForTimeout(5_000);
+
+      if (isSignInHost(await page.currentUrl())) throw new M365WebSessionUnavailableError();
+
+      if (captured.size === 0) {
+        throw new M365WebSessionUnavailableError("M365 web navigation did not expose UI context");
+      }
+
+      return Object.fromEntries(captured);
     } finally {
       unsubscribe();
     }
-
-    if (isSignInHost(await page.currentUrl())) throw new M365WebSessionUnavailableError();
-
-    if (captured.size === 0) throw new M365WebSessionUnavailableError("M365 web navigation did not expose UI context");
-
-    return Object.fromEntries(captured);
   }
 
   private async post(page: M365WebPage, headers: Record<string, string>, body: M365ChatRequest): Promise<BrowserFetchResult> {

@@ -135,18 +135,18 @@ interface CdpMessage {
   readonly sessionId?: string;
 }
 
-/** Raised by {@link CdpSocket.recv} when no message arrives before the timeout. */
-class WebSocketTimeout extends Error {}
+/** Raised when a browser command is not answered within its timeout. */
+class CdpTimeout extends Error {}
 
 /**
- * A minimal async facade over the platform WebSocket for the CDP session:
- * messages queue up and `recv` waits for the next one, with an optional timeout,
- * mirroring the blocking `recv(timeout=...)` of the Python client.
+ * A minimal async facade over the platform WebSocket for the CDP session: it
+ * opens, decodes each frame, and hands every message to its subscriber the
+ * moment it arrives. It queues nothing — the owner decides what a message means.
  */
 class CdpSocket {
   private readonly socket: WebSocket;
-  private readonly pending: CdpMessage[] = [];
-  private readonly waiters: Array<(message: CdpMessage | null) => void> = [];
+  private readonly messageHandlers = new Set<(message: CdpMessage) => void>();
+  private readonly failureHandlers = new Set<(error: Error) => void>();
   private failure: Error | null = null;
   private readonly opened: Promise<void>;
   private resolveOpen!: () => void;
@@ -180,12 +180,7 @@ class CdpSocket {
       } catch {
         return;
       }
-      const waiter = this.waiters.shift();
-      if (waiter !== undefined) {
-        waiter(message);
-      } else {
-        this.pending.push(message);
-      }
+      for (const handler of this.messageHandlers) handler(message);
     });
     this.socket.addEventListener("error", () => {
       this.fail(new AuthenticationError(BROWSER_TROUBLE, "The browser connection failed (CDP WebSocket error)"));
@@ -195,11 +190,26 @@ class CdpSocket {
     });
   }
 
+  /** Subscribes to every message the browser sends; returns an unsubscribe. */
+  onMessage(handler: (message: CdpMessage) => void): () => void {
+    this.messageHandlers.add(handler);
+    return () => {
+      this.messageHandlers.delete(handler);
+    };
+  }
+
+  /** Subscribes to the socket failing or closing; returns an unsubscribe. */
+  onFailure(handler: (error: Error) => void): () => void {
+    this.failureHandlers.add(handler);
+    return () => {
+      this.failureHandlers.delete(handler);
+    };
+  }
+
   private fail(error: Error): void {
     if (this.failure === null) this.failure = error;
     this.rejectOpen(error);
-    const waiters = this.waiters.splice(0, this.waiters.length);
-    for (const waiter of waiters) waiter(null);
+    for (const handler of this.failureHandlers) handler(error);
   }
 
   async ready(timeoutMs: number): Promise<void> {
@@ -222,30 +232,6 @@ class CdpSocket {
 
   send(payload: string): void {
     this.socket.send(payload);
-  }
-
-  async recv(timeoutMs?: number): Promise<CdpMessage> {
-    const pending = this.pending.shift();
-    if (pending !== undefined) return pending;
-    if (this.failure !== null) throw this.failure;
-    return new Promise<CdpMessage>((resolve, reject) => {
-      let timer: NodeJS.Timeout | undefined;
-      const waiter = (message: CdpMessage | null): void => {
-        clearTimeout(timer);
-        if (message === null) {
-          reject(this.failure ?? new Error("The browser closed the CDP connection"));
-          return;
-        }
-        resolve(message);
-      };
-      this.waiters.push(waiter);
-      if (timeoutMs === undefined) return;
-      timer = setTimeout(() => {
-        const index = this.waiters.indexOf(waiter);
-        if (index >= 0) this.waiters.splice(index, 1);
-        reject(new WebSocketTimeout("Timed out waiting for a browser message"));
-      }, timeoutMs);
-    });
   }
 
   close(): void {
@@ -276,6 +262,8 @@ export interface BrowserPage {
   evaluate<TInput, TResult>(fn: (input: TInput) => Promise<TResult>, input: TInput): Promise<TResult>;
   /** Sleeps for `ms` (Playwright's `page.waitForTimeout`). */
   waitForTimeout(ms: number): Promise<void>;
+  /** Rejects when the browser connection drops; never resolves. */
+  readonly closed: Promise<never>;
 }
 
 function requestFromMessage(message: CdpMessage): BrowserRequest | null {
@@ -298,21 +286,23 @@ function requestFromMessage(message: CdpMessage): BrowserRequest | null {
 }
 
 /**
- * A browser launched with a remote-debugging port and driven over CDP, with a
- * persistent profile (Microsoft's cookies live there, so a repeat sign-in can
- * complete without asking again). Owns the child process and its socket.
+ * A browser driven over CDP against a persistent profile (Microsoft's cookies
+ * live there, so a repeat sign-in can complete without asking again). Normally
+ * launched as a child process, which it then owns; {@link BrowserSession.attach}
+ * drives a browser someone else started.
  */
 export class BrowserSession {
   private readonly connection: CdpConnection;
-  private readonly child: ChildProcess;
+  private readonly child: ChildProcess | null;
   private readonly terminated: Promise<void>;
   private closed = false;
 
-  private constructor(connection: CdpConnection, child: ChildProcess) {
+  private constructor(connection: CdpConnection, child: ChildProcess | null) {
     this.connection = connection;
     this.child = child;
     this.terminated = new Promise<void>((resolve) => {
-      if (child.exitCode !== null || child.signalCode !== null) resolve();
+      if (child === null) resolve();
+      else if (child.exitCode !== null || child.signalCode !== null) resolve();
       else child.once("exit", () => resolve());
     });
   }
@@ -357,6 +347,13 @@ export class BrowserSession {
     return new BrowserSession(new CdpConnection(socket), child);
   }
 
+  /** Connects to a browser already serving CDP at `debuggerUrl`. */
+  static async attach(debuggerUrl: string): Promise<BrowserSession> {
+    const socket = new CdpSocket(debuggerUrl);
+    await socket.ready(30_000);
+    return new BrowserSession(new CdpConnection(socket), null);
+  }
+
   /** Creates a fresh page target and attaches a flattened session to it. */
   async openPage(): Promise<BrowserPage> {
     const target = await this.connection.call("Target.createTarget", { url: "about:blank" }, "");
@@ -376,7 +373,9 @@ export class BrowserSession {
 
   /** Whether the browser process is still running. */
   alive(): boolean {
-    return !this.closed && this.child.exitCode === null && this.child.signalCode === null;
+    if (this.closed) return false;
+    if (this.child === null) return true;
+    return this.child.exitCode === null && this.child.signalCode === null;
   }
 
   /** Waits for the browser process to exit, resolving false on timeout. */
@@ -407,6 +406,7 @@ export class BrowserSession {
       // The browser may already be gone.
     }
     this.connection.close();
+    if (this.child === null) return;
     if (await this.waitForExit(10_000)) return;
     this.child.kill("SIGKILL");
     await this.waitForExit(5_000);
@@ -417,9 +417,12 @@ class CdpPage implements BrowserPage {
   private readonly connection: CdpConnection;
   private readonly sessionId: string;
 
+  readonly closed: Promise<never>;
+
   constructor(connection: CdpConnection, sessionId: string) {
     this.connection = connection;
     this.sessionId = sessionId;
+    this.closed = connection.closed;
   }
 
   onRequest(listener: (request: BrowserRequest) => void): () => void {
@@ -470,14 +473,47 @@ class CdpPage implements BrowserPage {
   }
 }
 
-/** A command/response channel over one CDP socket, with message fan-out. */
+/**
+ * A command/response channel over one CDP socket. Every message is dispatched
+ * the instant it arrives: a reply settles the command that is waiting for it,
+ * anything else goes to the page listeners — whether or not a command happens
+ * to be in flight. Waiting only inside `call` would strand the events that
+ * arrive between commands, which is every event that follows a reply.
+ */
 class CdpConnection {
   private readonly socket: CdpSocket;
   private readonly listeners = new Set<(message: CdpMessage) => void>();
+  private readonly pending = new Map<number, { resolve: (message: CdpMessage) => void; reject: (error: Error) => void }>();
+  private readonly lost = Promise.withResolvers<never>();
   private counter = 0;
+
+  /** Rejects when the socket fails or closes; never resolves. */
+  readonly closed: Promise<never> = this.lost.promise;
 
   constructor(socket: CdpSocket) {
     this.socket = socket;
+    // The connection can die while nobody awaits `closed`; keep that from
+    // surfacing as an unhandled rejection. Awaiting it still rejects.
+    void this.closed.catch(() => {});
+    socket.onMessage((message) => this.dispatch(message));
+    socket.onFailure((error) => {
+      for (const waiter of this.pending.values()) waiter.reject(error);
+      this.pending.clear();
+      this.lost.reject(error);
+    });
+  }
+
+  private dispatch(message: CdpMessage): void {
+    const id = message.id;
+    if (typeof id === "number") {
+      const waiter = this.pending.get(id);
+      if (waiter !== undefined) {
+        this.pending.delete(id);
+        waiter.resolve(message);
+        return;
+      }
+    }
+    for (const listener of this.listeners) listener(message);
   }
 
   onMessage(listener: (message: CdpMessage) => void): () => void {
@@ -487,7 +523,7 @@ class CdpConnection {
     };
   }
 
-  /** Sends a command and resolves with its result, dispatching every other message. */
+  /** Sends a command and resolves with its result. */
   async call(
     method: string,
     params: JsonObject,
@@ -498,19 +534,50 @@ class CdpConnection {
     const id = this.counter;
     const command: Record<string, JsonValue> = { id, method, params };
     if (sessionId.length > 0) command.sessionId = sessionId;
-    this.socket.send(JSON.stringify(command));
-    while (true) {
-      const message = await this.socket.recv(timeoutMs);
-      for (const listener of this.listeners) listener(message);
-      if (message.id !== id) continue;
-      if (message.error !== undefined) {
-        throw new AuthenticationError(
-          BROWSER_TROUBLE,
-          `Browser setup failed: CDP ${method} returned ${JSON.stringify(message.error)}`,
-        );
-      }
-      return asJsonObject(message.result) ?? {};
+    const message = await this.exchange(id, () => {
+      this.socket.send(JSON.stringify(command));
+    }, timeoutMs);
+    if (message.error !== undefined) {
+      throw new AuthenticationError(
+        BROWSER_TROUBLE,
+        `Browser setup failed: CDP ${method} returned ${JSON.stringify(message.error)}`,
+      );
     }
+    return asJsonObject(message.result) ?? {};
+  }
+
+  /** Writes `command` and resolves with the reply that carries the same id. */
+  private exchange(
+    id: number,
+    write: () => void,
+    timeoutMs: number | undefined,
+  ): Promise<CdpMessage> {
+    return new Promise<CdpMessage>((resolve, reject) => {
+      let timer: NodeJS.Timeout | undefined;
+      const waiter = {
+        resolve: (message: CdpMessage): void => {
+          clearTimeout(timer);
+          resolve(message);
+        },
+        reject: (error: Error): void => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      };
+      this.pending.set(id, waiter);
+      if (timeoutMs !== undefined) {
+        timer = setTimeout(() => {
+          if (!this.pending.delete(id)) return;
+          reject(new CdpTimeout("Timed out waiting for a browser message"));
+        }, timeoutMs);
+      }
+      try {
+        write();
+      } catch (error) {
+        this.pending.delete(id);
+        waiter.reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
   }
 
   close(): void {
@@ -775,6 +842,8 @@ export interface TokenProviderOptions {
     profileDir: string,
     executable: string | undefined,
   ) => Promise<AuthorizationResponse>;
+  /** Test seam: drives this CDP endpoint for the sign-in capture. */
+  readonly debuggerUrl?: string;
 }
 
 /** Caches one refresh token plus per-scope access tokens in a JSON file. */
@@ -794,6 +863,10 @@ export class FileTokenProvider {
     this.tokenEndpoint = options.tokenEndpoint ?? TOKEN_ENDPOINT;
     this.executable = options.executable;
     this.authorizeResponse = options.authorizeResponse ?? captureAuthorizationResponse;
+    if (options.debuggerUrl !== undefined) {
+      const url = options.debuggerUrl;
+      this.authorizeResponse = (authUri, dir, exe) => captureAuthorizationResponse(authUri, dir, exe, url);
+    }
   }
 
   private ready(): Promise<void> {
@@ -1019,18 +1092,24 @@ export function authorizationResponseFrom(request: BrowserRequest): Authorizatio
 
 /**
  * Opens the sign-in browser at `authUri` and resolves with the redirect the page
- * makes back to `nativeclient`. Rejects on a timeout or a closed browser.
+ * makes back to `nativeclient`. Rejects on a timeout, a closed browser, or a lost
+ * CDP connection. `debuggerUrl` drives a browser already serving CDP instead of
+ * launching one.
  */
 async function captureAuthorizationResponse(
   authUri: string,
   profileDir: string,
   executable: string | undefined,
+  debuggerUrl?: string,
 ): Promise<AuthorizationResponse> {
-  const browser = await BrowserSession.launch({
-    executable: browserExecutable(executable),
-    profileDir,
-    headless: false,
-  });
+  const browser =
+    debuggerUrl === undefined
+      ? await BrowserSession.launch({
+          executable: browserExecutable(executable),
+          profileDir,
+          headless: false,
+        })
+      : await BrowserSession.attach(debuggerUrl);
   try {
     if (!browser.alive()) {
       throw new AuthenticationError(BROWSER_CLOSED, "Browser closed before sign-in started");
@@ -1046,7 +1125,10 @@ async function captureAuthorizationResponse(
     }, 300_000);
     try {
       await page.navigate(authUri);
-      return await captured.promise;
+      // The redirect arrives as an event, typically long after `navigate`
+      // resolved; nothing is in flight to dispatch it, so wait on the capture
+      // itself — and on the connection dying, rather than on the full timeout.
+      return await Promise.race([captured.promise, page.closed]);
     } finally {
       clearTimeout(timer);
       unsubscribe();

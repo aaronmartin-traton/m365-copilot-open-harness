@@ -52,6 +52,7 @@ function fakeBrowser(responses: FakeResponse[], finalUrl = "https://m365.cloud.m
     },
     currentUrl: async () => finalUrl,
     waitForTimeout: async () => {},
+    closed: new Promise<never>(() => {}),
     evaluate: async (_pageFunction: M365ChatPageFunction, input: M365ChatFetchInput) => {
       requests.push(input.body);
       const response = responses.shift();
