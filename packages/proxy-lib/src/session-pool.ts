@@ -17,6 +17,9 @@ const MAX_IDLE_MS = Number(process.env.M365_SESSION_MEMORY_TTL_MS ?? 30 * 60 * 1
 
 const DEFAULT_PRUNE_RETRY_MS = 15 * 60 * 1000;
 
+/** How long a thread may sit idle before the reaper deletes it upstream. */
+const DEFAULT_IDLE_TTL_MINUTES = 7 * 24 * 60;
+
 export interface ConversationState {
   key: string;
   persistent: boolean;
@@ -217,8 +220,18 @@ export class SessionPool {
     });
   }
 
+  /**
+   * Delete every idle conversation older than `M365_SESSION_TTL_MINUTES`, so M365's
+   * per-account conversation cap is not spent on threads nobody will return to.
+   *
+   * Unset falls back to `DEFAULT_IDLE_TTL_MINUTES` (a week) rather than disabling
+   * reaping: an unbounded pile of idle threads is what trips the throttle in the
+   * first place. Set it to `0` to switch reaping off, or to a negative number to
+   * opt out explicitly. Deletion is one-way — an idle thread is gone from M365.
+   */
   async reapIdle(): Promise<{ pruned: number; failed: number }> {
-    const minutes = Number(process.env.M365_SESSION_TTL_MINUTES ?? Number.NaN);
+    const configured = process.env.M365_SESSION_TTL_MINUTES;
+    const minutes = configured === undefined ? DEFAULT_IDLE_TTL_MINUTES : Number(configured);
 
     if (!Number.isFinite(minutes) || minutes <= 0) return { pruned: 0, failed: 0 };
     const cutoff = this.now() - minutes * 60_000;

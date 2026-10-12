@@ -2,7 +2,18 @@ import { SessionPool, activeBackend } from "@m365-copilot/proxy-lib";
 
 const backend = activeBackend();
 
-let automaticReaperDisabled = process.env.M365_WEB_PRUNE_PROVEN !== "1";
+/**
+ * Automatic reaping is ON: idle M365 threads are deleted upstream, which is what
+ * keeps the account's per-conversation cap from being spent on threads nobody
+ * returns to. `M365_WEB_PRUNE_PROVEN=0` switches it off for a host whose browser
+ * runtime cannot drive the M365 web UI.
+ *
+ * Failing is safe in both directions — a single remote failure sets
+ * `automaticReaperDisabled` and stops all further attempts, and each conversation
+ * backs off via `nextPruneAttemptAt` — so an unverifiable runtime costs one
+ * failed attempt, not a stream of them.
+ */
+let automaticReaperDisabled = process.env.M365_WEB_PRUNE_PROVEN === "0";
 
 let reaperPromise: Promise<{ pruned: number; failed: number }> | null = null;
 

@@ -184,6 +184,40 @@ describe("SessionPool identity", () => {
     expect(remote).toEqual([state.session.conversationId]);
     expect(stateStore.size).toBe(0);
   });
+
+  it("reaps an idle thread on the default TTL when none is configured", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "m365-handler-reap-default-"));
+    dirs.push(dir);
+    const stateStore = new SessionStateStore(join(dir, "sessions.json"));
+    let now = 3_000_000;
+    const remote: string[] = [];
+
+    const sessions = new SessionPool({}, {
+      stateStore,
+      now: () => now,
+      remotePruner: async ({ conversationId }) => { remote.push(conversationId); },
+    });
+
+    const state = sessions.resolve(messages([{ role: "user", content: "idle" }]), "default-key");
+    sessions.markSent(state, 1);
+
+    const previous = process.env.M365_SESSION_TTL_MINUTES;
+
+    delete process.env.M365_SESSION_TTL_MINUTES;
+
+    try {
+      // One day idle is under the week-long default, so nothing goes yet.
+      now += 24 * 60 * 60_000;
+      await expect(sessions.reapIdle()).resolves.toEqual({ pruned: 0, failed: 0 });
+      // Past the default the thread is deleted upstream.
+      now += 7 * 24 * 60 * 60_000;
+      await expect(sessions.reapIdle()).resolves.toEqual({ pruned: 1, failed: 0 });
+    } finally {
+      if (previous !== undefined) process.env.M365_SESSION_TTL_MINUTES = previous;
+    }
+
+    expect(remote).toEqual([state.session.conversationId]);
+  });
   it("blocks a same-key turn behind a queued prune", async () => {
     let resolveRemote!: () => void;
     let remoteDone = false;
