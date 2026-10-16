@@ -12,8 +12,9 @@ Findings should carry **n** (sample size), **service version under test**,
 and **falsification criteria** wherever they're claiming something stronger
 than "we eyeballed one run." See §M (Methods) for the experimental rig.
 
-Evidence pointers into `.scratch/` refer to the local ticket tracker, which is
-gitignored and not published.
+Evidence pointers into `.scratch/` refer to a local ticket tracker that was never
+published and no longer exists. Kept as written: the pointer records where the
+evidence lived at the time, and the findings below still stand on their own.
 
 **Contents**
 
