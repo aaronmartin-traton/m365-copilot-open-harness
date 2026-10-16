@@ -1,7 +1,7 @@
 # M365 Copilot Open Harness
 
 An OpenAI-compatible HTTP proxy that wraps Microsoft 365 Copilot's undocumented
-SignalR/WebSocket API, so OpenAI-compatible coding agents (pi, Codex, and other
+SignalR/WebSocket API, so OpenAI-compatible coding agents (Pi-Bolt, Codex, and other
 `openai-completions` clients) can use an M365 Copilot subscription as a model
 backend.
 
@@ -74,15 +74,13 @@ The launcher takes an optional port argument (`bun packages/proxy/bin/m365-proxy
 falling back to `$PORT`, then `4141`. The server binds `$HOST` (default `127.0.0.1`).
 `bun run proxy` is a shortcut for the same launcher.
 
-Run pi against that standalone proxy from a second terminal:
+Drive that proxy from a second terminal with the console, which runs Pi-Bolt against
+it (see [Web console](#web-console)). `bun run proxy` remains a separate long-running
+process to start by hand:
 
 ```sh
-bun run pi -- -p "Say hello."
+bun run web
 ```
-
-The launcher uses an isolated repo-local `.pi-local` home; set `MODEL` or `PORT`
-to change its default model or the proxy port. `bun run proxy` remains a separate
-long-running process.
 
 **Keep `HOST` on loopback.** The proxy has no authentication unless `M365_API_KEY` is
 set, so binding it to a network address lets anyone who can reach the port spend the
@@ -115,7 +113,6 @@ Other root scripts:
 |---|---|
 | `bun run dev` | Nitro dev server on port 4141 (`nitro dev`) |
 | `bun run proxy` | Starts the standalone M365 proxy on `127.0.0.1:4141` |
-| `bun run pi` | Launches pi against the standalone proxy with isolated repo-local settings |
 | `bun run build` | Builds all packages (`core`, `chatgpt-web`, `proxy-lib`, `harness`, `proxy`, `openclaw-plugin`) |
 | `bun run build:libs` | Builds only the library packages the tests import from `dist/` |
 | `bun run web` / `bun run web:dev` | Starts the Bun console on `127.0.0.1:4173` (plain, or with `--watch`) |
@@ -139,12 +136,11 @@ bun run web            # console on http://127.0.0.1:4173
 ```
 
 `packages/harness` holds what the console and any other host share:
-`resolvePiBoltBinary()` (explicit path, then `PI_BOLT_BIN`, then `pi-bolt` on `PATH`,
-then `pi`), `PiBoltSupervisor` (process, framing and event mapping), and
+`resolvePiBoltBinary()` (explicit path, then `PI_BOLT_BIN`, then `pi-bolt` on `PATH`),
+`PiBoltSupervisor` (process, framing and event mapping), and
 `writeM365ProviderConfig()` (the `m365-copilot` provider entry in
-`~/.pi/agent/models.json`, merged so every other provider survives). Pi-Bolt is Pi
-compiled ahead of time and keeps Pi's CLI, so an installed `pi` drives the same
-interface when Pi-Bolt is absent.
+`~/.pi/agent/models.json`, merged so every other provider survives). Pi-Bolt is the
+only agent this project drives, and `install.ps1` installs it.
 
 On Windows, `install.ps1` does the whole setup in one step — Bun, Pi-Bolt,
 dependencies, build, and the M365 provider entry:

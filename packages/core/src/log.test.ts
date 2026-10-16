@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { redact } from "./log.js";
@@ -55,7 +55,10 @@ describe("log/frame directory overrides", () => {
   });
 
   it("takes an absolute override as is", async () => {
-    const abs = "/tmp/opencode/frames";
+    // An absolute path has to be absolute for the host platform: on Windows a
+    // leading-slash path such as "/tmp/frames" is drive-relative, so resolve()
+    // prefixes the current drive and the "as is" contract cannot hold.
+    const abs = resolve(tmpdir(), "opencode-frames");
     const log = await loadLogModule({ M365_FRAME_DIR: abs });
 
     expect(log.FRAME_DIR).toBe(abs);

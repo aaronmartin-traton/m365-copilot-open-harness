@@ -10,7 +10,6 @@
     "build": "bun run --cwd packages/core build && bun run --cwd packages/chatgpt-web build && bun run --cwd packages/proxy-lib build && bun run --cwd packages/harness build && bun run --cwd packages/proxy build && bun run --cwd packages/openclaw-plugin build",
     "build:libs": "bun run --cwd packages/core build && bun run --cwd packages/chatgpt-web build && bun run --cwd packages/proxy-lib build && bun run --cwd packages/harness build",
     "proxy": "bun packages/proxy/bin/m365-proxy.mjs",
-    "pi": "bun scripts/pi-local.mjs",
     "harness:config": "bun packages/harness/bin/configure.mjs",
     "test": "bun run test:unit",
     "test:unit": "bun run build:libs && bun --bun run vitest run",

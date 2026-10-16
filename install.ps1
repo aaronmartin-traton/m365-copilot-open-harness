@@ -5,18 +5,18 @@
 
 .DESCRIPTION
   Installs the toolchain (Bun, Pi-Bolt), the workspace dependencies, builds the
-  library packages, and points Pi and Pi-Bolt at the local M365 Copilot proxy.
+  library packages, and points Pi-Bolt at the local M365 Copilot proxy.
 
-  Pi-Bolt shares ~/.pi/agent with Pi, so both see the same providers; setup only
-  writes the `m365-copilot` provider entry into models.json and leaves every
-  other provider alone.
+  Pi-Bolt is the only agent this project drives and keeps its configuration in
+  ~/.pi/agent, so setup only writes the `m365-copilot` provider entry into
+  models.json and leaves every other provider alone.
 
 .PARAMETER CheckOnly
   Report what is installed and change nothing.
 
 .PARAMETER SkipPiBolt
-  Do not install or update Pi-Bolt; the harness falls back to `pi` when Pi-Bolt
-  is absent.
+  Do not install Pi-Bolt. The harness drives Pi-Bolt only, so use this only when
+  you manage that install yourself.
 
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\install.ps1
@@ -71,8 +71,7 @@ function Show-Status {
   $harnessBuild = Test-Path (Join-Path $RepoRoot "packages\harness\dist\index.mjs")
 
   Write-Host "bun:        $(if (Test-CommandAvailable bun) { (& bun --version) } else { 'missing' })"
-  Write-Host "pi-bolt:    $(if ($piBoltVersion) { $piBoltVersion } else { 'missing (Pi is used as a fallback)' })"
-  Write-Host "pi:         $(if (Test-CommandAvailable pi) { (& pi --version 2>&1 | Select-Object -First 1) } else { 'missing' })"
+  Write-Host "pi-bolt:    $(if ($piBoltVersion) { $piBoltVersion } else { 'missing (bun add -g --trust pi-bolt)' })"
   Write-Host "deps:       $(if ($dependencies) { 'installed' } else { 'missing (run bun install)' })"
   Write-Host "harness:    $(if ($harnessBuild) { 'built' } else { 'missing (run bun run build:libs)' })"
 }
@@ -121,12 +120,15 @@ if (-not $SkipPiBolt) {
     Write-Note $piBoltVersion
   }
   else {
-    Write-Step "Installing Pi-Bolt (bun add -g pi-bolt)"
+    # --trust is required: Pi-Bolt's postinstall downloads the native release for
+    # this platform, and Bun blocks postinstalls by default. Without it the
+    # `pi-bolt` shim is left pointing at a package that never fetched a binary.
+    Write-Step "Installing Pi-Bolt (bun add -g --trust pi-bolt)"
 
-    & bun add -g pi-bolt
+    & bun add -g --trust pi-bolt
 
     if ($LASTEXITCODE -ne 0) {
-      Write-Note "bun could not install Pi-Bolt. Install it from https://pi-bolt.opensec.in/ or with 'npm i -g pi-bolt'; the harness falls back to pi until then."
+      Write-Note "bun could not install Pi-Bolt. Install it from https://pi-bolt.opensec.in/ and re-run -CheckOnly to confirm."
     }
   }
 }

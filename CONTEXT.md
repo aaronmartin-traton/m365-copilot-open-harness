@@ -6,7 +6,7 @@ name concepts with these terms. Do not drift to synonyms.
 ## What this repo is
 
 An OpenAI-compatible **proxy** that wraps Microsoft 365 Copilot's undocumented
-SignalR/WebSocket API. OpenAI-compatible coding agents (pi, Codex, standalone
+SignalR/WebSocket API. OpenAI-compatible coding agents (Pi-Bolt, Codex, standalone
 bench) can use M365 as a model backend. It is a reverse-engineering project
 against a live, undocumented, throttled API. It is not a normal SDK wrapper.
 

@@ -18,7 +18,6 @@ scripts/input-size-out/
 scripts/output-ceiling-out/
 scripts/cancel-frame-out/
 scripts/send-cancel-out/
-.pi-local/
 scripts/code-interp-out/
 scripts/tone-out/
 scripts/sentinel-hits.log
@@ -53,7 +52,5 @@ runtime-test-output.txt
 # local ticket tracker — deliberately not published
 .scratch/
 
-# Bun's local cache and the adopt-proxy-improvements worktree are local
-# artifacts of this checkout, not part of the repository.
+# Bun's local cache — a checkout artifact, not part of the repository.
 npm-cache/
-adopt-proxy-improvements/
