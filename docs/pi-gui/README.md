@@ -18,7 +18,7 @@
 > - The `m365-copilot` provider lives in `~/.pi/agent/models.json`, which Pi-Bolt also reads,
 >   so the provider entry carries over unchanged.
 >
-> Superseded here: the desktop app itself. This repo drives **[Pi-Bolt](../README.md#web-console)**
+> Superseded here: the desktop app itself. This repo drives **[Pi-Bolt](../../README.md#web-console)**
 > through `packages/harness` and `apps/web`; the Electron shell was not carried over.
 >
 > For current behavior read [`README.md`](../../README.md), [`CONTEXT.md`](../../CONTEXT.md),
