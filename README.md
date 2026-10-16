@@ -74,6 +74,16 @@ The launcher takes an optional port argument (`bun packages/proxy/bin/m365-proxy
 falling back to `$PORT`, then `4141`. The server binds `$HOST` (default `127.0.0.1`).
 `bun run proxy` is a shortcut for the same launcher.
 
+Run pi against that standalone proxy from a second terminal:
+
+```sh
+bun run pi -- -p "Say hello."
+```
+
+The launcher uses an isolated repo-local `.pi-local` home; set `MODEL` or `PORT`
+to change its default model or the proxy port. `bun run proxy` remains a separate
+long-running process.
+
 **Keep `HOST` on loopback.** The proxy has no authentication unless `M365_API_KEY` is
 set, so binding it to a network address lets anyone who can reach the port spend the
 signed-in account's quota and drive any tool the client offers. When the bound host is
@@ -104,6 +114,8 @@ Other root scripts:
 | Command | What it does |
 |---|---|
 | `bun run dev` | Nitro dev server on port 4141 (`nitro dev`) |
+| `bun run proxy` | Starts the standalone M365 proxy on `127.0.0.1:4141` |
+| `bun run pi` | Launches pi against the standalone proxy with isolated repo-local settings |
 | `bun run build` | Builds all packages (`core`, `chatgpt-web`, `proxy-lib`, `proxy`, `openclaw-plugin`) |
 | `bun run build:libs` | Builds only the library packages the tests import from `dist/` |
 | `bun run test:unit` | Builds the libraries, then runs Vitest |

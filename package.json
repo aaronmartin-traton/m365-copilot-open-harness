@@ -8,7 +8,7 @@
     "build": "bun run --cwd packages/core build && bun run --cwd packages/chatgpt-web build && bun run --cwd packages/proxy-lib build && bun run --cwd packages/proxy build && bun run --cwd packages/openclaw-plugin build",
     "build:libs": "bun run --cwd packages/core build && bun run --cwd packages/chatgpt-web build && bun run --cwd packages/proxy-lib build",
     "proxy": "bun packages/proxy/bin/m365-proxy.mjs",
-    "pi": "bash scripts/pi-local.sh",
+    "pi": "bun scripts/pi-local.mjs",
     "test": "bun run test:unit",
     "test:unit": "bun run build:libs && bun run vitest run",
     "test:live": "bun run build:libs && M365_LIVE=1 bun run vitest run",
