@@ -26,7 +26,7 @@ const ROOT = resolve(import.meta.dirname, "..");
 
 const SKIP_DIRS = new Set([
   ".git", "node_modules", "dist", ".output", ".nitro", ".commandcode",
-  ".autonomous", ".pi-local", "result", ".github",
+  ".autonomous", "result", ".github",
 ]);
 
 const SKIP_FILES = new Set([
