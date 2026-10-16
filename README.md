@@ -1,4 +1,4 @@
-# M365 Copilot Proxy
+# M365 Copilot Open Harness
 
 An OpenAI-compatible HTTP proxy that wraps Microsoft 365 Copilot's undocumented
 SignalR/WebSocket API, so OpenAI-compatible coding agents (pi, Codex, and other
@@ -116,13 +116,47 @@ Other root scripts:
 | `bun run dev` | Nitro dev server on port 4141 (`nitro dev`) |
 | `bun run proxy` | Starts the standalone M365 proxy on `127.0.0.1:4141` |
 | `bun run pi` | Launches pi against the standalone proxy with isolated repo-local settings |
-| `bun run build` | Builds all packages (`core`, `chatgpt-web`, `proxy-lib`, `proxy`, `openclaw-plugin`) |
+| `bun run build` | Builds all packages (`core`, `chatgpt-web`, `proxy-lib`, `harness`, `proxy`, `openclaw-plugin`) |
 | `bun run build:libs` | Builds only the library packages the tests import from `dist/` |
-| `bun run test:unit` | Builds the libraries, then runs Vitest |
-| `bun run test:live` | Same, with `M365_LIVE=1` (hits the real API) |
-| `bun run setup` / `bun run doctor` | Install + build + check prerequisites (+ sign in); `--check-only` via `doctor` |
-| `bun run typecheck` | `tsc --noEmit` for `core`, `chatgpt-web`, `proxy-lib`, `proxy` |
-| `bun run lint` | `oxlint packages` |
+| `bun run web` / `bun run web:dev` | Starts the Bun console on `127.0.0.1:4173` (plain, or with `--watch`) |
+| `bun run harness:config` | Writes the `m365-copilot` provider into `~/.pi/agent/models.json` |
+| `bun run test:unit` | Builds the libraries, then runs Vitest on the Bun runtime |
+| `bun run test:e2e` | Same, restricted to the end-to-end suites in `packages/harness` and `apps/web` |
+| `bun run test:live` | Same as `test:unit`, with `M365_LIVE=1` (hits the real API) |
+| `bun run setup` / `bun run doctor` | Install + build + check prerequisites (+ sign in, + the M365 provider entry) |
+| `bun run typecheck` | `tsc --noEmit` for `core`, `chatgpt-web`, `proxy-lib`, `harness`, `web`, `proxy` |
+| `bun run lint` | `oxlint packages apps` (the anti-slop gate) |
+
+## Web console
+
+`apps/web` is a Bun HTTP + WebSocket console that runs the agent for you: it spawns
+one `pi-bolt --mode rpc --no-session` process per session and streams that process's
+JSONL events to the browser, so a turn arrives as it is produced rather than at the
+end.
+
+```sh
+bun run web            # console on http://127.0.0.1:4173
+```
+
+`packages/harness` holds what the console and any other host share:
+`resolvePiBoltBinary()` (explicit path, then `PI_BOLT_BIN`, then `pi-bolt` on `PATH`,
+then `pi`), `PiBoltSupervisor` (process, framing and event mapping), and
+`writeM365ProviderConfig()` (the `m365-copilot` provider entry in
+`~/.pi/agent/models.json`, merged so every other provider survives). Pi-Bolt is Pi
+compiled ahead of time and keeps Pi's CLI, so an installed `pi` drives the same
+interface when Pi-Bolt is absent.
+
+On Windows, `install.ps1` does the whole setup in one step — Bun, Pi-Bolt,
+dependencies, build, and the M365 provider entry:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+powershell -ExecutionPolicy Bypass -File .\install.ps1 -CheckOnly   # report only
+```
+
+Notes carried over from the pi-gui fork — the desktop shell, and the
+`PI_GUI_M365_PROXY_URL` bridge that points it at this proxy — are under
+[`docs/pi-gui/`](docs/pi-gui/).
 
 ## Sign in
 

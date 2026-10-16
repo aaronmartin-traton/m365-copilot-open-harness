@@ -1,21 +1,25 @@
 {
-  "name": "m365-copilot-proxy",
+  "name": "m365-copilot-open-harness",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.4.0",
   "scripts": {
     "dev": "bun run --cwd packages/proxy dev",
-    "build": "bun run --cwd packages/core build && bun run --cwd packages/chatgpt-web build && bun run --cwd packages/proxy-lib build && bun run --cwd packages/proxy build && bun run --cwd packages/openclaw-plugin build",
-    "build:libs": "bun run --cwd packages/core build && bun run --cwd packages/chatgpt-web build && bun run --cwd packages/proxy-lib build",
+    "web": "bun apps/web/src/server.ts",
+    "web:dev": "bun --watch apps/web/src/server.ts",
+    "build": "bun run --cwd packages/core build && bun run --cwd packages/chatgpt-web build && bun run --cwd packages/proxy-lib build && bun run --cwd packages/harness build && bun run --cwd packages/proxy build && bun run --cwd packages/openclaw-plugin build",
+    "build:libs": "bun run --cwd packages/core build && bun run --cwd packages/chatgpt-web build && bun run --cwd packages/proxy-lib build && bun run --cwd packages/harness build",
     "proxy": "bun packages/proxy/bin/m365-proxy.mjs",
     "pi": "bun scripts/pi-local.mjs",
+    "harness:config": "bun packages/harness/bin/configure.mjs",
     "test": "bun run test:unit",
-    "test:unit": "bun run build:libs && bun run vitest run",
-    "test:live": "bun run build:libs && M365_LIVE=1 bun run vitest run",
-    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/chatgpt-web && tsc --noEmit -p packages/proxy-lib && tsc --noEmit -p packages/proxy",
-    "lint": "oxlint packages",
-    "lint:fix": "oxlint --fix packages",
-    "setup": "bun run build:libs && bun packages/proxy/bin/m365-setup.mjs",
+    "test:unit": "bun run build:libs && bun --bun run vitest run",
+    "test:e2e": "bun run build:libs && bun --bun run vitest run e2e",
+    "test:live": "bun run build:libs && M365_LIVE=1 bun --bun run vitest run",
+    "typecheck": "tsc --noEmit -p packages/core && tsc --noEmit -p packages/chatgpt-web && tsc --noEmit -p packages/proxy-lib && tsc --noEmit -p packages/harness && tsc --noEmit -p apps/web && tsc --noEmit -p packages/proxy",
+    "lint": "oxlint packages apps",
+    "lint:fix": "oxlint --fix packages apps",
+    "setup": "bun run build:libs && bun packages/proxy/bin/m365-setup.mjs && bun run harness:config",
     "doctor": "bun run build:libs && bun packages/proxy/bin/m365-setup.mjs --check-only"
   },
   "devDependencies": {
@@ -28,6 +32,7 @@
     "vitest": "^4.1.2"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ]
 }

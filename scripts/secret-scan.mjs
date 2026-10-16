@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * secret-scan.mjs — pre-push secret guard for m365-copilot-proxy.
+ * secret-scan.mjs — pre-push secret guard for m365-copilot-open-harness.
  *
  * Scans for high-signal secret patterns in:
  *   --all        the working tree (skips .git, node_modules, build outputs)

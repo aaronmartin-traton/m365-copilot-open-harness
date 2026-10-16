@@ -1,6 +1,6 @@
 # CONTEXT.md
 
-Domain vocabulary for the `m365-copilot-proxy` repo. Skills and issue tickets
+Domain vocabulary for the `m365-copilot-open-harness` repo. Skills and issue tickets
 name concepts with these terms. Do not drift to synonyms.
 
 ## What this repo is

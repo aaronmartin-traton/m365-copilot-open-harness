@@ -8,12 +8,12 @@
   "author": "asmartin-ai",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/asmartin-ai/m365-copilot-proxy.git",
+    "url": "git+https://github.com/aaronmartin-traton/m365-copilot-open-harness.git",
     "directory": "packages/openclaw-plugin"
   },
-  "homepage": "https://github.com/asmartin-ai/m365-copilot-proxy#readme",
+  "homepage": "https://github.com/aaronmartin-traton/m365-copilot-open-harness#readme",
   "bugs": {
-    "url": "https://github.com/asmartin-ai/m365-copilot-proxy/issues"
+    "url": "https://github.com/aaronmartin-traton/m365-copilot-open-harness/issues"
   },
   "keywords": [
     "m365",

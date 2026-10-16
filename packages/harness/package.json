@@ -1,0 +1,52 @@
+{
+  "name": "@m365-copilot/harness",
+  "version": "0.2.0",
+  "description": "Pi-Bolt supervisor and M365 Copilot provider configuration for the open harness.",
+  "license": "MIT",
+  "author": "asmartin-ai",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aaronmartin-traton/m365-copilot-open-harness.git",
+    "directory": "packages/harness"
+  },
+  "homepage": "https://github.com/aaronmartin-traton/m365-copilot-open-harness#readme",
+  "bugs": {
+    "url": "https://github.com/aaronmartin-traton/m365-copilot-open-harness/issues"
+  },
+  "keywords": [
+    "m365",
+    "copilot",
+    "pi",
+    "pi-bolt",
+    "harness",
+    "agent",
+    "openai-compatible"
+  ],
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
+    }
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist",
+    "!dist/**/*.map"
+  ],
+  "scripts": {
+    "build": "tsdown src/index.ts --format esm --dts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@m365-copilot/core": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

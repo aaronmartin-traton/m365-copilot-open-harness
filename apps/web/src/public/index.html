@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>M365 Copilot Open Harness</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>M365 Copilot Open Harness</h1>
+      <p id="status" data-tone="idle">Starting…</p>
+      <button id="new-session" type="button">New session</button>
+    </header>
+    <main>
+      <section id="transcript" aria-live="polite"></section>
+      <form id="composer">
+        <textarea
+          id="prompt"
+          rows="3"
+          placeholder="Ask Pi-Bolt to do something in this workspace…"
+        ></textarea>
+        <button id="send" type="submit">Send</button>
+      </form>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

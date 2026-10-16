@@ -1,18 +1,18 @@
 {
   "name": "@m365-copilot/chatgpt-web",
   "version": "0.1.0",
-  "description": "Opt-in browser-driven ChatGPT Web backend for the m365-copilot-proxy (PROVIDER=chatgpt-web).",
+  "description": "Opt-in browser-driven ChatGPT Web backend for the m365-copilot-open-harness (PROVIDER=chatgpt-web).",
   "license": "MIT",
   "author": "asmartin-ai",
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/asmartin-ai/m365-copilot-proxy.git",
+    "url": "git+https://github.com/aaronmartin-traton/m365-copilot-open-harness.git",
     "directory": "packages/chatgpt-web"
   },
-  "homepage": "https://github.com/asmartin-ai/m365-copilot-proxy#readme",
+  "homepage": "https://github.com/aaronmartin-traton/m365-copilot-open-harness#readme",
   "bugs": {
-    "url": "https://github.com/asmartin-ai/m365-copilot-proxy/issues"
+    "url": "https://github.com/aaronmartin-traton/m365-copilot-open-harness/issues"
   },
   "keywords": [
     "chatgpt",
