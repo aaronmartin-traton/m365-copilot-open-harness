@@ -1,11 +1,11 @@
 # AGENTS.md
 
-Guidance for agents (and humans) working in `m365-copilot-proxy`.
+Guidance for agents (and humans) working in `m365-copilot-open-harness`.
 
 ## What this is
 
 A reverse-engineered, **OpenAI-compatible proxy** over Microsoft 365 Copilot's
-undocumented SignalR/WebSocket API, so OpenAI-compatible coding agents (pi,
+undocumented SignalR/WebSocket API, so OpenAI-compatible coding agents (Pi-Bolt,
 Codex, the bench) can use M365 as a model backend. It is not a normal SDK
 wrapper: it targets a live, undocumented, throttled API.
 
@@ -19,7 +19,7 @@ wrapper: it targets a live, undocumented, throttled API.
 
 1. **Sequential.** One M365 thread at a time. Throttle tracks conversations
    *started*, not messages (F13), and masquerades as `Disengaged`. Never fire
-   concurrent or back-to-back fresh threads. A real pi session (one long
+   concurrent or back-to-back fresh threads. A real Pi-Bolt session (one long
    thread) is cheap; a new thread per experiment is what burns the budget.
 2. **Scientific.** Hypothesize → predict → test → conclude. Log each result in
    [`docs/hypotheses.md`](docs/hypotheses.md) with sample size and an evidence
@@ -28,7 +28,7 @@ wrapper: it targets a live, undocumented, throttled API.
    [`docs/experiments.md`](docs/experiments.md); one-off probes live in
    `scripts/`; the objective score is `scripts/bench/`. Prompting levers are in
    [`docs/prompt-engineering.md`](docs/prompt-engineering.md).
-4. **End goal: a usable agent in pi, Codex, or standalone.** A finding that
+4. **End goal: a usable agent in Pi-Bolt, Codex, or standalone.** A finding that
    does not move that needle is a footnote, not a win.
 
 ## Hard-won gotchas
@@ -56,8 +56,10 @@ wrapper: it targets a live, undocumented, throttled API.
 | `@m365-copilot/core` | auth (MSAL + Playwright), WebSocket client, sessions, agent mgmt, tool formatting, schemas, the `ModelProvider` seam |
 | `@m365-copilot/proxy-lib` | OpenAI↔backend translation, `SessionPool`, handler, tool-call parsing |
 | `@m365-copilot/chatgpt-web` | opt-in browser-driven ChatGPT backend (`PROVIDER=chatgpt-web`) |
+| `@m365-copilot/harness` | drives Pi-Bolt: `resolvePiBoltBinary`, `PiBoltSupervisor`, `writeM365ProviderConfig` |
 | `@m365-copilot/proxy` | standalone Nitro service / `m365-proxy` binary |
 | `@m365-copilot/openclaw-plugin` | private, not published (disabled OpenClaw tombstone) |
+| `apps/web` | the Bun console: one `pi-bolt` process per session, streamed to the browser |
 
 ## Fork policy
 
@@ -72,6 +74,7 @@ review.
 bun install
 bun run build        # tsdown, all packages (tests import from dist/, so build first)
 bun run test:unit    # build + vitest. Use THIS, not bare `bun test` (Bun's runner cannot run this suite)
+bun run test:e2e     # the end-to-end suites only (packages/harness, apps/web)
 bun run typecheck    # tsc --noEmit per package (tsdown does not typecheck)
 ```
 
@@ -95,7 +98,6 @@ Conventions: ESM with `.js`-suffixed relative imports; Zod at boundaries;
 
 ## Queued work
 
-Tickets live in `.scratch/<feature>/issues/` (one file each, with `Status:` and
-`Blocked by:` lines); the feature spec is `.scratch/<feature>/spec.md`. The
-tracker is a local working aid: `.scratch/` is gitignored and deliberately not
-published. Claim the earliest unblocked ticket.
+There is no in-repo ticket tracker. Tickets open on
+[GitHub](https://github.com/aaronmartin-traton/m365-copilot-open-harness/issues),
+and `scripts/self-improve/` is the hill-climbing loop for harness changes.

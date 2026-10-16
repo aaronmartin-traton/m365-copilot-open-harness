@@ -7,9 +7,9 @@ people who are not technical.
 
 | Surface                                     | Screenshot (real Electron app)                                               |
 | ------------------------------------------- | ---------------------------------------------------------------------------- |
-| Rich answer card rendered from model output | [`docs/fork/generative-ui-card.png`](docs/fork/generative-ui-card.png)       |
-| Settings → Microsoft 365 Copilot            | [`docs/fork/m365-copilot-settings.png`](docs/fork/m365-copilot-settings.png) |
-| Starter prompts on New thread               | [`docs/fork/starter-prompts.png`](docs/fork/starter-prompts.png)             |
+| Rich answer card rendered from model output | [`fork/generative-ui-card.png`](fork/generative-ui-card.png)       |
+| Settings → Microsoft 365 Copilot            | [`fork/m365-copilot-settings.png`](fork/m365-copilot-settings.png) |
+| Starter prompts on New thread               | [`fork/starter-prompts.png`](fork/starter-prompts.png)             |
 
 ## For coworkers
 

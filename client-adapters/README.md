@@ -43,7 +43,7 @@ bun client-adapters/attestation-helper.mjs --proof codex
 
 Add the gate headers AND the proof header to the provider config:
 
-### pi — `~/.pi/agent/models.json`
+### pi / Pi-Bolt — `~/.pi/agent/models.json`
 
 ```json
 {
@@ -65,6 +65,11 @@ Add the gate headers AND the proof header to the provider config:
 
 pi needs an `apiKey` value to list a custom provider. `dummy` is sufficient for
 a keyless local proxy.
+
+Pi-Bolt reads the same file, so this entry covers both. The `pi` in
+`--proof pi` and `X-M365-Attestation-Client: pi` is a **wire value**, not the
+binary's name: the proxy's HMAC covers the literal string, and `pi`, `omp`, and
+`codex` are the only accepted values. Leave them as-is.
 
 ### Oh My Pi — `~/.omp/agent/models.yml`
 

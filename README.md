@@ -487,7 +487,13 @@ it at the proxy layer. The full contract is in
   (endpoint, auth, framing, throttling, the `Disengaged` filter, tool calling).
 - [`docs/tool-calling.md`](docs/tool-calling.md) — the tool-calling contract.
 - [`CONTEXT.md`](CONTEXT.md) — vocabulary and locked decisions.
+- [`AGENTS.md`](AGENTS.md) — repo conventions, hard-won gotchas, and the layout table.
+- [`docs/hypotheses.md`](docs/hypotheses.md) — the open-questions notebook, with evidence
+  pointers and sample sizes.
 - [`docs/experiments.md`](docs/experiments.md) — the runnable experiment catalog.
+- [`docs/adr/`](docs/adr/) — runtime decisions.
+- [`docs/pi-gui/`](docs/pi-gui/) — archived notes from the pi-gui fork (the desktop shell
+  this repo did not carry over).
 
 ## License
 

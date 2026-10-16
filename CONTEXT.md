@@ -1,6 +1,6 @@
 # CONTEXT.md
 
-Domain vocabulary for the `m365-copilot-open-harness` repo. Skills and issue tickets
+Domain vocabulary for the `m365-copilot-open-harness` repo. Prompts and tickets
 name concepts with these terms. Do not drift to synonyms.
 
 ## What this repo is
@@ -57,8 +57,8 @@ against a live, undocumented, throttled API. It is not a normal SDK wrapper.
 
 ## Where things live
 
-- Backlog and live probes: `.scratch/<feature>/issues/` — a local, gitignored
-  ticket tracker, not published.
+- Backlog and live probes: GitHub issues on `aaronmartin-traton/m365-copilot-open-harness`;
+  one-off probes live in `scripts/`.
 - Upstream fork policy: `.gitattributes` (`merge=ours` ownership) and
   `docs/upstream-manifest.json` (the upstream-absorption record).
 - Domain decisions: `docs/adr/`.
